@@ -77,6 +77,9 @@ def serve_cmd(args: argparse.Namespace, mode: str, port: int, max_running: int) 
         cmd += ["--moe-cache-size", str(args.cache)]
     else:
         cmd.append("--moe-cache-auto")
+    if args.num_tokens > 0:
+        cmd += ["--num-tokens", str(args.num_tokens),
+                "--kv-reserve-tokens", str(args.num_tokens)]
     return cmd
 
 
@@ -89,6 +92,7 @@ def stream(origin: str, model_id: str, prompt: str, args: argparse.Namespace,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "stream": True,
         }).encode(),
         headers={"Content-Type": "application/json"},
     )
@@ -129,7 +133,7 @@ def run_row(origin: str, model_id: str, prompt: str, args: argparse.Namespace,
     return {
         "mode": mode, "context": ctx_label, "warm": warm,
         "prompt_tokens": r["usage"].get("prompt_tokens"),
-        "completion_tokens": r["usage"].get("completion_tokens"),
+        "completion_tokens": r["usage"].get("completion_tokens", len(r["stamps"])),
         "ttft_ms": (r["stamps"][0] - r["t0"]) * 1e3,
         "decode_tok_s": steps / span if span > 0 else 0.0,
         "ms_per_token": span / steps * 1e3 if steps > 0 else 0.0,
@@ -166,7 +170,8 @@ def quality_rows(origin: str, model_id: str, prompts: dict[str, str],
             continue
         for depth in (0.25, 0.5, 0.75):
             needle = f"XKCD-{label}-{int(depth * 100)}"
-            r = stream(origin, model_id, needle_prompt(base, needle, depth), args, 24)
+            r = stream(origin, model_id, needle_prompt(base, needle, depth), args,
+                       args.quality_tokens)
             rows.append({
                 "kind": "retrieval", "mode": mode, "context": label, "depth": depth,
                 "hit": needle in r["text"], "text": r["text"][:200],
@@ -174,7 +179,7 @@ def quality_rows(origin: str, model_id: str, prompts: dict[str, str],
     base = prompts.get("4k") or next(iter(prompts.values()))
     json_prompt = ("Output ONLY a JSON object with keys tool and city, values "
                    "\"get_weather\" and \"Kyiv\". No prose.\n\n" + base)
-    r = stream(origin, model_id, json_prompt, args, 64)
+    r = stream(origin, model_id, json_prompt, args, args.quality_tokens)
     m = re.search(r"\{.*\}", r["text"], re.S)
     ok = False
     if m:
@@ -187,7 +192,7 @@ def quality_rows(origin: str, model_id: str, prompts: dict[str, str],
 
     code_prompt = ("What is the value of fib(10) for fib(0)=0, fib(1)=1? "
                    "End with the number.\n\n" + base)
-    r = stream(origin, model_id, code_prompt, args, 64)
+    r = stream(origin, model_id, code_prompt, args, args.quality_tokens)
     rows.append({
         "kind": "coding", "mode": mode,
         "ok": bool(re.search(r"\b55\b", r["text"])), "text": r["text"][:200],
@@ -209,6 +214,10 @@ def main(argv=None) -> int:
     p.add_argument("--repeats-short", type=int, default=3, help="runs after warmup for <=32k")
     p.add_argument("--repeats-long", type=int, default=1, help="runs after warmup for >32k")
     p.add_argument("--quality", action="store_true", help="run the quality phase too")
+    p.add_argument("--quality-tokens", type=int, default=512,
+                   help="max_tokens for the quality prompts (reasoning models need room)")
+    p.add_argument("--num-tokens", type=int, default=0,
+                   help="pin the KV pool (--num-tokens/--kv-reserve-tokens); 0 = budget-driven")
     p.add_argument("--parallel", type=int, default=1,
                    help="concurrent requests per context (>1 = concurrency phase)")
     p.add_argument("--json", dest="json_out", required=True)
