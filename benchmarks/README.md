@@ -11,6 +11,15 @@ include the full serving path. AIME-25 prompt, checkpoint-recommended sampling.
 python benchmarks/bench_decode_moe.py --model /path/to/model --backend offload,cpu,hybrid
 ```
 
+`--spec-depth 0,2` adds MTP speculative runs: one server per depth, acceptance parsed
+from the spawned server's log, and a quality gate against the depth-0 greedy output
+(``--min-prefix-ratio``). Example:
+
+```bash
+python benchmarks/bench_decode_moe.py --model /path/to/model --backend offload \
+    --spec-depth 0,2 --greedy --decode 256 --cache 4000
+```
+
 **`bench_load_weight_generic.py`** — expert-bank load time: serial vs parallel O_DIRECT
 vs pre-repacked FTW, each mode in its own subprocess. Linux-only; stages the FTW under
 `/var/tmp` (`--ftw-dir` overrides; roughly checkpoint-sized).

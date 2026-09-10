@@ -39,6 +39,14 @@ Run (one backend):
 
 Run (all three backends, one server per backend):
     ... --model /path/to/model --backend offload,cpu,hybrid --json out.json
+
+Speculative decoding (MTP): ``--spec-depth 0,2`` runs plain and depth-2 servers in one
+invocation. Acceptance is parsed from each spawned server's ``spec accept: A/P`` log
+line (API does not expose it), and every depth > 0 run is quality-gated against the
+depth-0 output: a greedy spec run whose text shares less than ``--min-prefix-ratio``
+of the plain output's characters as a common prefix fails the run (a broken verifier
+collapses to ~0). Note that spec decode is not bit-identical to plain by design
+(batched rows round differently), so the gate is a floor, not an equality check.
 """
 
 from __future__ import annotations
@@ -47,6 +55,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -103,6 +112,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--gpu", default=None,
                    help="GPU for the serve: a UUID or nvidia-smi index (as ft serve --gpu)")
     p.add_argument("--no-graph", action="store_true", help="eager decode instead of CUDA graph")
+    p.add_argument(
+        "--spec-depth",
+        default="0",
+        help="comma list of MTP draft depths; each depth gets its own server run "
+        "(0 = plain decode). Acceptance is parsed from the spawned server's log; a "
+        "depth > 0 run is quality-gated against the depth-0 output.",
+    )
+    p.add_argument(
+        "--spec-adaptive",
+        action="store_true",
+        help="add --speculative-adaptive to spec servers (depth tracks acceptance)",
+    )
+    p.add_argument(
+        "--min-prefix-ratio",
+        type=float,
+        default=0.15,
+        help="quality gate: fail a spec run whose greedy output shares less than this "
+        "fraction of the depth-0 output's characters as a common prefix "
+        "(a broken verifier collapses to ~0)",
+    )
     p.add_argument(
         "--greedy",
         action="store_true",
@@ -173,7 +202,7 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def serve_cmd(args: argparse.Namespace, backend: str, port: int) -> list[str]:
+def serve_cmd(args: argparse.Namespace, backend: str, port: int, depth: int) -> list[str]:
     cmd = [
         sys.executable, "-m", "freetoken.cli", "serve",
         "--model", args.model,
@@ -185,6 +214,10 @@ def serve_cmd(args: argparse.Namespace, backend: str, port: int) -> list[str]:
         "--cuda-graph-max-bs", "0" if args.no_graph else "1",
         "--moe-hybrid-max-fetch", str(args.hybrid_fetch),
     ]
+    if depth > 0:
+        cmd += ["--mtp-depth", str(depth)]
+        if args.spec_adaptive:
+            cmd.append("--speculative-adaptive")
     if args.gpu:
         cmd += ["--gpu", args.gpu]
     if args.cache > 0:
@@ -194,6 +227,35 @@ def serve_cmd(args: argparse.Namespace, backend: str, port: int) -> list[str]:
     else:
         cmd.append("--moe-cache-auto")
     return cmd
+
+
+def parse_spec_acceptance(log_path: str) -> dict | None:
+    """The last cumulative ``spec accept: A/P`` readout of a spawned spec server.
+
+    The scheduler prints it on the periodic decode log line; counters are cumulative
+    for the process, so the last line is the run's total. None for plain servers.
+    """
+    accepted = proposed = 0
+    seen = False
+    for line in Path(log_path).read_text(errors="ignore").splitlines():
+        match = re.search(r"spec accept: (\d+)/(\d+)", line)
+        if match:
+            accepted, proposed, seen = int(match.group(1)), int(match.group(2)), True
+    if not seen:
+        return None
+    return {
+        "accepted": accepted,
+        "proposed": proposed,
+        "rate": accepted / proposed if proposed else 0.0,
+    }
+
+
+def quality_prefix(plain: str, spec: str) -> tuple[int, float]:
+    """(common prefix chars, ratio of the plain output's length) for the quality gate."""
+    n = 0
+    while n < min(len(plain), len(spec)) and plain[n] == spec[n]:
+        n += 1
+    return n, (n / len(plain) if plain else 0.0)
 
 
 def die_with_log(msg: str, log_path: str) -> None:
@@ -301,17 +363,18 @@ def stream_generate(origin: str, model_id: str, problem: str, sampling: dict,
     return {"t0": t0, "stamps": stamps, "text": "".join(pieces), "usage": usage}
 
 
-def run_one(args: argparse.Namespace, backend: str) -> dict:
+def run_one(args: argparse.Namespace, backend: str, depth: int) -> dict:
     problem, answer = load_problem(args.aime, args.problem)
     sampling, sampling_src = resolve_sampling(args.model, args.greedy)
     port = free_port()
     origin = f"http://127.0.0.1:{port}"
     fd, log_path = tempfile.mkstemp(prefix=f"bench-serve-{backend}-", suffix=".log")
-    cmd = serve_cmd(args, backend, port)
+    cmd = serve_cmd(args, backend, port, depth)
 
     print(
         f"[bench] model={args.model}\n"
-        f"[bench] backend={backend} cache={args.cache or args.cache_rate or 'auto'} "
+        f"[bench] backend={backend} depth={depth} "
+        f"cache={args.cache or args.cache_rate or 'auto'} "
         f"mem_ratio={args.mem_ratio} decode={args.decode} graph={not args.no_graph}\n"
         f"[bench] sampling={sampling} <- {sampling_src}\n"
         f"[bench] server log: {log_path}",
@@ -334,6 +397,7 @@ def run_one(args: argparse.Namespace, backend: str) -> dict:
             stream_generate(origin, model_id, problem, sampling, args)
             r = stream_generate(origin, model_id, problem, sampling, args)
             stats = get_json(f"{origin}/v1/stats")
+            acc = parse_spec_acceptance(log_path) if depth > 0 else None
         finally:
             stop_server(proc)
             pump.join(timeout=10)
@@ -350,6 +414,9 @@ def run_one(args: argparse.Namespace, backend: str) -> dict:
     row = {
         "model": args.model,
         "backend": backend,
+        "mtp_depth": depth,
+        "spec_accept": acc,
+        "spec_accept_rate": None if acc is None else round(acc["rate"], 4),
         "problem": args.problem,
         "prompt_tokens": usage["prompt_tokens"],
         "decode_steps": steps,
@@ -366,8 +433,10 @@ def run_one(args: argparse.Namespace, backend: str) -> dict:
         "server_log": log_path,
     }
 
-    print(f"\n==== decode bs=1 [{backend}] via /v1/chat/completions ====", flush=True)
+    print(f"\n==== decode bs=1 [{backend}] depth={depth} via /v1/chat/completions ====", flush=True)
     print(f"  decode throughput : {row['decode_tok_s']:8.2f} tok/s  ({row['ms_per_token']:.3f} ms/token)")
+    if acc is not None:
+        print(f"  spec acceptance   : {acc['rate']:8.3f}  ({acc['accepted']}/{acc['proposed']})")
     print(f"  TTFT (warm)       : {row['ttft_ms']:8.1f} ms  (prompt {row['prompt_tokens']} tok)")
     print(f"  decode measured   : {steps} steps in {decode_time:.3f} s  "
           f"(event p50 {row['event_ms_p50']:.3f} / p99 {row['event_ms_p99']:.3f} ms, "
@@ -376,7 +445,7 @@ def run_one(args: argparse.Namespace, backend: str) -> dict:
     sha_note = "greedy" if args.greedy else "sampled, per-server deterministic"
     print(f"  output sha1       : {row['output_sha1']}  ({sha_note}; compare across backends)")
     print(f"  output sample     : {r['text'][:240]!r}")
-    return row
+    return {**row, "_text": r["text"]}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -385,24 +454,49 @@ def main(argv: list[str] | None = None) -> int:
     unknown = [b for b in backends if b not in ("offload", "cpu", "hybrid")]
     if unknown:
         sys.exit(f"unknown backend(s): {unknown}")
+    depths = [int(d) for d in str(args.spec_depth).split(",") if d.strip()]
+    if any(d < 0 for d in depths):
+        sys.exit("--spec-depth must be non-negative")
 
     failed = []
+    plain_text: dict[str, str] = {}
     for backend in backends:
-        try:
-            row = run_one(args, backend)
-        # SystemExit inherits BaseException, not Exception, so name both: a mid-decode
-        # connection drop (server crash) must not abort the remaining backends either.
-        except (SystemExit, Exception) as e:
-            if len(backends) == 1:
-                raise
-            print(f"\n[bench] backend {backend} failed: {e!r}", flush=True)
-            failed.append(backend)
-            continue
-        if args.json_out:
-            with open(args.json_out, "a") as f:
-                f.write(json.dumps(row) + "\n")
+        for depth in depths:
+            try:
+                row = run_one(args, backend, depth)
+            # SystemExit inherits BaseException, not Exception, so name both: a mid-decode
+            # connection drop (server crash) must not abort the remaining runs either.
+            except (SystemExit, Exception) as e:
+                if len(backends) == 1 and len(depths) == 1:
+                    raise
+                print(f"\n[bench] {backend} depth={depth} failed: {e!r}", flush=True)
+                failed.append(f"{backend} d{depth}")
+                continue
+            text = row.pop("_text")
+            if depth == 0:
+                plain_text[backend] = text
+            elif backend in plain_text:
+                chars, ratio = quality_prefix(plain_text[backend], text)
+                row["quality_prefix_chars"] = chars
+                row["quality_prefix_ratio"] = round(ratio, 4)
+                print(
+                    f"  quality vs plain  : {chars} chars common prefix "
+                    f"({ratio:.2f} of the plain output)",
+                    flush=True,
+                )
+                if ratio < args.min_prefix_ratio:
+                    print(
+                        f"\n[bench] QUALITY GATE: depth={depth} prefix ratio {ratio:.2f} "
+                        f"< --min-prefix-ratio {args.min_prefix_ratio}: the verifier looks "
+                        f"broken (acceptance {row.get('spec_accept_rate')})",
+                        flush=True,
+                    )
+                    failed.append(f"{backend} d{depth} (quality)")
+            if args.json_out:
+                with open(args.json_out, "a") as f:
+                    f.write(json.dumps(row) + "\n")
     if failed:
-        print(f"\n[bench] backends that failed: {failed}", flush=True)
+        print(f"\n[bench] runs that failed: {failed}", flush=True)
         return 1
     return 0
 
