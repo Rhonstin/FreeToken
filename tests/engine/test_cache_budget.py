@@ -122,6 +122,41 @@ def test_resolve_auto_caps_slots_at_the_kernel_limit():
     assert size == 992
 
 
+def test_moe_cache_auto_prices_the_resolved_kv_format():
+    # --moe-cache-auto must size from kv_cost's quantized price (e4m3 codes + fp32
+    # scales), not a dtype-derived itemsize: fp8 roughly halves the per-page KV bytes,
+    # so an identical budget funds more KV pages and the solver's split moves.
+    from freetoken.attention import AttnType
+    from freetoken.kvcache.mha_pool import MHAKVCache
+    from freetoken.models.config import KVCacheGroupSpec
+
+    def per_page(kv_quant):
+        spec = KVCacheGroupSpec(
+            name="full", layer_ids=(0, 1, 2, 3), num_kv_heads=8, head_dim=64,
+            sliding_window=None, attn_type=AttnType.FULL,
+        )
+        mc = SimpleNamespace(has_swa_attention=False, dsv4_args=None)
+        mc.kv_cache_group_specs = lambda: (spec,)
+        config = SimpleNamespace(
+            model_config=mc, page_size=16, dtype=torch.bfloat16, kv_quant=kv_quant,
+            tp_info=SimpleNamespace(size=1),
+        )
+        return MHAKVCache.kv_cost(config)[0]
+
+    def plan(cache_per_page):
+        return resolve_moe_cache_auto(
+            baseline_free=1_000_000, weights_bytes=0, memory_ratio=1.0,
+            cache_per_page=cache_per_page, fixed_cache_size=0, per_expert_bytes=1000,
+            num_experts=4, total_experts=4, prefill_overlap=False,
+            kv_reserve_tokens=0, page_size=16,
+        )
+
+    plain_pages = plan(per_page("none"))[1]
+    fp8_pages = plan(per_page("fp8"))[1]
+    assert per_page("fp8") < per_page("none")
+    assert fp8_pages > plain_pages
+
+
 def _dsv4_adjust_cfg(**over):
     # A DSV4 _adjust_config stub mirroring the real checkpoint (ds_fp4 experts, dsv4_sparse
     # attention, offload MoE backend).

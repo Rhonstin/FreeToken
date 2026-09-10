@@ -297,6 +297,7 @@ def create_kvcache_pool(
         device=device,
         dtype=dtype,
         layer_ids=layer_ids,
+        kv_quant=kv_quant,
     )
 
 

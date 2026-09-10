@@ -78,6 +78,69 @@ def test_generic_kv_cost_and_solve_parity():
     assert MHAKVCache.min_kv_tokens(config) == config.page_size
 
 
+def _fp8_config(*, kv_heads=2, head_dim=64, layers=2, page_size=16, tp_size=1, kv_quant="fp8"):
+    spec = KVCacheGroupSpec(
+        name="full", layer_ids=tuple(range(layers)), num_kv_heads=kv_heads, head_dim=head_dim,
+        sliding_window=None, attn_type=AttnType.FULL,
+    )
+    config = _generic_config()
+    config.model_config = _model_config((spec,))
+    object.__setattr__(config, "page_size", page_size)
+    object.__setattr__(config, "tp_info", SimpleNamespace(size=tp_size))
+    object.__setattr__(config, "kv_quant", kv_quant)
+    return config
+
+
+def test_fp8_kv_pair_at_head_dim_128_is_264_bytes_without_extra_tiers():
+    # 2 x 128 e4m3 code bytes + 2 fp32 row scales = 264 B vs bf16's 512 B, and the
+    # uniform slab has no fixed tier to pad the figure.
+    from freetoken.kvcache.base import spec_kv_bytes_per_token
+    from freetoken.kvcache.mha_pool import MHAKVCache
+
+    config = _fp8_config(kv_heads=1, head_dim=128, layers=1, page_size=1, kv_quant="fp8")
+    (spec,) = config.model_config.kv_cache_group_specs()
+    assert spec_kv_bytes_per_token(spec, config) == 264
+    assert MHAKVCache.kv_cost(config) == (264, 0, 1, 0)
+    plain = _fp8_config(kv_heads=1, head_dim=128, layers=1, page_size=1, kv_quant="none")
+    assert spec_kv_bytes_per_token(spec, plain) == 512
+
+
+@pytest.mark.parametrize("tp_size", [1, 2])
+@pytest.mark.parametrize(
+    "kv_heads,head_dim,layers", [(8, 64, 3), (2, 128, 2), (4, 32, 5)]
+)
+def test_fp8_planner_price_matches_live_pool_bytes(
+    monkeypatch, tp_size, kv_heads, head_dim, layers
+):
+    """kv_cost (which sizes --moe-cache-auto) and the pool's own unit_bytes must agree
+    byte for byte across geometries and TP sharding of the KV heads."""
+    import torch
+
+    from freetoken.distributed.info import DistributedInfo
+    from freetoken.kvcache.base import spec_kv_bytes_per_token
+    from freetoken.kvcache.mha_pool import MHAKVCache
+
+    monkeypatch.setattr(
+        "freetoken.kvcache.mha_pool.get_tp_info",
+        lambda: DistributedInfo(rank=0, size=tp_size),
+    )
+    config = _fp8_config(
+        kv_heads=kv_heads, head_dim=head_dim, layers=layers, tp_size=tp_size, kv_quant="fp8"
+    )
+    (spec,) = config.model_config.kv_cache_group_specs()
+    per_token = spec_kv_bytes_per_token(spec, config)
+    assert MHAKVCache.kv_cost(config) == (
+        per_token * config.page_size, 0, config.page_size, 0
+    )
+
+    pool = MHAKVCache(
+        num_kv_heads=kv_heads, num_layers=layers, head_dim=head_dim, num_pages=5,
+        page_size=config.page_size, dtype=torch.bfloat16, device=torch.device("cpu"),
+        kv_quant="fp8",
+    )
+    assert pool.unit_bytes() == (per_token, 0)
+
+
 def _dsv4_config(num_page_override=None):
     from freetoken.models.deepseek_v4.args import DeepseekV4Args
 
@@ -237,6 +300,29 @@ def test_create_kv_pool_builds_the_right_family():
     pool2 = create_kv_pool(config2, num_pages=8, device=torch.device("cpu"), dtype=torch.bfloat16)
     assert isinstance(pool2, HybridSWAKVCache)
     assert pool2.swa_num_tokens == _swa_paged_num_tokens(config2, 9)
+
+
+def test_create_kvcache_pool_threads_kv_quant_into_the_mha_pool():
+    # The factory's kv_quant must reach the pool, or the budget's fp8 price would be
+    # served by a 16-bit buffer (the storage gate only blocks create_kv_pool).
+    import torch
+
+    from freetoken.distributed import set_tp_info, try_get_tp_info
+    from freetoken.kvcache import create_kvcache_pool
+
+    if try_get_tp_info() is None:
+        set_tp_info(rank=0, size=1)
+    mc = _model_config(
+        (_spec("full", AttnType.FULL),), has_linear_attention=False, num_layers=2,
+        num_kv_heads=2, head_dim=64,
+    )
+    pool = create_kvcache_pool(
+        model_config=mc, num_pages=4, page_size=1, dtype=torch.bfloat16,
+        device=torch.device("cpu"), kv_quant="fp8",
+    )
+    assert pool.kv_quant == "fp8"
+    assert pool.store_dtype is torch.uint8
+    assert pool.dtype is torch.bfloat16
 
 
 def test_linear_state_pool_prices_itself():

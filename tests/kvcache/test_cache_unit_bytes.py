@@ -24,14 +24,17 @@ def _init_tp() -> None:
         set_tp_info(rank=0, size=1)
 
 
-def _mha_engine(layers=4, pages=100, page_size=16, kv_heads=2, head_dim=64, dtype=torch.bfloat16):
+def _mha_engine(
+    layers=4, pages=100, page_size=16, kv_heads=2, head_dim=64, dtype=torch.bfloat16,
+    kv_quant="none",
+):
     from freetoken.kvcache.mha_pool import MHAKVCache
 
     _init_tp()
     eng = SimpleNamespace(
         kv_cache=MHAKVCache(
             num_kv_heads=kv_heads, num_layers=layers, head_dim=head_dim, num_pages=pages,
-            page_size=page_size, dtype=dtype, device=torch.device("cpu"),
+            page_size=page_size, dtype=dtype, device=torch.device("cpu"), kv_quant=kv_quant,
         ),
         moe_offload_cache=None,
         linear_state_pool=None,
@@ -48,6 +51,69 @@ def test_kv_bytes_per_token_from_mha_buffer():
     assert ub["kv_bytes_per_token"] == 2 * layers * kv_heads * head_dim * itemsize
     assert ub["moe_bytes_per_expert"] == 0
     assert ub["mamba_bytes_per_slot"] == 0
+
+
+def test_fp8_kv_bytes_per_token_adds_scale_sidecar():
+    # e4m3 codes are one byte/elem; one fp32 scale rides each (slab, layer, head, token).
+    layers, kv_heads, head_dim = 4, 2, 64
+    eng = _mha_engine(layers=layers, kv_heads=kv_heads, head_dim=head_dim, kv_quant="fp8")
+    ub = compute_cache_unit_bytes(eng)
+    codes = 2 * layers * kv_heads * head_dim * 1
+    scales = 2 * layers * kv_heads * 4
+    assert ub["kv_bytes_per_token"] == codes + scales
+
+
+def test_fp8_kv_pair_at_head_dim_128_is_264_bytes_not_512():
+    # The acceptance figure: 2 x 128 e4m3 code bytes + 2 fp32 row scales = 264 B/token,
+    # against bf16's 512 B/token, with no extra fixed tier (a 1-page pool here).
+    fp8 = _mha_engine(layers=1, kv_heads=1, head_dim=128, page_size=1, kv_quant="fp8")
+    plain = _mha_engine(layers=1, kv_heads=1, head_dim=128, page_size=1)
+    assert compute_cache_unit_bytes(fp8)["kv_bytes_per_token"] == 264
+    assert compute_cache_unit_bytes(plain)["kv_bytes_per_token"] == 512
+
+
+def test_fp8_pool_reports_compute_dtype_but_stores_uint8():
+    from freetoken.kvcache.mha_pool import MHAKVCache
+
+    _init_tp()
+    layers, heads, dim, pages, page_size = 3, 4, 32, 5, 8
+    pool = MHAKVCache(
+        num_kv_heads=heads, num_layers=layers, head_dim=dim, num_pages=pages,
+        page_size=page_size, dtype=torch.bfloat16, device=torch.device("cpu"),
+        kv_quant="fp8",
+    )
+    # dtype stays what backends hand to store_kv / size scratch with; store_dtype is the
+    # buffer's element type. Reporting codes as ``dtype`` breaks downstream tl.dot sizing.
+    assert pool.dtype is torch.bfloat16
+    assert pool.store_dtype is torch.uint8
+    assert pool.k_cache(0).dtype is torch.uint8
+    slots = pages * page_size
+    for layer in range(layers):
+        assert pool.k_scale(layer).shape == (slots, heads)
+        assert pool.v_scale(layer).shape == (slots, heads)
+        assert pool.k_scale(layer).dtype is torch.float32
+    # A 16-bit pool exposes no scales and keeps the compute buffer dtype.
+    plain = MHAKVCache(
+        num_kv_heads=heads, num_layers=layers, head_dim=dim, num_pages=pages,
+        page_size=page_size, dtype=torch.bfloat16, device=torch.device("cpu"),
+    )
+    assert plain.k_scale(0) is None and plain.v_scale(0) is None
+    assert plain.store_dtype is torch.bfloat16
+
+
+def test_fp8_scales_follow_the_layer_id_remap():
+    # A scale view that forgot the remap would hand layer 7's rows to layer 2's attention.
+    from freetoken.kvcache.mha_pool import MHAKVCache
+
+    _init_tp()
+    pool = MHAKVCache(
+        num_kv_heads=2, num_layers=4, head_dim=8, num_pages=2, page_size=4,
+        dtype=torch.bfloat16, device=torch.device("cpu"), layer_ids=(1, 3), kv_quant="fp8",
+    )
+    assert pool._kv_buffer.shape[1] == 2  # only the two full-attention layers
+    assert pool.k_scale(3).shape == (8, 2)
+    with pytest.raises(KeyError):
+        pool.k_scale(0)
 
 
 def test_kv_and_swa_bytes_per_token_from_hybrid_pools():
