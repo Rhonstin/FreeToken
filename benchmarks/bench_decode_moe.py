@@ -123,6 +123,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="write the measured run's generated text here (quality comparisons)",
     )
     p.add_argument(
+        "--max-extend-length", type=int, default=0,
+        help="server --max-extend-length (prefill chunk token budget); 0 = server default (8192)",
+    )
+    p.add_argument(
         "--max-seq-len",
         type=int,
         default=0,
@@ -232,6 +236,8 @@ def serve_cmd(args: argparse.Namespace, backend: str, port: int, depth: int) -> 
     ]
     if args.kv_cache_dtype != "auto":
         cmd += ["--kv-cache-dtype", args.kv_cache_dtype]
+    if args.max_extend_length > 0:
+        cmd += ["--max-extend-length", str(args.max_extend_length)]
     if depth > 0:
         cmd += ["--mtp-depth", str(depth)]
         if args.spec_adaptive:
