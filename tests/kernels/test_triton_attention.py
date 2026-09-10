@@ -988,7 +988,14 @@ def test_paged_attention_decodes_fp8_scales():
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="Triton attention needs CUDA")
 @pytest.mark.parametrize("use_split_inputs", [False, True])
-def test_extend_paged_attention_decodes_fp8_scales(use_split_inputs: bool):
+@pytest.mark.parametrize(
+    "cached_lens,extend_lens",
+    [([4, 2], [3, 2]), ([70, 3], [61, 2])],
+    ids=["short", "crosses-tiles"],
+)
+def test_extend_paged_attention_decodes_fp8_scales(
+    use_split_inputs: bool, cached_lens, extend_lens
+):
     """Prefill over an fp8 cache.
 
     With ``use_split_inputs`` the kernel reads a request's own new tokens from
@@ -996,13 +1003,16 @@ def test_extend_paged_attention_decodes_fp8_scales(use_split_inputs: bool):
     fp8 codes; without it every row is served from the codes. The reference mirrors
     that split, so a scale leaking onto the extend path -- or failing to apply to the
     cache path -- cannot pass.
+
+    The ``crosses-tiles`` case runs the same oracle with a 131-token prefix and a
+    63-token extend: BLOCK_N (64) and BLOCK_M (128) boundaries are crossed, so a
+    chunk-boundary bug cannot hide behind a single-tile prefix.
     """
     from freetoken.kernel.triton.attention import extend_paged_attention
 
     torch.manual_seed(14)
     device = torch.device("cuda")
     head_dim, num_kv_heads, num_q_heads = 64, 2, 8
-    cached_lens, extend_lens = [4, 2], [3, 2]
     seq_lens = [c + e for c, e in zip(cached_lens, extend_lens)]
     total_q, total_kv = sum(extend_lens), sum(seq_lens)
     q = torch.randn(total_q, num_q_heads, head_dim, device=device, dtype=torch.bfloat16)
@@ -1024,8 +1034,9 @@ def test_extend_paged_attention_decodes_fp8_scales(use_split_inputs: bool):
     # KV positions are logical, but FP8 codes and their scales are addressed by the
     # physical slots from the page table. A contiguous table masks a regression that
     # looks scales up with the logical position instead of the slot.
-    indices = torch.tensor(
-        [10, 3, 8, 1, 9, 0, 7, 2, 6, 4, 5], dtype=torch.int32, device=device
+    generator = torch.Generator(device="cpu").manual_seed(7)
+    indices = torch.randperm(total_kv, generator=generator).to(
+        dtype=torch.int32, device=device
     )
     prefix_lens = torch.tensor(cached_lens, dtype=torch.int32, device=device)
     q_to_req = torch.empty(total_q, dtype=torch.int32, device=device)
