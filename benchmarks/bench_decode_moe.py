@@ -113,6 +113,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="GPU for the serve: a UUID or nvidia-smi index (as ft serve --gpu)")
     p.add_argument("--no-graph", action="store_true", help="eager decode instead of CUDA graph")
     p.add_argument(
+        "--max-seq-len",
+        type=int,
+        default=0,
+        help="server --max-seq-len-override; 0 = 8192 + --decode (the decode-bench default)",
+    )
+    p.add_argument(
         "--spec-depth",
         default="0",
         help="comma list of MTP draft depths; each depth gets its own server run "
@@ -209,7 +215,7 @@ def serve_cmd(args: argparse.Namespace, backend: str, port: int, depth: int) -> 
         "--host", "127.0.0.1", "--port", str(port),
         "--moe-backend", backend,
         "--max-running-requests", "1",
-        "--max-seq-len-override", str(8192 + args.decode),
+        "--max-seq-len-override", str(args.max_seq_len or (8192 + args.decode)),
         "--memory-ratio", str(args.mem_ratio),
         "--cuda-graph-max-bs", "0" if args.no_graph else "1",
         "--moe-hybrid-max-fetch", str(args.hybrid_fetch),
@@ -393,8 +399,9 @@ def run_one(args: argparse.Namespace, backend: str, depth: int) -> dict:
             print(f"[bench] model_id={model_id}", flush=True)
             print(f"[bench] AIME25 #{args.problem} (answer {answer})", flush=True)
 
-            # Warm the expert cache to a steady-state decode working set.
-            stream_generate(origin, model_id, problem, sampling, args)
+            # Warm the expert cache to a steady-state decode working set. The warmup's
+            # first token is the COLD TTFT: empty radix prefix, first prefill after load.
+            warmup = stream_generate(origin, model_id, problem, sampling, args)
             r = stream_generate(origin, model_id, problem, sampling, args)
             stats = get_json(f"{origin}/v1/stats")
             acc = parse_spec_acceptance(log_path) if depth > 0 else None
@@ -425,6 +432,9 @@ def run_one(args: argparse.Namespace, backend: str, depth: int) -> dict:
         "event_ms_p50": gaps[len(gaps) // 2],
         "event_ms_p99": gaps[min(len(gaps) - 1, int(len(gaps) * 0.99))],
         "ttft_ms": (stamps[0] - r["t0"]) * 1e3,
+        "ttft_cold_ms": (
+            (warmup["stamps"][0] - warmup["t0"]) * 1e3 if warmup["stamps"] else None
+        ),
         "events": len(stamps),
         "completion_tokens": completion,
         "vram_gib": stats.get("vram_bytes", 0) / 2**30,
@@ -437,7 +447,8 @@ def run_one(args: argparse.Namespace, backend: str, depth: int) -> dict:
     print(f"  decode throughput : {row['decode_tok_s']:8.2f} tok/s  ({row['ms_per_token']:.3f} ms/token)")
     if acc is not None:
         print(f"  spec acceptance   : {acc['rate']:8.3f}  ({acc['accepted']}/{acc['proposed']})")
-    print(f"  TTFT (warm)       : {row['ttft_ms']:8.1f} ms  (prompt {row['prompt_tokens']} tok)")
+    cold_s = f"{row['ttft_cold_ms']:.1f}" if row["ttft_cold_ms"] is not None else "n/a"
+    print(f"  TTFT cold/warm    : {cold_s}/{row['ttft_ms']:.1f} ms  (prompt {row['prompt_tokens']} tok)")
     print(f"  decode measured   : {steps} steps in {decode_time:.3f} s  "
           f"(event p50 {row['event_ms_p50']:.3f} / p99 {row['event_ms_p99']:.3f} ms, "
           f"{len(stamps)} events)")
