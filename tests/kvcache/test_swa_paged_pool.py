@@ -232,3 +232,38 @@ def test_fp8_store_kv_translates_slots_and_scatters_codes_and_scales(monkeypatch
         pool.k_scale(1)[full_loc.long()], scales_view, rtol=0, atol=0
     )
     assert torch.equal(pool.k_cache(1)[full_loc.long()][:, 0, 0, :], codes)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fp8 scatter needs CUDA")
+def test_fp8_reused_slot_gets_fresh_codes_and_scales(monkeypatch):
+    """A slot handed out again must read back the NEW row: overwriting codes without
+    overwriting the scale sidecar would silently serve the previous request's scale."""
+    from freetoken.kernel.triton.kv_quant import codes_to_f32
+
+    _patch_tp(monkeypatch)
+    dev = torch.device("cuda")
+    pool = _paged_pool(kv_quant="fp8", device=dev)
+    loc = torch.tensor([0, 1], dtype=torch.int32, device=dev)
+    pool.alloc_swa(loc)
+    first = torch.full((2, 8), 5.0, device=dev, dtype=torch.bfloat16)
+    pool.store_kv(first, first, loc, layer_id=0)
+    torch.cuda.synchronize()
+    old_scale = pool.k_scale(0).clone()
+
+    pool.free_swa(loc)
+    pool.alloc_swa(loc)
+    swa = pool.translate_loc_from_full_to_swa(loc).long()
+    second = torch.full((2, 8), 0.25, device=dev, dtype=torch.bfloat16)
+    pool.store_kv(second, second, loc, layer_id=0)
+    torch.cuda.synchronize()
+
+    scales = pool.k_scale(0)[swa][:, 0]
+    ref = second.to(torch.float32).abs().amax(dim=-1) / 448.0
+    torch.testing.assert_close(scales, ref, rtol=1e-6, atol=0)
+    deq = codes_to_f32(pool.k_cache(0)[swa][:, 0, 0, :]) * scales.unsqueeze(-1)
+    assert torch.all(
+        (deq - second.to(torch.float32)).abs()
+        <= 0.08 * second.to(torch.float32).abs().amax(dim=-1, keepdim=True)
+    )
+    # The write went through the byte view: the pool is still a real quantized pool.
+    assert pool.store_dtype != torch.bfloat16 and old_scale.numel() > 0

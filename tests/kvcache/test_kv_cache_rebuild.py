@@ -292,3 +292,33 @@ def test_every_kv_pool_answers_the_rebuild_surface():
         for cls in (MHAKVCache, MLAKVCache, DSAKVCache, HybridSWAKVCache)
     )
     assert _mha_pool().attach_page_table(torch.zeros(1)) is None  # base no-op
+
+
+def test_mha_fp8_rebuild_resizes_codes_and_scales_together():
+    """Grow/shrink must reallocate the code AND scale buffers together: a grown slab
+    whose scales are stale would serve quantized rows at the wrong scale."""
+    from freetoken.kernel.triton.kv_quant import codes_to_f32, kv_codes_dtype
+    from freetoken.kvcache.mha_pool import MHAKVCache
+
+    _init_tp()
+    pool = MHAKVCache(
+        num_kv_heads=8, num_layers=3, head_dim=64, num_pages=2, page_size=16,
+        dtype=torch.float16, device=torch.device("cpu"), kv_quant="fp8",
+    )
+    pool_id = id(pool)
+    assert pool._kv_buffer.shape == (2, 3, 2, 16, 8, 64)
+    assert pool._scale_buffer.shape == (2, 3, 2 * 16, 8)
+
+    pool.rebuild(6)
+
+    assert id(pool) == pool_id
+    assert pool.store_dtype == kv_codes_dtype()
+    assert pool._kv_buffer.shape == (2, 3, 6, 16, 8, 64)
+    assert pool._scale_buffer.shape == (2, 3, 6 * 16, 8)
+    assert pool._storage_shape == (6 * 16, 8, 64)
+    # Fresh buffers are zero-filled: every unwritten code decodes to exactly 0.0.
+    assert (codes_to_f32(pool.k_cache(0)) == 0).all()
+    assert (pool.k_scale(0) == 0).all()
+    # The cost model must agree with the resized pool: two slabs x layers x heads x
+    # (64 code bytes + 4 B scale) per token.
+    assert pool.unit_bytes() == (2 * 3 * 8 * (64 + 4), 0)
