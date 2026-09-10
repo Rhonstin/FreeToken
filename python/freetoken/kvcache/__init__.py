@@ -170,6 +170,7 @@ def create_kvcache_pool(
             num_swa_tokens=num_swa_tokens,
             device=device,
             dtype=dtype,
+            kv_quant=kv_quant,
         )
 
     from .mha_pool import MHAKVCache

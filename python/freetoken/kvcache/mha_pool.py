@@ -9,6 +9,17 @@ from freetoken.utils import div_even
 from .base import BaseKVCachePool
 
 
+def _kv_store_dtype(dtype: torch.dtype, kv_quant: str) -> torch.dtype:
+    """Storage dtype of the KV buffer for a quantization mode."""
+    if kv_quant == "none":
+        return dtype
+    if kv_quant == "fp8":
+        from freetoken.kernel.triton.kv_quant import kv_codes_dtype
+
+        return kv_codes_dtype()
+    raise ValueError(f"unknown kv_quant {kv_quant!r}")
+
+
 class MHAKVCache(BaseKVCachePool):
     """
     Base class for key-value caches.

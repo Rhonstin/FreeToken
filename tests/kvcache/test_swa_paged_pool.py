@@ -29,7 +29,7 @@ def _specs():
     )
 
 
-def _paged_pool(num_full=16, num_swa=8):
+def _paged_pool(num_full=16, num_swa=8, kv_quant="none", device=None):
     from freetoken.kvcache.hybrid_swa_pool import HybridSWAKVCache
 
     return HybridSWAKVCache(
@@ -38,8 +38,9 @@ def _paged_pool(num_full=16, num_swa=8):
         num_full_pages=num_full,  # page_size=1 -> full_num_tokens == num_full
         page_size=1,
         dtype=torch.bfloat16,
-        device=torch.device("cpu"),
+        device=device or torch.device("cpu"),
         num_swa_tokens=num_swa,
+        kv_quant=kv_quant,
     )
 
 
@@ -139,3 +140,95 @@ def test_rebuild_resets_mapping_and_freelist(monkeypatch):
     # allocator still works at the new geometry.
     pool.alloc_swa(torch.tensor([30, 31], dtype=torch.int32))
     assert pool.swa_available_size() == 9
+
+
+def test_fp8_pool_separates_compute_and_store_dtype(monkeypatch):
+    """Both groups shrink to codes, and the scale views follow the layer mapping."""
+    _patch_tp(monkeypatch)
+    from freetoken.kernel.triton.kv_quant import kv_codes_dtype
+
+    quantized = _paged_pool(kv_quant="fp8")
+    plain = _paged_pool()
+    assert quantized.dtype is torch.bfloat16 and plain.dtype is torch.bfloat16
+    assert quantized.store_dtype == kv_codes_dtype()
+    assert plain.store_dtype is torch.bfloat16
+    # layer 0 -> swa group, layer 1 -> full group; the buffers really shrank.
+    assert quantized.k_cache(1).element_size() == 1
+    assert quantized.k_cache(0).element_size() == 1
+    assert plain.k_cache(1).element_size() == 2
+    # Scales have the same physical ownership as the payload they describe.
+    assert quantized.k_scale(1).shape == (16, 1)  # full tokens
+    assert quantized.k_scale(0).shape == (8, 1)  # swa tokens
+    assert quantized.k_scale(1).dtype is torch.float32
+    assert plain.k_scale(1) is None and plain.v_scale(0) is None
+
+
+def test_fp8_unit_bytes_prices_the_scale_sidecar_in_both_groups(monkeypatch):
+    """fp8 = 1 code byte + 4 scale bytes per (token, head) vs bf16's 2 bytes.
+
+    At this fixture's head_dim 8 the sidecar is large (4/8 of the codes), which is
+    exactly the accounting contract: both groups must price it, and the sum must match
+    the buffers the planner sized."""
+    _patch_tp(monkeypatch)
+    assert _paged_pool().unit_bytes() == (32, 32)
+    assert _paged_pool(kv_quant="fp8").unit_bytes() == (24, 24)
+
+
+def test_fp8_rebuild_resizes_codes_and_scales_together(monkeypatch):
+    _patch_tp(monkeypatch)
+    from freetoken.kernel.triton.kv_quant import kv_codes_dtype
+
+    pool = _paged_pool(kv_quant="fp8")
+    pool.rebuild(num_full_pages=32, num_swa_tokens=12)
+    assert pool.store_dtype == kv_codes_dtype()
+    assert pool.full_num_tokens == 32 and pool.swa_num_tokens == 12
+    assert pool.k_cache(1).shape[0] == 32 and pool.k_scale(1).shape == (32, 1)
+    assert pool.k_cache(0).shape[0] == 12 and pool.k_scale(0).shape == (12, 1)
+    # Fresh buffers are zero-filled, so an unwritten code decodes to 0.0, not NaN.
+    assert (pool.k_cache(1) == 0).all() and (pool.k_cache(0) == 0).all()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fp8 scatter needs CUDA")
+def test_fp8_store_kv_translates_slots_and_scatters_codes_and_scales(monkeypatch):
+    """The SWA group's write goes through translate_loc_from_full_to_swa, so codes and
+    scales must land on the TRANSLATED physical slot, not the logical one; an
+    unmapped (sentinel) slot stays exactly zero."""
+    from freetoken.kernel.triton.kv_quant import codes_to_f32
+
+    _patch_tp(monkeypatch)
+    dev = torch.device("cuda")
+    pool = _paged_pool(kv_quant="fp8", device=dev)
+    k = torch.randn(3, 8, device=dev, dtype=torch.bfloat16) * 2.0
+    v = torch.randn_like(k)
+    full_loc = torch.tensor([0, 3, 5], dtype=torch.int32, device=dev)
+    pool.alloc_swa(full_loc)
+
+    pool.store_kv(k, v, full_loc, layer_id=0)  # swa group
+    torch.cuda.synchronize()
+    swa_loc = pool.translate_loc_from_full_to_swa(full_loc).long()
+    assert pool.k_scale(0).shape == (8, 1)
+    scales_view = pool.k_scale(0)[swa_loc]
+    # The pool hands out the RAW buffer (slots, inner, heads, dim); the attention
+    # backend flattens it. This fixture has inner=1, heads=1, so index both away.
+    codes = pool.k_cache(0)[swa_loc][:, 0, 0, :]  # (tokens, head_dim)
+    scales = scales_view[:, 0]  # (tokens,)
+    deq = codes_to_f32(codes) * scales.unsqueeze(-1)
+    ref_scale = k.to(torch.float32).abs().amax(dim=-1) / 448.0
+    torch.testing.assert_close(scales, ref_scale, rtol=1e-6, atol=0)
+    assert torch.all(
+        (deq - k.to(torch.float32)).abs()
+        <= 0.08 * k.to(torch.float32).abs().amax(dim=-1, keepdim=True)
+    )
+    # The sentinel slot and every unmapped slot stayed zero (no stale codes).
+    untouched = torch.ones(8, dtype=torch.bool, device=dev)
+    untouched[swa_loc] = False
+    assert (pool.k_cache(0)[untouched] == 0).all()
+    assert (pool.k_scale(0)[untouched] == 0).all()
+
+    # The full group stores by slot identity: same rows, same codes.
+    pool.store_kv(k, v, full_loc, layer_id=1)
+    torch.cuda.synchronize()
+    torch.testing.assert_close(
+        pool.k_scale(1)[full_loc.long()], scales_view, rtol=0, atol=0
+    )
+    assert torch.equal(pool.k_cache(1)[full_loc.long()][:, 0, 0, :], codes)
