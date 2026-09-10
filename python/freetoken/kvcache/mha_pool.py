@@ -22,8 +22,8 @@ class MHAKVCache(BaseKVCachePool):
     dense slot, avoiding a multiple-x over-allocation of unused slabs.
 
     ``kv_quant="fp8"`` halves the cache: rows become e4m3 codes and every
-    ``(token, slab, layer, kv head)`` row carries one fp32 scale (the quantize-scatter
-    kernel that fills them is wired in a later task). The codes buffer keeps the exact same
+    ``(token, slab, layer, kv head)`` row carries one fp32 scale (see
+    :mod:`freetoken.kernel.triton.kv_quant`). The codes buffer keeps the exact same
     shape as the 16-bit one, so ``k_cache``/``v_cache`` and every index into them are
     unchanged -- only the element type, and ``store_kv``'s write path, differ.
     """
@@ -76,9 +76,11 @@ class MHAKVCache(BaseKVCachePool):
         """
         shape = (2, num_storage_layers, num_pages, page_size, local_kv_heads, head_dim)
         if self.kv_quant == "fp8":
+            from freetoken.kernel.triton.kv_quant import alloc_codes
+
             # e4m3 codes live in a plain uint8 buffer on every arch, so the fp8 type never
             # reaches a kernel signature (see kernel/triton/e4m3_compat.py).
-            self._kv_buffer = torch.zeros(shape, dtype=torch.uint8, device=self._device)
+            self._kv_buffer = alloc_codes(shape, self._device)
             self._scale_buffer = torch.zeros(
                 (2, num_storage_layers, num_pages * page_size, local_kv_heads),
                 device=self._device,
@@ -167,15 +169,22 @@ class MHAKVCache(BaseKVCachePool):
         out_loc: torch.Tensor,
         layer_id: int,
     ) -> None:
+        dense = self._dense(layer_id)
         if self.kv_quant == "fp8":
-            # The quantize-scatter kernel (kernel/triton/kv_quant.py) lands with the
-            # next task; until then a quantized pool must not 16-bit-write into codes.
-            raise NotImplementedError(
-                "fp8 KV store is not wired yet; keep --kv-cache-dtype auto/bf16."
+            from freetoken.kernel.triton.kv_quant import quantize_kv_to_cache
+
+            quantize_kv_to_cache(
+                k=k,
+                v=v,
+                out_loc=out_loc,
+                k_cache=self._k_buffer[dense].view(self._storage_shape),
+                v_cache=self._v_buffer[dense].view(self._storage_shape),
+                k_scale=self._scale_buffer[0][dense],
+                v_scale=self._scale_buffer[1][dense],
             )
+            return
         from freetoken.kernel import store_cache
 
-        dense = self._dense(layer_id)
         store_cache(
             k_cache=self._k_buffer[dense].view(self._storage_shape),
             v_cache=self._v_buffer[dense].view(self._storage_shape),

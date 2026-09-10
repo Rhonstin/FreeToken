@@ -88,8 +88,8 @@ def _reject_unsupported_quant(pool: str, kv_quant: str) -> None:
 
 def _quant_storage_pending(pool: str, kv_quant: str) -> None:
     """Temporary gate: the config contract allows fp8 for these families, but the
-    code/scale buffers land with the FP8 storage tasks -- refuse loudly instead of
-    silently serving the compute-dtype cache."""
+    attention backends cannot read the scale sidecar yet (and most pools have no code
+    buffers) -- refuse loudly instead of silently serving a wrong-dtype cache."""
     if kv_quant != "none":
         raise NotImplementedError(
             f"--kv-cache-dtype {kv_quant} storage is not wired into the {pool} pool yet; "
