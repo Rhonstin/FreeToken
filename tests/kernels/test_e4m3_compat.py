@@ -308,7 +308,10 @@ def _emit_all(path: str) -> None:
     # must produce identical bits: the reader casts back to the query dtype before the
     # dot, so any decode difference lands on the comparison instead of hiding in a
     # tolerance.
-    from freetoken.kernel.triton.kv_quant import alloc_codes, quantize_kv_to_cache
+    from freetoken.kernel.triton.kv_quant import (
+        alloc_codes, codes_to_f32, quantize_kv_to_cache,
+    )
+    from freetoken.kernel.triton.qsa import qsa_sparse_paged_attention
 
     slots, kvh, hd, page = 128, 2, 64, 64
     kv_in = (torch.randn(slots, kvh * hd, device=dev, dtype=torch.float32) * 4.0).to(
@@ -330,9 +333,27 @@ def _emit_all(path: str) -> None:
     out["kvfp8_codes"] = k_codes.view(torch.uint8).to(torch.int16).cpu()
     out["kvfp8_scale"] = k_sc.cpu()
 
-    # The QSA sparse reader's fp8 signature (k_scale/v_scale) lands with the QSA read
-    # path (task 5y2.9); until then this gate stops at the writer, whose sm_86 emulated
-    # encode is exactly what a foreign-arch compile needs to survive.
+    pages = slots // page
+    kc4, vc4 = k_codes.view(pages, page, kvh, hd), v_codes.view(pages, page, kvh, hd)
+    q = torch.randn(2, 2 * kvh, hd, device=dev, dtype=torch.bfloat16)
+    sel = (
+        torch.arange(2 * page, dtype=torch.int32, device=dev)[None, :]
+        .repeat(2, 1)
+        .contiguous()
+    )
+    table = torch.arange(pages, dtype=torch.int32, device=dev)[None, :].contiguous()
+    t2r = torch.zeros(2, dtype=torch.int32, device=dev)
+    out["kvfp8_qsa"] = f32(qsa_sparse_paged_attention(
+        q, kc4, vc4, sel, table, t2r, k_scale=k_sc, v_scale=v_sc))
+    # The very same numbers, pre-rounded into a bf16 cache. The reader casts its
+    # dequantized operands to the query dtype before tl.dot, so the two runs must end up
+    # bit-identical (asserted where launches really execute: tests/kernels/test_qsa_fp8.py
+    # -- the compile gate below runs warmup-only, where outputs are never written).
+    out["kvfp8_qsa_bf16"] = f32(qsa_sparse_paged_attention(
+        q,
+        (codes_to_f32(kc4) * k_sc.view(pages, page, kvh, 1)).to(torch.bfloat16),
+        (codes_to_f32(vc4) * v_sc.view(pages, page, kvh, 1)).to(torch.bfloat16),
+        sel, table, t2r))
     torch.save(out, path)
 
 
