@@ -40,6 +40,11 @@ class Qwen4ExpArgs:
     index_head_dim: int
     index_budget: int
     index_ratio: int
+    # MTP draft depth (``mtp.layers`` count). 0 = no draft head: the model builds no
+    # ``mtp`` submodule and the loader stays strict-inert. The HF config carries no such
+    # field (transformers ignores ``mtp.*``), so this is opt-in (a CLI flag in 419.7) or
+    # ``num_nextn_predict_layers`` when a checkpoint config provides it.
+    mtp_num_layers: int = 0
 
     @property
     def index_topk_blocks(self) -> int:
@@ -236,8 +241,7 @@ def parse_config(hf_config: Any) -> ModelConfig:
     qwen4_args = Qwen4ExpArgs(
         hidden_size=text.hidden_size,
         hc_count=int(text.hc_count),
-        hc_lowrank=int(text.hc_lowrank),
-        ple_layer_ids=ple_layer_ids,
+        hc_lowrank=int(text.hc_lowrank),        ple_layer_ids=ple_layer_ids,
         ple_embed_dim=int(text.ple_embed_dim),
         ple_conv_kernel_size=int(text.ple_conv_kernel_size),
         ngram_size=int(text.ngram_size),
@@ -251,6 +255,7 @@ def parse_config(hf_config: Any) -> ModelConfig:
         index_head_dim=int(text.indexer_head_dim),
         index_budget=int(text.indexer_budget),
         index_ratio=int(text.indexer_compress_ratio),
+        mtp_num_layers=int(getattr(text, "num_nextn_predict_layers", 0) or 0),
     )
 
     return ModelConfig(

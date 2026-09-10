@@ -143,6 +143,15 @@ def parse_args(
             raise argparse.ArgumentTypeError("must be >= 1")
         return n
 
+    def _non_negative_int(value: str) -> int:
+        try:
+            n = int(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("must be a non-negative integer") from exc
+        if n < 0:
+            raise argparse.ArgumentTypeError("must be >= 0")
+        return n
+
     def _lazy_gpu_arg(value: str) -> tuple[str, ...]:
         from freetoken.gpu_select import gpu_arg
 
@@ -368,6 +377,64 @@ def parse_args(
         type=_positive_int,
         default=ServerArgs.decode_log_interval,
         help="Print one decode scheduler status line every N decode forwards.",
+    )
+
+    parser.add_argument(
+        "--mtp-depth",
+        type=_non_negative_int,
+        default=ServerArgs.mtp_depth,
+        help=(
+            "MTP speculative drafts proposed per decode step (gamma) for qwen4_exp. "
+            "0 (default) is plain decode: no draft head is built and logging is "
+            "unchanged. > 0 builds the checkpoint's mtp.* draft head and verifies "
+            "each step's drafts against the target."
+        ),
+    )
+
+    parser.add_argument(
+        "--speculative-adaptive",
+        action="store_true",
+        dest="mtp_adaptive",
+        default=ServerArgs.mtp_adaptive,
+        help=(
+            "Let each request's draft depth track its own acceptance (start at "
+            "--mtp-depth, grow on fully-accepted steps, shrink on all-rejected "
+            "ones). Requires --mtp-depth > 0."
+        ),
+    )
+
+    parser.add_argument(
+        "--lookup-draft",
+        type=_non_negative_int,
+        default=ServerArgs.lookup_draft,
+        help=(
+            "Draft-free speculation: propose up to N tokens per step by prompt "
+            "look-up (the continuation of the most recent earlier occurrence of the "
+            "request's token suffix), verified by the same exact path as MTP. No "
+            "draft model and no VRAM; 0 (default) disables. Mutually exclusive with "
+            "--mtp-depth."
+        ),
+    )
+
+    parser.add_argument(
+        "--lookup-ngram",
+        type=_positive_int,
+        default=ServerArgs.lookup_ngram,
+        help=(
+            "Longest suffix length the look-up matcher considers (default 6). Only "
+            "with --lookup-draft > 0."
+        ),
+    )
+
+    parser.add_argument(
+        "--lookup-min-ngram",
+        type=_positive_int,
+        default=ServerArgs.lookup_min_ngram,
+        help=(
+            "Shortest match length the look-up matcher accepts (default 2). Raise it "
+            "on non-repetitive text: a weak match drafts rows that reject, and every "
+            "verify row costs expert fetches."
+        ),
     )
 
     kv_capacity_group = parser.add_mutually_exclusive_group()
@@ -598,6 +665,15 @@ def parse_args(
     )
 
     parser.add_argument(
+        "--moe-collect-stats",
+        action="store_true",
+        default=ServerArgs.moe_collect_stats,
+        help="Collect MoE decode cache counters (realized miss rate + routing skew / "
+        "oracle-hit) on-device and print them on the periodic decode log line; for "
+        "tuning cache size and future policies.",
+    )
+
+    parser.add_argument(
         "--moe-cpu-threads",
         type=int,
         default=ServerArgs.moe_cpu_threads,
@@ -784,6 +860,11 @@ def parse_args(
     kwargs["dtype"] = DTYPE_MAP[dtype_str] if isinstance(dtype_str, str) else dtype_str
     kwargs["tp_info"] = DistributedInfo(0, kwargs["tensor_parallel_size"])
     del kwargs["tensor_parallel_size"]
+
+    if kwargs["mtp_adaptive"] and not kwargs["mtp_depth"] > 0:
+        parser.error("--speculative-adaptive requires --mtp-depth > 0")
+    if kwargs["lookup_draft"] and kwargs["mtp_depth"]:
+        parser.error("--lookup-draft and --mtp-depth are mutually exclusive (one drafter per run)")
 
     result = ServerArgs(**kwargs)
     logger.info(f"Parsed arguments:\n{result}")

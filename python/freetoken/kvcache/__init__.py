@@ -117,6 +117,8 @@ def create_kv_pool(config, num_pages: int, device: torch.device, dtype: torch.dt
         device=device,
         dtype=dtype,
         num_req_slots=config.max_running_req + 1,  # + 1 for the dummy request row
+        # MTP draft depth widens the QSA pending ring (0 = plain decode, unchanged).
+        num_speculative_tokens=max(0, int(getattr(config, "mtp_depth", 0) or 0)),
     )
 
 
@@ -128,6 +130,7 @@ def create_kvcache_pool(
     device: torch.device,
     num_swa_tokens: int | None = None,
     num_req_slots: int | None = None,
+    num_speculative_tokens: int = 0,
 ) -> BaseKVCachePool:
     if model_config.has_swa_attention:
         from .hybrid_swa_pool import HybridSWAKVCache
@@ -187,23 +190,34 @@ def create_kvcache_pool(
     # all num_layers would allocate K/V slabs for the GDN layers too.
     if len(kv_specs) == 1 and kv_specs[0].attn_type == _AttnType.QSA:
         from .qsa_pool import QSAKVCache
+        from freetoken.engine.mtp import draft_qsa_layer_ids
 
         spec = kv_specs[0]
         if num_req_slots is None:
             raise ValueError("QSA pools need num_req_slots (max_running_req + 1)")
+        # MTP draft layers ride the same pool: their ids extend the dense slot map
+        # (storage slabs + index tiers) in the same order the backend maps them, and
+        # the pending ring widens by the draft depth. Empty without a draft head.
+        draft_ids = draft_qsa_layer_ids(model_config)
+        layer_ids = (*spec.layer_ids, *draft_ids)
+        num_layers = model_config.num_layers
+        if draft_ids:
+            num_layers = max(num_layers, max(draft_ids) + 1)
         return QSAKVCache(
             num_kv_heads=spec.num_kv_heads,
-            num_layers=model_config.num_layers,
+            num_layers=num_layers,
             head_dim=spec.head_dim,
             num_pages=num_pages,
             page_size=page_size,
             dtype=dtype,
             device=device,
             index_head_dim=spec.index_head_dim,
-            num_index_layers=spec.num_index_layers,
+            num_index_layers=spec.num_index_layers + len(draft_ids),
             index_ratio=spec.index_ratio,
             num_req_slots=num_req_slots,
-            layer_ids=spec.layer_ids,
+            ring_capacity=QSAKVCache.ring_capacity_for(
+                spec.index_ratio, max(0, num_speculative_tokens)),
+            layer_ids=layer_ids,
         )
 
     if len(kv_specs) == 1 and kv_specs[0].mla:

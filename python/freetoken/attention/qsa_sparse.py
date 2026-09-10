@@ -125,8 +125,13 @@ class QSASparseAttnBackend(BaseAttnBackend):
             "qsa_sparse serves the default 1/sqrt(head_dim) attention scale only"
         )
         # QSA layer -> index slab slot, in sparse-layer order (the pool's own convention).
+        # Draft layers extend the map in the same order the pool appends them
+        # (draft_qsa_layer_ids: empty without a draft head, so the plain map is untouched).
         group = self._qsa_group(config)
-        self._idx_slot = {lid: i for i, lid in enumerate(group.layer_ids)}
+        from freetoken.engine.mtp import draft_qsa_layer_ids
+
+        self._idx_slot = {
+            lid: i for i, lid in enumerate([*group.layer_ids, *draft_qsa_layer_ids(config)])}
         self.rotary_config = group.rotary_config
         self._index_cos_sin: torch.Tensor | None = None
 
@@ -231,15 +236,26 @@ class QSASparseAttnBackend(BaseAttnBackend):
 
     def _snapshot_decode(self, md: QSASparseMetadata, batch: Batch) -> None:
         """Eager decode (not graph-staged): this step's rows, once per forward. The live
-        page-table row may mutate for the next batch while this one runs, so gather now."""
+        page-table row may mutate for the next batch while this one runs, so gather now.
+        Row-addressed fields (token_to_req, cu_seqlens) span FORWARD ROWS, not
+        requests: a spec batch carries 1 + spec_depth rows per request."""
         reqs = batch.padded_reqs if hasattr(batch, "padded_reqs") else batch.reqs
         bs = len(reqs)
         table_idx = torch.tensor([r.table_idx for r in reqs], **_CPU_PINNED)
         md.ring_slots = table_idx.to(self.device, non_blocking=True)
         md.block_table = self._block_table(md.ring_slots.to(torch.int64))
         md.seq_lens = md.kv_len_cpu.to(self.device, non_blocking=True)
-        md.token_to_req = torch.arange(bs, dtype=torch.int32, device=self.device)
-        md.cu_seqlens = torch.arange(bs + 1, dtype=torch.int32, device=self.device)
+        spec_rows = getattr(batch, "spec_rows", None)
+        if spec_rows is None:
+            md.token_to_req = torch.arange(bs, dtype=torch.int32, device=self.device)
+            md.cu_seqlens = torch.arange(bs + 1, dtype=torch.int32, device=self.device)
+            return
+        pos = {id(req): i for i, req in enumerate(reqs)}
+        md.token_to_req = torch.tensor(
+            [pos[id(req)] for req, _ in spec_rows], dtype=torch.int32,
+            device=self.device)
+        md.cu_seqlens = torch.arange(
+            len(spec_rows) + 1, dtype=torch.int32, device=self.device)
 
     # ----- dense layers -------------------------------------------------------------------
     def forward(

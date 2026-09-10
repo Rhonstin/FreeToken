@@ -25,6 +25,13 @@ TopK = Tuple[torch.Tensor, torch.Tensor]
 # GPU work) -- a measurement-only escape hatch to A/B the overlap benefit.
 _HYBRID_OVERLAP = os.getenv("FREETOKEN_HYBRID_OVERLAP", "1") != "0"
 
+# Tiny prefill extends (the speculative GDN replay, MTP draft evaluations) compute
+# better on the on-demand decode path: streaming a whole layer copies ~num_experts x
+# row bytes per layer, while a handful of rows touch only rows*top_k experts. The
+# threshold keeps the streaming path for real prefills (where the whole-layer copy
+# amortizes over many rows).
+_TINY_EXTEND_MAX_ROWS = 8
+
 
 class MoELayer(BaseOP):
     """Resident routed experts.
@@ -186,13 +193,21 @@ class OffloadMoELayer(MoELayer):
         )
         self.offload_cache: OffloadMoeCache | None = None
 
+    def _tiny_extend(self, hidden_states: torch.Tensor) -> bool:
+        """Whether a prefill batch is small enough that on-demand loading beats
+        streaming every layer: a few rows touch at most ``rows * top_k`` experts, far
+        below one layer's ``num_experts``, so the full-layer H2D copy would dwarf the
+        compute it enables (the speculative GDN replay runs one to a few tokens)."""
+        rows = int(hidden_states.shape[0])
+        return rows <= _TINY_EXTEND_MAX_ROWS and rows * int(self.top_k) <= self.num_experts
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         router_logits: torch.Tensor | None = None,
     ):
         ctx = get_global_ctx()
-        if ctx.batch.is_prefill:
+        if ctx.batch.is_prefill and not self._tiny_extend(hidden_states):
             final_hidden_states = self.prefill_forward(hidden_states, router_logits)
         else:
             final_hidden_states = self.decode_forward(hidden_states, router_logits)
@@ -212,7 +227,7 @@ class OffloadMoELayer(MoELayer):
         rewrites expert ids into cache slot ids); pass a fresh tensor or a clone.
         """
         ctx = get_global_ctx()
-        if ctx.batch.is_prefill:
+        if ctx.batch.is_prefill and not self._tiny_extend(hidden_states):
             out = self._prefill_routed(hidden_states, topk_weights, topk_ids)
         else:
             out = self._decode_routed(hidden_states, topk_weights, topk_ids)

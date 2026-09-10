@@ -122,11 +122,14 @@ class ParallelLMHead(VocabParallelEmbedding):
         return {} if result is None else result
 
     @nvtx_annotate("LMHead")
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, *, all_rows: bool = False) -> torch.Tensor:
         ctx = get_global_ctx()
         batch = ctx.batch
         bs = batch.size
-        if batch.is_prefill:
+        # Prefill batches normally score only each request's last row (the
+        # continuation); the MTP draft forward runs prefill-phase but needs every
+        # row's distribution, so it opts out with all_rows=True.
+        if batch.is_prefill and not all_rows:
             indices = batch.attn_metadata.get_last_indices(bs)
             x = x[indices].contiguous()
             del indices

@@ -308,6 +308,37 @@ def _ngram_context_pool() -> torch.Tensor:
     return pool.slot_state(PLE_NGRAM_STATE)
 
 
+def _spec_row_contexts(batch, spec_rows, slots, context_pool, device):
+    """Per-row n-gram contexts for a speculative decode batch (device-only).
+
+    The anchor row of each span keeps the rolled pre-step slot state (the plain
+    path); each draft row's context is the ``ctx_len`` ids before its position,
+    taken from the flat rows above the anchor and from the anchor's rolled state
+    below it (which already embodies eos restarts). Past-the-start positions read
+    the eos-filled columns of a fresh slot state, matching the plain path.
+    """
+    flat = batch.input_ids.long()
+    ctx_len = context_pool.shape[-1]
+    anchor_ctx = context_pool.index_select(0, slots).long()
+    out = torch.empty(flat.numel(), ctx_len, dtype=torch.int64, device=device)
+    rows = list(spec_rows)
+    o = i = 0
+    ar = torch.arange(ctx_len, device=device).unsqueeze(0)
+    while i < len(rows):
+        req = rows[i][0]
+        span = 1
+        while i + span < len(rows) and rows[i + span][0] is req:
+            span += 1
+        jm = torch.arange(span, device=device).unsqueeze(1) + ar  # j+m per row
+        take_anchor = jm < ctx_len
+        got_anchor = anchor_ctx[o : o + span].gather(1, jm.clamp(0, ctx_len - 1))
+        got_flat = flat[(o + (jm - ctx_len)).clamp(min=o)]
+        out[o : o + span] = torch.where(take_anchor, got_anchor, got_flat)
+        o += span
+        i += span
+    return out
+
+
 def build_ple_metadata(
     batch: Batch,
     args: Qwen4ExpArgs,
@@ -336,12 +367,27 @@ def build_ple_metadata(
 
     if batch.is_decode and slots_dev is not None:
         slots = slots_dev.long()
+        spec_rows = getattr(batch, "spec_rows", None)
+        if spec_rows is not None:
+            # Multi-row speculative batch: repeat each request's slot across its
+            # anchor + draft rows (row-major span order, matching flat input_ids)
+            # and roll each draft row's n-gram context forward from committed +
+            # draft tokens. The anchor row keeps the rolled pre-step state (the
+            # plain path, untouched); draft row j's context is the ctx_len ids
+            # before its position, taken from the flat rows above the anchor and
+            # from the token pool (device mirror of the committed prefix) below
+            # it, with eos padding past the sequence start.
+            order = {id(r): i for i, r in enumerate(batch.padded_reqs)}
+            slots = slots[[order[id(r)] for r, _ in spec_rows]]
+            ctx = _spec_row_contexts(batch, spec_rows, slots, context_pool, device)
+        else:
+            ctx = context_pool.index_select(0, slots).long()
         bs = slots.numel()
         return PLEMetadata(
             input_ids=batch.input_ids,
             cu_seqlens=torch.arange(bs + 1, dtype=torch.int32, device=device),
             seq_lens=(1,) * bs,
-            ngram_context=context_pool.index_select(0, slots).long(),
+            ngram_context=ctx,
             state_slots=slots,
             fresh_slots=None,
             is_decode=True,
@@ -383,7 +429,20 @@ def commit_ngram_context(meta: PLEMetadata, fla, context_pool: torch.Tensor | No
     ctx_len = meta.ngram_context.shape[1]
     steps = torch.arange(ctx_len, device=ids.device)
     if meta.is_decode:
+        slots = meta.state_slots
         nxt = torch.cat([meta.ngram_context[:, 1:], ids.view(-1, 1)], dim=1)
+        # Speculative spans share one slot across rows, and padded batches repeat
+        # the dummy row: index_copy_ with duplicate indices is nondeterministic, and
+        # branching on a uniqueness check would sync (capture-hostile). Instead,
+        # broadcast every row to its slot's LAST row value first (pure kernels,
+        # static shapes -- identity for unique slots), so duplicate writes agree.
+        # The kept value is the state past the span end: exact on full acceptance,
+        # restored + replayed on partial.
+        n = slots.numel()
+        ar = torch.arange(n, device=slots.device)
+        eq = slots.unsqueeze(0) == slots.unsqueeze(1)
+        last_idx = torch.where(eq, ar.unsqueeze(0), ar[:1]).amax(dim=1)
+        context_pool.index_copy_(0, slots, nxt[last_idx].to(context_pool.dtype))
     else:
         cu = meta.cu_seqlens.long()
         cand = cu[1:].unsqueeze(1) - ctx_len + steps
@@ -393,7 +452,7 @@ def commit_ngram_context(meta: PLEMetadata, fla, context_pool: torch.Tensor | No
             1, ((cu[1:] - cu[:-1]).unsqueeze(1) + steps).clamp_(max=ctx_len - 1)
         )
         nxt = torch.where(cand >= cu[:-1].unsqueeze(1), ids[cand.clamp_min(0)], old)
-    context_pool.index_copy_(0, meta.state_slots, nxt.to(context_pool.dtype))
+        context_pool.index_copy_(0, meta.state_slots, nxt.to(context_pool.dtype))
     if fla is not None and fla.track_boundary_row is not None:
         win = ids[fla.track_boundary_row.unsqueeze(1) - ctx_len + steps]
         context_pool.index_copy_(0, fla.track_dst, win.to(context_pool.dtype))

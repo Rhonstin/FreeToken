@@ -281,6 +281,69 @@ class CacheManager:
                 self.swa_pool.alloc_swa(allocated)
             _write_page_table(self.page_table, allocated, allocation_info, self.page_size)
 
+    def free_token_tail(self, req: Req, keep_len: int) -> None:
+        """Release this request's reserved pages holding no token through ``keep_len``.
+
+        Speculative decode reserves pages for draft rows that verification may reject; after a
+        commit the tail past the accepted length goes back to the free list. Page-granular:
+        a page is released only when it lies wholly beyond ``keep_len``, so nothing committed
+        shares a freed page with the accepted prefix. The caller is single-shot per commit
+        (calling again would double-free) and updates the request's lengths itself. The swa
+        slots backing freed full tokens go back too.
+        """
+        device_len = req.device_len
+        if device_len <= keep_len:
+            return
+        start = div_ceil(keep_len, self.page_size) * self.page_size
+        if start >= device_len:
+            return
+        indices = self.page_table[req.table_idx, start:device_len]
+        if self.swa_paged:
+            self._free_swa(indices)
+        self._free(indices)
+
+    def spec_snapshot(self, req: Req) -> None:
+        """Journal this request's pre-step GDN state for a speculative step.
+
+        Copies the live slot into the request's journal slot (allocated on first use via
+        ensure_mamba_slots, so tree snapshots yield under pressure instead of deadlocking
+        admission). Must run pre-forward on the engine stream, once per step: the forward
+        advances the live slot in place through every draft row, so a snapshot taken any
+        later would already encode rejectable tokens. Re-snapshotting pre-forward is
+        harmless (same content). No-op unless hybrid with drafts scheduled.
+        """
+        if not self.is_hybrid or req.spec_depth <= 0 or req.linear_slot_idx is None:
+            return
+        pool = self.linear_state_pool
+        if req.spec_journal_slot is None:
+            self.ensure_mamba_slots(1)
+            req.spec_journal_slot = pool.alloc(1)[0]
+        pool.copy_from(req.linear_slot_idx, req.spec_journal_slot)
+
+    def spec_restore(self, req: Req) -> None:
+        """Roll the live GDN state back to the pre-step journal after a rejection.
+
+        The caller replays the accepted-but-unplayed suffix as a continuation chunk next
+        (the journal holds the state through the pre-step cached_len, while lengths
+        already rotated past it) -- see commit_spec. No-op unless hybrid with a journal.
+        """
+        if (not self.is_hybrid or req.spec_journal_slot is None
+                or req.linear_slot_idx is None):
+            return
+        self.linear_state_pool.copy_from(req.spec_journal_slot, req.linear_slot_idx)
+
+    def commit_spec(self, req: Req, committed: int) -> None:
+        """Pair a verification verdict's page release with its length rotation.
+
+        Releases the whole pages holding only rejected reservation tail, then rotates the
+        frame past the accepted length -- one call so the two cannot drift apart. The
+        GDN side is separate: on a partial accept the caller runs spec_restore first (the
+        forward advanced the live slot past ``committed``) and replays the accepted suffix
+        after. Single-shot per commit, like free_token_tail.
+        """
+        self.free_token_tail(req, keep_len=committed)
+        req.commit_spec(committed)
+
     def cache_req(self, req: Req, *, finished: bool) -> None:
         if self.is_swa:
             return self._cache_req_swa(req, finished=finished)
@@ -526,16 +589,19 @@ class CacheManager:
         return self.page_table[req.table_idx, start:end]
 
     def _free_req_slots(self, req: Req, keep_live: bool = False) -> None:
-        """Return a finished request's GDN pool slots: both ping-pong slots, plus the live slot
-        unless it was donated to the tree. Idempotent -- clears the refs so a re-entry frees
+        """Return a finished request's GDN pool slots: both ping-pong slots, the live slot
+        unless it was donated to the tree, and the speculative journal slot. Idempotent -- clears the refs so a re-entry frees
         nothing (defense-in-depth against the abort/finish double-free, see _free_req_resources)."""
         slots = list(req.mamba_ping_pong) if req.mamba_ping_pong is not None else []
         if not keep_live and req.linear_slot_idx is not None:
             slots.append(req.linear_slot_idx)
+        if req.spec_journal_slot is not None:
+            slots.append(req.spec_journal_slot)
         if slots:
             self.linear_state_pool.free(slots)
         req.mamba_ping_pong = None
         req.linear_slot_idx = None
+        req.spec_journal_slot = None
 
     def check_integrity(self) -> None:
         if self.is_hybrid:

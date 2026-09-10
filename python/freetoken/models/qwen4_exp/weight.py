@@ -5,8 +5,13 @@ Three separate paths, because the checkpoint's three weight classes live in diff
 * :func:`iter_weights` -- every dense (non-expert) tensor, with the ``model.language_model.`` prefix stripped and fused where the model expects one buffer. See ``_FUSIONS``.
 * :func:`load_ple_table` -- the 47.7 GiB FP8 n-gram table, 128 checkpoint shards concatenated into one pinned :class:`HostBank`.
 * :func:`nvfp4_expert_spec` -- how the routed NVFP4 experts are named, for the offload cache's expert reader.
+* :func:`iter_mtp_expert_pieces` -- the MTP head's stacked block-fp8 routed experts, as per-expert pieces for the offload banks (``iter_weights`` skips them).
 
-Dropped: ``mtp.*`` (speculative head, including its stacked ``mtp.layers.0.mlp.experts.*``) and ``model.visual.*`` (served text-only).
+``iter_weights`` drops ``mtp.*`` unless asked: the MTP speculative head (a full decoder
+layer plus a top-level hyper-connection mixer, keys already ``mtp.``-namespaced) is only
+loaded on request (``include_mtp=True``), gated by the draft module the model builds. Its
+routed experts are stacked per-MTP-layer dense-bf16 tensors, always served from the
+expert banks instead of the state dict. ``model.visual.*`` stays dropped (served text-only).
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ from typing import Iterator
 import safetensors
 import torch
 from freetoken.distributed import get_tp_info
-from freetoken.models.loader import drop_page_cache, iter_weight_files
+from freetoken.models.loader import ShardReader, drop_page_cache, iter_weight_files
 from freetoken.models.nvfp4_banks import (
     Nvfp4ExpertSourceSpec,
 )
@@ -38,6 +43,14 @@ _EXPERT_KEY_RE = re.compile(
     r"(?P<proj>gate_proj|up_proj|down_proj)\.(?P<kind>weight|weight_scale|weight_scale_2)$"
 )
 _EXPERT_RE = re.compile(r"\.mlp\.experts\.\d+\.")
+
+# The MTP head's stacked dense-bf16 routed experts: one fused tensor per role per MTP
+# layer (no per-block scales -- unlike the NVFP4 target experts, these are plain bf16).
+_MTP_EXPERT_RE = re.compile(
+    r"^mtp\.layers\.(?P<layer>\d+)\.mlp\.experts\."
+    r"(?P<name>gate_up_proj|down_proj)$"
+)
+_MTP_EXPERT_BATCH = 32  # experts per piece; bounds the transient slice footprint
 _NVFP4_SOURCE_SPEC = Nvfp4ExpertSourceSpec(
     key_pattern=_EXPERT_KEY_RE,
     proj_to_role={"gate_proj": "gate", "up_proj": "up", "down_proj": "down"},
@@ -98,9 +111,15 @@ _FUSIONS: dict[str, tuple[tuple[str, ...], int]] = {
 }
 
 
-def _rename(raw_name: str) -> str | None:
+def _rename(raw_name: str, *, include_mtp: bool = False) -> str | None:
     """Checkpoint key -> FreeToken state-dict key, or None to skip."""
-    if raw_name.startswith(("mtp.", "model.visual.", "visual.")):
+    if raw_name.startswith("mtp."):
+        if not include_mtp:
+            return None
+        if _MTP_EXPERT_RE.match(raw_name):
+            return None  # MTP routed experts: iter_mtp_expert_pieces
+        return raw_name  # already namespaced below the model root
+    if raw_name.startswith(("model.visual.", "visual.")):
         return None
     if _PLE_TABLE_INFIX in raw_name:
         return None  # n-gram table + its scale: load_ple_table
@@ -143,6 +162,7 @@ def iter_weights(
     *,
     include_moe_experts: bool,
     include_non_moe: bool,
+    include_mtp: bool = False,
 ) -> Iterator[tuple[str, torch.Tensor]]:
     """Yield the dense (non-expert) weights, prefix-stripped and fused to the model's buffers.
 
@@ -157,6 +177,11 @@ def iter_weights(
 
     ``include_moe_experts`` is accepted for the loader contract but never yields anything: the
     routed experts are NVFP4 and always come from the offload cache's expert reader.
+
+    ``include_mtp`` adds the MTP head's dense tensors under their ``mtp.`` keys (fusions apply
+    inside the namespace the same way); its routed experts never flow through here. Default off:
+    the model only asks for the head once it builds the draft module, and load_state_dict is
+    strict about unexpected keys.
     """
     if get_tp_info().size > 1:
         raise NotImplementedError("qwen4_exp weight loading supports TP=1 only")
@@ -171,7 +196,7 @@ def iter_weights(
     ):
         with safetensors.safe_open(file, framework="pt", device=str(device)) as f:
             for raw_name in f.keys():
-                name = _rename(raw_name)
+                name = _rename(raw_name, include_mtp=include_mtp)
                 if name is None:
                     continue
                 tensor = f.get_tensor(raw_name)
@@ -323,11 +348,109 @@ def load_ple_table(model_path: str, qwen4_args, *, pin: bool = True,
 # ======================================================================================
 
 
+# ======================================================================================
+# MTP head: stacked block-fp8 experts + the quant mapping
+# ======================================================================================
+
+
+def _mtp_expert_files(model_path: str) -> dict[str, str]:
+    """MTP stacked-expert checkpoint key -> shard path (index when there is one, headers otherwise)."""
+    folder = download_hf_weight(model_path)
+    index = os.path.join(folder, "model.safetensors.index.json")
+    if os.path.exists(index):
+        with open(index, encoding="utf-8") as fh:
+            weight_map = json.load(fh)["weight_map"]
+        return {k: os.path.join(folder, v) for k, v in weight_map.items() if _MTP_EXPERT_RE.match(k)}
+    files: dict[str, str] = {}
+    for file in iter_weight_files(folder):
+        header, _base = _safetensors_header(file)
+        files.update({k: file for k in header if k != "__metadata__" and _MTP_EXPERT_RE.match(k)})
+    return files
+
+
+def iter_mtp_expert_pieces(model_path: str, model_config, *, batch: int = _MTP_EXPERT_BATCH):
+    """The MTP head's stacked dense-bf16 routed experts as per-expert pieces for ``build_expert_banks``.
+
+    The head stores one fused tensor per role per MTP layer (``mtp.layers.N.mlp.experts.
+    gate_up_proj`` [E, 2I, H] bf16 and the ``down_proj`` [E, H, I] bf16 -- checkpoint
+    ground truth, no ``_scale_inv`` companions), so pieces slice the gate/up halves out
+    of the fused rows. Roles carry the target's bf16 bank names ({gate, up, down}),
+    packed through the draft layers' own (unquantized) method; layer ids continue past
+    the target's MoE layers (``num_moe_layers + mtp_layer``) so the attach path can key
+    them. A non-floating (quantized) stacked expert fails loudly: the bf16 bank pack
+    cannot serve it.
+    """
+    keys = _mtp_expert_files(model_path)
+    if not keys:
+        return
+    E = model_config.num_experts
+    I = model_config.moe_intermediate_size
+    H = model_config.hidden_size
+    layers = sorted({int(_MTP_EXPERT_RE.match(k).group("layer")) for k in keys})
+    reader = ShardReader(model_path, torch.device("cpu"))
+    try:
+        for li in layers:
+            base = f"mtp.layers.{li}.mlp.experts"
+            gate_up = reader.get_tensor(f"{base}.gate_up_proj")
+            down = reader.get_tensor(f"{base}.down_proj")
+            for name, tensor, shape in (
+                ("gate_up_proj", gate_up, (E, 2 * I, H)),
+                ("down_proj", down, (E, H, I)),
+            ):
+                if tuple(tensor.shape) != shape:
+                    raise ValueError(f"{base}.{name} is {tuple(tensor.shape)}, expected {shape}")
+            if not (gate_up.is_floating_point() and down.is_floating_point()):
+                raise ValueError(
+                    f"{base}: stacked MTP experts must be dense floating point, "
+                    f"got {gate_up.dtype} / {down.dtype}")
+            for e0 in range(0, E, batch):
+                e1 = min(e0 + batch, E)
+                yield model_config.num_moe_layers + li, e0, e1, {
+                    "gate": gate_up[e0:e1, :I],
+                    "up": gate_up[e0:e1, I:],
+                    "down": down[e0:e1],
+                }
+    finally:
+        reader.close()
+
+
+def mtp_expert_method(model_config):
+    """The expert quant method the MTP head's routed experts pack through.
+
+    Built through the #418 layers (``fp8_block_scheme`` -> ``method_class`` -> backend) with
+    the target's expert geometry, so its bank layout is exactly the target offload layers':
+    one bank schema, one cache.
+
+    NOTE: the shipping RadixArk NVFP4 checkpoint carries dense-BF16 stacked MTP experts,
+    not block-fp8 -- for that checkpoint the attach path packs through the draft layers'
+    own (unquantized) method instead (see ``build_mtp_draft_banks``). This constructor
+    stays for block-fp8 releases whose stacked experts do carry ``_scale_inv`` companions.
+    """
+    from freetoken.layers.quantization.moe.base import MoEConfig
+    from freetoken.layers.quantization.quant_backend import get_quant_backend
+    from freetoken.layers.quantization.registry import LayerKind, method_class
+    from freetoken.layers.quantization.scheme import QuantKind, fp8_block_scheme
+
+    cfg = MoEConfig(
+        num_experts=model_config.num_experts,
+        hidden=model_config.hidden_size,
+        intermediate=model_config.moe_intermediate_size,
+        top_k=model_config.num_experts_per_tok,
+        scheme=fp8_block_scheme("float"),
+        activation=model_config.hidden_act,
+        strategy="offload",
+    )
+    cls = method_class(QuantKind.FP8_BLOCK, LayerKind.MOE)
+    return cls(cfg, get_quant_backend().select(LayerKind.MOE, QuantKind.FP8_BLOCK))
+
+
 def nvfp4_expert_spec(model_path: str, config):
     return _NVFP4_SOURCE_SPEC
 
 
 __all__ = [
+    "iter_mtp_expert_pieces",
+    "mtp_expert_method",
     "nvfp4_expert_spec",
     "PleTable",
     "iter_weights",

@@ -876,3 +876,147 @@ def test_lock_failure_downgrades_echoed_residency(monkeypatch):
         with hb.PinPipeline() as pins:
             pins(1, {"gate_up": hb.HostBank((4,), torch.uint8)})
     assert plan2.actual == {1: hb.HostResidency.PAGEABLE.value}
+
+
+# ======================================================================================
+# Sticky materialize (the MTP draft cache): one whole-layer copy, then reuse
+# ======================================================================================
+
+
+def test_sticky_materialize_skips_the_repeated_layer_copy(monkeypatch):
+    """The draft cache is sized to hold one whole layer and only prefills materialize
+    it, so a materialized layer stays in slots [0, E). Repeating the materialize must
+    not re-stage the layer-size H2D copy every draft step (the live 100x slowdown)."""
+    from freetoken.moe.offload_cache import OffloadMoeCache
+    import freetoken.moe.offload_kernels as ok
+
+    calls = []
+    monkeypatch.setattr(ok, "materialize_layer", lambda cache, layer_id: calls.append(layer_id))
+
+    cache = OffloadMoeCache(
+        num_layers=1, num_experts=4, cache_size=4,
+        device=torch.device("cpu"), sticky_materialize=True,
+    )
+    cache.materialize_layer(0)
+    assert calls == [0]
+    assert cache._materialized_layers == {0}
+    # the repeated step skips staging entirely and copy_missing no-ops without banks
+    cache.materialize_layer(0)
+    assert calls == [0]
+    cache.copy_missing()
+    # a different layer's materialize overwrites slots [0, E): the claim drops
+    cache.materialize_layer(1)
+    assert calls == [0, 1]
+    cache.materialize_layer(0)
+    assert calls == [0, 1, 0]
+
+
+def test_sticky_claim_drops_on_an_lru_remap(monkeypatch):
+    """ensure_experts rewrites slot_for_id: any sticky claim may no longer describe
+    the slots and must be dropped (conservative correctness over the fast path)."""
+    from freetoken.moe.offload_cache import OffloadMoeCache
+    import freetoken.moe.offload_kernels as ok
+
+    monkeypatch.setattr(ok, "materialize_layer", lambda cache, layer_id: None)
+    monkeypatch.setattr(ok, "ensure_experts", lambda cache, layer_id, ids: None)
+
+    cache = OffloadMoeCache(
+        num_layers=1, num_experts=4, cache_size=4,
+        device=torch.device("cpu"), sticky_materialize=True,
+    )
+    cache.materialize_layer(0)
+    assert cache._materialized_layers == {0}
+    cache.ensure_experts(0, torch.tensor([1], dtype=torch.int32))
+    assert cache._materialized_layers == set()
+
+
+def test_plain_cache_copy_missing_still_requires_staging():
+    """The sticky no-op must not relax the plain contract: no staged misses is a bug."""
+    from freetoken.moe.offload_cache import OffloadMoeCache
+    import pytest
+
+    cache = OffloadMoeCache(
+        num_layers=1, num_experts=4, cache_size=4, device=torch.device("cpu"))
+    with pytest.raises(AssertionError, match="no staged misses"):
+        cache.copy_missing()
+
+
+def test_reset_drops_sticky_claims(monkeypatch):
+    from freetoken.moe.offload_cache import OffloadMoeCache
+    import freetoken.moe.offload_kernels as ok
+    monkeypatch.setattr(ok, "materialize_layer", lambda cache, layer_id: None)
+    monkeypatch.setattr(ok, "reset_cache", lambda cache: None)
+    cache = OffloadMoeCache(
+        num_layers=1, num_experts=4, cache_size=4,
+        device=torch.device("cpu"), sticky_materialize=True,
+    )
+    cache.materialize_layer(0)
+    cache.reset()
+    assert cache._materialized_layers == set()
+
+
+def test_tiny_prefill_extends_route_through_the_on_demand_path(monkeypatch):
+    """The speculative GDN replay runs tiny prefill extends (1..depth+1 rows); those
+    must not stream every layer (live: 5.5s per replay step). Real prefills keep the
+    streaming path, decode is unchanged."""
+    from types import SimpleNamespace
+
+    import freetoken.core as core
+    from freetoken.core import Context
+
+    layer, _cache = _make_layer_and_cache()
+    ctx = Context(page_size=1)
+    monkeypatch.setattr(core, "_GLOBAL_CTX", ctx)
+    routed = []
+    monkeypatch.setattr(
+        layer, "prefill_forward", lambda h, r: routed.append(("prefill", h.shape[0])) or h)
+    monkeypatch.setattr(
+        layer, "decode_forward", lambda h, r: routed.append(("decode", h.shape[0])) or h)
+
+    # E=4, top_k=2: tiny = rows <= 2 (and <= 8 rows)
+    for rows, want in ((1, "decode"), (2, "decode"), (64, "prefill")):
+        routed.clear()
+        ctx._batch = SimpleNamespace(is_prefill=True)
+        out = layer.forward(torch.randn(rows, 8), torch.randn(rows, layer.num_experts))
+        assert out.shape == (rows, 8)
+        assert routed == [(want, rows)], (rows, routed)
+    # decode is always the on-demand path
+    routed.clear()
+    ctx._batch = SimpleNamespace(is_prefill=False)
+    layer.forward(torch.randn(1, 8), torch.randn(1, layer.num_experts))
+    assert routed == [("decode", 1)]
+
+
+def test_tiny_prefill_forward_ensures_experts_instead_of_materializing(monkeypatch):
+    """End-to-end routing: a 1-row prefill calls ensure_experts (misses only) and the
+    decode kernel, never materialize_layer/copy_missing (the whole-layer stream)."""
+    from types import SimpleNamespace
+
+    import freetoken.core as core
+    from freetoken.core import Context
+
+    layer, cache = _make_layer_and_cache()
+    ctx = Context(page_size=1)
+    ctx._batch = SimpleNamespace(is_prefill=True)
+    monkeypatch.setattr(core, "_GLOBAL_CTX", ctx)
+    calls = []
+    monkeypatch.setattr(
+        "freetoken.layers.moe.fused_topk",
+        lambda *, hidden_states, gating_output, topk, renormalize: (
+            torch.tensor([[0.6, 0.4]], dtype=torch.float32),
+            torch.tensor([[2, 1]], dtype=torch.int32),
+        ),
+    )
+    monkeypatch.setattr(
+        cache, "ensure_experts", lambda layer_id, ids: calls.append(("ensure", layer_id)))
+    monkeypatch.setattr(cache, "copy_missing", lambda: calls.append(("copy",)))
+    monkeypatch.setattr(
+        cache, "materialize_layer", lambda layer_id: calls.append(("materialize", layer_id)))
+    monkeypatch.setattr(
+        "freetoken.moe.fused.fused_experts_decode_impl",
+        lambda *args, **kwargs: calls.append(("decode_gemm",)) or args[0],
+    )
+    out = layer.forward(torch.randn(1, 8), torch.randn(1, layer.num_experts))
+    assert out.shape == (1, 8)
+    assert ("ensure", 0) in calls and ("copy",) in calls and ("decode_gemm",) in calls
+    assert not [c for c in calls if c[0] == "materialize"]

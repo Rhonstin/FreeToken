@@ -216,3 +216,68 @@ def test_resolve_pool_class_and_factory():
 
     with pytest.raises(ValueError, match="num_req_slots"):
         create_kvcache_pool(mc, num_pages=4, page_size=64, dtype=torch.bfloat16, device=DEV)
+
+
+# ------------------------------------------------- MTP draft layers ride the same pool
+
+
+def _mtp_mc(num_mtp_layers: int):
+    """A model config stub with an MTP draft head of ``num_mtp_layers`` layers."""
+    spec = _spec()
+    mc = SimpleNamespace(
+        num_layers=8, has_swa_attention=False, has_linear_attention=True,
+        num_kv_heads=2, head_dim=64, dsv4_args=None,
+        num_moe_layers=8,  # draft ids start past the target's MoE layers
+        qwen4_args=SimpleNamespace(mtp_num_layers=num_mtp_layers),
+    )
+    mc.kv_cache_group_specs = lambda: (spec,)
+    return mc
+
+
+def test_factory_provisions_draft_slots_and_widens_the_ring():
+    from freetoken.kvcache import create_kvcache_pool
+
+    pool = create_kvcache_pool(
+        _mtp_mc(1), num_pages=4, page_size=64, dtype=torch.bfloat16, device=DEV,
+        num_req_slots=4, num_speculative_tokens=2,
+    )
+    assert isinstance(pool, QSAKVCache)
+    assert pool._kv_buffer.shape[1] == 5  # 4 sparse layers + the draft layer
+    assert pool.ring_capacity == QSAKVCache.ring_capacity_for(4, 2) == 8
+    # the draft layer stores and reads through its dense slot like a target layer
+    assert pool.k_cache(8).shape == pool.k_cache(7).shape == (4, 64, 2, 64)
+    assert pool.cmp_k_cache(4).shape == (4 * 64 // 4 + 4, 32)
+    assert pool.pending_ring(4).shape == (4, 8, 32)
+    with pytest.raises(KeyError):
+        pool.k_cache(0)  # still no storage for non-KV layers
+
+
+def test_factory_without_mtp_is_unchanged():
+    from freetoken.kvcache import create_kvcache_pool
+
+    pool = create_kvcache_pool(
+        _mtp_mc(0), num_pages=4, page_size=64, dtype=torch.bfloat16, device=DEV,
+        num_req_slots=4, num_speculative_tokens=0,
+    )
+    assert pool._kv_buffer.shape[1] == 4
+    assert pool.ring_capacity == QSAKVCache.ring_capacity_for(4)
+    with pytest.raises(IndexError):  # never-provisioned ids stay out of range
+        pool.k_cache(8)
+
+
+def test_kv_cost_grows_with_draft_depth_and_layers():
+    spec = _spec()
+    base = _config(spec, max_running_req=3)
+    per_page, fixed, _, _ = QSAKVCache.kv_cost(base)
+
+    mc = _mtp_mc(1)
+    mtp = SimpleNamespace(
+        model_config=mc, page_size=64, dtype=torch.bfloat16,
+        tp_info=SimpleNamespace(size=1), max_running_req=3, mtp_depth=2,
+    )
+    mtp_per_page, mtp_fixed, _, _ = QSAKVCache.kv_cost(mtp)
+    # the compressed slab amortizes one extra index layer per group-token ...
+    assert mtp_per_page == per_page + 64 * (32 * 1 * 2 // 4)
+    # ... and the ring/ scratch price one extra slot at the widened depth
+    assert mtp_fixed == 4 * (32 * 5 * 2) * (QSAKVCache.ring_capacity_for(4, 2) + 1)
+    assert mtp_fixed > fixed

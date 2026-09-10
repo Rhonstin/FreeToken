@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, List, NamedTuple, NoReturn, Set, Tuple, TypeAlias
 
 import torch
@@ -33,6 +34,17 @@ from .io import SchedulerIOMixin
 from .prefill import ChunkedReq, PrefillManager
 from .status import SchedulerStatusReporter
 from .table import TableManager
+from freetoken.engine.mtp import (
+    MtpConfig,
+    draft_forward,
+    draft_write_positions,
+    make_spec_depth_fn,
+    propose_drafts,
+    verify_and_finalize,
+    write_draft_tokens,
+)
+from freetoken.engine.lookup import LookupDrafter
+from freetoken.engine.spec import SpecAccounting
 
 if TYPE_CHECKING:
     from freetoken.engine import BatchSamplingArgs, ForwardOutput
@@ -45,6 +57,22 @@ Indice2D: TypeAlias = Tuple[torch.Tensor, torch.Tensor]
 
 def _gib(n_bytes: int) -> str:
     return f"{n_bytes / (1 << 30):.2f} GiB"
+
+
+def _gdn_row_slots(batch: Batch, padding_slot: int) -> List[int]:
+    """GDN state slot per forward ROW: one entry per request for plain decode, one per
+    spec row (anchor + drafts, flat in spec_rows order) for a multi-token batch.
+
+    Every row of a request names its live slot; the repetition is a shape contract so the
+    per-row metadata lines up with the per-row positions. Exact hybrid scoring runs as a
+    continuation extend in the verify driver -- parallel same-slot decode rows would race
+    in the decode kernel, so nothing here assumes an in-place sequential update.
+    """
+    rows = batch.spec_rows if batch.spec_active else [(req, 0) for req in batch.padded_reqs]
+    return [
+        req.linear_slot_idx if req.linear_slot_idx is not None else padding_slot
+        for req, _spec_index in rows
+    ]
 
 
 # For overlap scheduling, we also need to cache some other data to avoid IMA
@@ -88,6 +116,36 @@ class Scheduler(SchedulerIOMixin):
             ) or getattr(self.engine.kv_cache, "sliding_window_size", None),
         )
         self.decode_manager = DecodeManager(config.page_size)
+        # MTP speculative decoding (419.7): per-step accepted/total draft counters live
+        # here for the whole run (inert when the depth is 0), and a positive mtp_depth
+        # installs the scheduler's spec_depth_fn -- the 419.3 multi-token frames then
+        # carry anchor + draft rows. Default off: spec_depth_fn stays None and every
+        # step below is byte-identical to plain decode.
+        self.spec_accounting = SpecAccounting()
+        # The previous forward's per-request anchor residuals (uid -> [4H] view),
+        # refreshed from every ForwardOutput; the draft closure proposes from these.
+        # Empty after graph replays and plain runs (which retain none).
+        self._last_target_hidden: dict = {}
+        mtp = MtpConfig.from_config(config)
+        if mtp.enabled:
+            self.decode_manager.spec_depth_fn = make_spec_depth_fn(
+                mtp.depth, adaptive=mtp.adaptive)
+            logger.info_rank0(
+                f"MTP speculative decoding enabled: depth={mtp.depth} "
+                f"adaptive={mtp.adaptive}")
+        # Draft-free speculation (prompt look-up): the same multi-token frames and the
+        # same exact verify path, with proposals from the request's own repeated
+        # n-grams instead of a draft model -- no VRAM, no draft forward. The schedule
+        # hook finds and stashes the step's drafts (see _open_spec_step).
+        self.lookup_drafter = None
+        if getattr(config, "lookup_draft", 0) > 0:
+            self.lookup_drafter = LookupDrafter(
+                max_ngram=config.lookup_ngram,
+                min_ngram=getattr(config, "lookup_min_ngram", 2))
+            self.decode_manager.spec_depth_fn = self._lookup_depth
+            logger.info_rank0(
+                f"Lookup (draft-free) speculation enabled: depth={config.lookup_draft} "
+                f"max_ngram={config.lookup_ngram}")
         self.prefill_manager = PrefillManager(
             self.cache_manager, self.table_manager, self.decode_manager
         )
@@ -303,12 +361,30 @@ class Scheduler(SchedulerIOMixin):
         if last_data is None:
             return
 
-        batch, (_, next_tokens_cpu, copy_done) = last_data[0].batch, last_data[1]
-        copy_done.synchronize()
+        batch, forward_output = last_data[0].batch, last_data[1]
+        # Index (not attribute) access: ForwardOutput grew a fourth field (spec_logits)
+        # and some callers/tests still pass the 3-tuple form; both index identically.
+        next_tokens_cpu = forward_output[1]
+        forward_output[2].synchronize()
         reply: List[DetokenizeMsg] = []
         new_finished_reqs: Set[Req] = set()
+        # Per-request slice of next_tokens_cpu: one token for a plain batch, 1 + spec_depth
+        # (the anchor's plus each draft row's continuation) for a multi-token batch -- the
+        # rows are flat in req order, exactly the order the sampler emitted them in. A
+        # finalized spec batch needs no slices at all: verification already consumed the
+        # rows and rotated lengths/pages (spec_depth reads 0 post-commit), so the accepted
+        # tokens stream from batch.spec_accepted instead.
+        if batch.spec_finalized:
+            row_spans = [0 for _ in batch.reqs]
+        elif not batch.spec_active:
+            row_spans = [1 for _ in batch.reqs]
+        else:
+            row_spans = [1 + req.spec_depth for req in batch.reqs]
+        if not batch.spec_finalized:
+            assert sum(row_spans) == len(next_tokens_cpu), "row accounting mismatch"
         with self.cache_manager.lazy_free_region():
-            for i, req in enumerate(batch.reqs):
+            i = 0
+            for req, row_span in zip(batch.reqs, row_spans):
                 if isinstance(req, ChunkedReq):
                     # Don't cache intermediate chunks; the full prompt is cached once when the
                     # final chunk is processed. Caching here snapshots a handle the next chunk
@@ -334,9 +410,61 @@ class Scheduler(SchedulerIOMixin):
                     # are freed below/already; shipping this token would append past the
                     # client's terminal reply.
                     continue
-                next_token = next_tokens_cpu[i]
-                req.append_host(next_token.unsqueeze(0))
-                next_token = int(next_token.item())
+                if batch.spec_finalized:
+                    # Verification already committed input_ids/lengths/pages
+                    # (accept_spec_tail + commit_spec); the drain must NOT re-append row
+                    # spans. Stream one message per accepted token so the client sees
+                    # every generated token; finish is evaluated per token in order
+                    # (EOS/stop/length, like the plain path evaluates its single
+                    # continuation), stopping at the first terminal token -- a finished
+                    # request is freed below, so later accepted tokens stay in the
+                    # committed context but are not streamed.
+                    for tok in (batch.spec_accepted or {}).get(req.uid, []):
+                        next_token = int(tok)
+                        hit_length = not req.can_decode
+                        hit_eos = (
+                            not req.sampling_params.ignore_eos and next_token in self.eos_token_ids
+                        )
+                        matched_stop = (
+                            self._match_stop_str(req)
+                            if not hit_eos and req.sampling_params.stop_strs
+                            else None
+                        )
+                        finished = hit_length or hit_eos or matched_stop is not None
+                        finish_reason = (
+                            ("stop" if (hit_eos or matched_stop is not None) else "length")
+                            if finished
+                            else None
+                        )
+                        if (
+                            next_token == self.toolcall_anchor_id
+                            and req.toolcall_anchor_len is None
+                            and not finished
+                        ):
+                            req.toolcall_anchor_len = req.input_ids.numel()
+                        reply.append(
+                            DetokenizeMsg(
+                                uid=req.uid,
+                                next_token=next_token,
+                                finished=finished,
+                                finish_reason=finish_reason,
+                                matched_stop=matched_stop,
+                                stop_strs=req.sampling_params.stop_strs or None,
+                            )
+                        )
+                        if finished and req not in self.finished_reqs:
+                            self.decode_manager.remove_req(req)
+                            self._free_req_resources(req)
+                            new_finished_reqs.add(req)
+                            break
+                    continue
+                next_token_items = next_tokens_cpu[i : i + row_span]
+                req.append_host(next_token_items if row_span > 1 else next_token_items[0].unsqueeze(0))
+                # The step's finish checks run on the row's FINAL continuation the same way
+                # they ran on the single continuation of a plain batch; per-draft-row
+                # rejections/cancellations are the verify pass's (419.5) business.
+                next_token = int(next_token_items[-1].item())
+                i += row_span
                 # EOS / stop-string -> "stop", output budget exhausted -> "length";
                 # EOS and stop strings win over length.
                 hit_length = not req.can_decode
@@ -414,8 +542,30 @@ class Scheduler(SchedulerIOMixin):
             page_size=self.config.page_size,
             mamba_slots=mamba_slots,
             swa_tokens=swa_tokens,
+            # getattr: unit tests drive this drain as an unbound method on doubles
+            # without a __init__ (no accounting object); production always has one.
+            spec=(acct.snapshot() if (acct := getattr(
+                self, "spec_accounting", None)) is not None else None),
+            # Opt-in MoE tuning readout (--moe-collect-stats): miss/route counters,
+            # one device read per log interval.
+            moe=self._moe_stats() if getattr(self.config, "moe_collect_stats", False) else None,
         )
         self.send_result(reply)
+
+    def _moe_stats(self) -> dict | None:
+        """Combined MoE decode cache readout for the periodic log (opt-in flag).
+
+        ``decode_miss_stats`` (realized miss rate of the running policy) plus
+        ``decode_routing_stats`` (routing skew: working set, experts for 90% mass,
+        the per-layer-LRU oracle hit at the current slots/layer). Duck-typed for
+        test doubles without an engine.
+        """
+        cache = getattr(getattr(self, "engine", None), "moe_offload_cache", None)
+        if cache is None:
+            return None
+        stats = dict(cache.decode_miss_stats())
+        stats.update(cache.decode_routing_stats() or {})
+        return stats
 
     def _match_stop_str(self, req: Req) -> str | None:
         """First stop string present in this request's generated tail, else None. Decodes
@@ -601,6 +751,13 @@ class Scheduler(SchedulerIOMixin):
         # slots to two later requests. table_idx == -1 marks an already-freed request.
         if req.table_idx == -1:
             return
+        # A retained anchor view keeps its whole residual tensor alive; drop it with
+        # everything else (idempotent like the rest of this path).
+        drafter = getattr(self, "lookup_drafter", None)
+        if drafter is not None:
+            drafter.drop(req.uid)
+        if isinstance(getattr(self, "_last_target_hidden", None), dict):
+            self._last_target_hidden.pop(req.uid, None)
         # Polymorphic free: the DSV4 manager returns the request's window pages + cmp/idx blocks
         # to their tier free-lists; the generic manager frees its KV pages (it reads
         # page_table[req.table_idx], so free the table entry after).
@@ -795,8 +952,7 @@ class Scheduler(SchedulerIOMixin):
                 # the old keying = input_mapping's table_idx column (already staged, no H2D).
                 if self.cache_manager.is_hybrid:
                     pool = self.engine.linear_state_pool
-                    slots = [r.linear_slot_idx if r.linear_slot_idx is not None
-                             else pool.padding_slot for r in batch.padded_reqs]
+                    slots = _gdn_row_slots(batch, pool.padding_slot)
                     batch.linear_table_idx = torch.tensor(
                         slots, dtype=torch.int32, device="cpu", pin_memory=True
                     ).to(self.device, non_blocking=True)
@@ -863,20 +1019,285 @@ class Scheduler(SchedulerIOMixin):
         pending.clear()
         self.send_result([ErrorReplyMsg(uid=uid, error="request aborted") for uid in uids])
 
+    @property
+    def _mtp_enabled(self) -> bool:
+        """Whether this scheduler drafts: the spec_depth_fn is installed only when the
+        run asked for --mtp-depth > 0, so every MTP branch below keys on it and the
+        default path never observes speculative state."""
+        return self.decode_manager.spec_depth_fn is not None
+
+    def _lookup_depth(self, req: Req) -> int:
+        """``DecodeManager.spec_depth_fn`` for the draft-free drafter: plan the step's
+        look-up continuation now (schedule time) and report how many draft rows it
+        will carry; 0 keeps the request on a plain row. The anchor token is read from
+        the pool (under overlap it is not yet in ``input_ids``)."""
+        anchor = int(self.token_pool[req.table_idx, req.cached_len].item())
+        return self.lookup_drafter.plan(req, int(self.config.lookup_draft), anchor)
+
+    def _draft_step_fn(self, req: Req):
+        """Production draft-stack evaluation over a draft prefix (GPU-only compute).
+
+        Returns ``step_fn(prefix_tokens) -> logits [T, V]`` closing over this
+        request's retained anchor residual (the previous scoring forward's 4-stream
+        hidden at the anchor row). Each call chains hidden rows -- the anchor plus
+        the previous evaluation's draft residuals (``Qwen4ExpMTPHead.last_draft_residual``,
+        DeepSeek-MTP inference structure) -- and evaluates the whole few-token
+        prefix through :func:`draft_forward`, so the driver holds no persistent
+        draft KV. Raises until the engine retains an anchor for the request (a graph
+        replay or a plain run provides none) and on the GPU box until the draft QSA
+        KV slots land (that raise names the missing slot -- seam 2's error).
+        """
+        mtp_head = getattr(self.engine.model, "mtp", None)
+        if mtp_head is None:
+            raise RuntimeError(
+                "--mtp-depth is set but this model built no MTP draft head "
+                "(qwen4_exp builds one when mtp_depth > 0 and the checkpoint ships mtp.*)")
+        anchors = getattr(self, "_last_target_hidden", None) or {}
+        if req.uid not in anchors:
+            raise RuntimeError(
+                f"no retained anchor hidden for request {req.uid}: the previous "
+                "forward produced no target_hidden_anchors (a graph replay or a "
+                "plain run holds none) -- the draft closure cannot propose without "
+                "the anchor residual")
+        span_base, span_rows = anchors[req.uid]
+        anchor_pos = req.cached_len  # the anchor token's position; drafts start after it
+        row = anchor_pos - 1 - span_base  # (h_{p-1}, x_p): the hidden BEFORE the anchor
+        if not 0 <= row < span_rows.shape[0]:
+            raise RuntimeError(
+                f"anchor hidden row {row} (anchor position {anchor_pos}, span base "
+                f"{span_base}) is outside the retained span of {span_rows.shape[0]} rows")
+        anchor = span_rows[row]
+        base_len = req.cached_len
+
+        def step_fn(prefix_tokens: torch.Tensor) -> torch.Tensor:
+            t = int(prefix_tokens.numel())
+            if t <= 1:
+                rows = anchor.unsqueeze(0)
+            else:
+                prev = mtp_head.last_draft_residual
+                if prev is None or prev.shape[0] != t - 1:
+                    raise RuntimeError(
+                        f"draft hidden chain broke at prefix length {t}: the previous "
+                        "draft evaluation left no residual to continue from")
+                rows = torch.cat([anchor.unsqueeze(0), prev[-(t - 1):]], dim=0)
+            pool = getattr(self, "token_pool", None)
+            ids = prefix_tokens.to(pool.dtype) if pool is not None else prefix_tokens
+            return draft_forward(
+                self.engine.model, ids, rows,
+                self._draft_batch(req, base_len, prefix_tokens))
+
+        return step_fn
+
+    def _draft_batch(self, req: Req, base_len: int, prefix_tokens: torch.Tensor) -> Batch:
+        """One synthetic prefill-phase batch framing a draft evaluation's prefix.
+
+        Positions are the absolute draft positions ``[base_len, base_len + T)``;
+        ``out_loc`` reuses the live page table's rows there (the step's spec
+        reservation already allocated them, so no allocation happens here);
+        ``input_ids`` are the prefix tokens themselves (the drafts are being
+        proposed, so they are not in the token pool yet). GDN metadata is skipped --
+        the draft layers are force-full-attention and never read it. The caller
+        enters the batch as the global batch (see ``draft_forward``).
+        """
+        t = int(prefix_tokens.numel())
+        pin = torch.cuda.is_available()
+        positions = torch.arange(
+            base_len, base_len + t, dtype=torch.int32, device="cpu",
+            pin_memory=pin).to(self.device, non_blocking=True)
+        out_loc = self.engine.page_table[
+            int(req.table_idx), base_len:base_len + t].contiguous()
+        fake = SimpleNamespace(
+            extend_len=t, device_len=base_len + t, cached_len=base_len,
+            table_idx=req.table_idx, uid=req.uid)
+        batch = Batch(reqs=[fake], phase="prefill")
+        batch.padded_reqs = batch.reqs
+        batch.input_ids = prefix_tokens
+        batch.positions = positions
+        batch.out_loc = out_loc
+        self.engine.attn_backend.prepare_metadata(batch)
+        return batch
+
+    def _open_spec_step(self, batch: Batch) -> dict:
+        """Propose + place this step's drafts; returns per-uid (base_len, tokens, logits).
+
+        Runs BEFORE the input gather: the drafts land in the token pool at
+        ``[cached_len + 1, cached_len + 1 + depth)`` so the draft rows read them as
+        inputs. ``base_len`` is the pre-forward ``cached_len`` -- the engine's
+        ``complete_n`` advances lengths during the forward, so the verify pass needs
+        the opening length stashed here. Depth is re-clamped per request (the schedule
+        already clamped it; proposing never exceeds the reservation).
+        """
+        state: dict = {}
+        for req in batch.reqs:
+            depth = req.spec_depth
+            if depth <= 0:
+                continue
+            base_len = req.cached_len
+            if getattr(self, "lookup_drafter", None) is not None:
+                # Draft-free speculation: the schedule-time hook already found and
+                # stashed the look-up continuation; place it and let the same exact
+                # verify path decide. A greedy request needs no draft distribution
+                # (the id-compare fast path); a stochastic one gets a one-hot.
+                drafts = self.lookup_drafter.take(req.uid, depth)
+                if len(drafts) != depth:
+                    raise RuntimeError(
+                        f"lookup drafter planned {len(drafts)} drafts for uid {req.uid} "
+                        f"but the step reserved {depth} rows")
+                draft_tokens = torch.tensor(drafts, dtype=torch.long, device=self.device)
+                write_draft_tokens(
+                    self.token_pool, req.table_idx,
+                    draft_write_positions(base_len, depth), draft_tokens)
+                if req.sampling_params.is_greedy:
+                    draft_logits = None
+                else:
+                    vocab = int(self.config.model_config.vocab_size)
+                    draft_logits = torch.full((depth, vocab), -1e30, device=self.device)
+                    draft_logits[torch.arange(depth, device=self.device), draft_tokens] = 0.0
+                state[req.uid] = (base_len, draft_tokens, draft_logits)
+                continue
+            # The anchor token comes from the token pool, NOT input_ids: under overlap
+            # scheduling this forward runs before the previous step's drain appends its
+            # token to input_ids, so input_ids[base_len] is stale by one (IndexError at
+            # the sequence tip). The pool slot already holds the sampled token.
+            anchor_token = int(self.token_pool[req.table_idx, base_len].item())
+            draft_tokens, draft_logits = propose_drafts(
+                self._draft_step_fn(req), anchor_token,
+                depth, device=self.device)
+            write_draft_tokens(
+                self.token_pool, req.table_idx,
+                draft_write_positions(base_len, depth), draft_tokens)
+            state[req.uid] = (base_len, draft_tokens, draft_logits)
+        return state
+
+    def _verify_spec_batch(self, batch: Batch, forward_output, spec_state: dict) -> None:
+        """Verify each drafted request against its scoring rows, then finalize.
+
+        Rows are flat in batch.reqs order with span 1 + spec_depth (padded_reqs ==
+        reqs: graphs decline spec batches, so no dummy padding); target row ``i`` of a
+        request holds ``p_{i+1}`` since row ``i`` consumes position ``base_len + i``.
+        ``finalize_spec_step`` pairs the journal restore (partial accepts only), the
+        host-tail rewrite and the single-shot page release with the length rotation.
+        Marks the batch finalized with per-uid accepted lists so the drain streams them
+        instead of re-appending row spans.
+        """
+        spec_logits = forward_output.spec_logits
+        assert spec_logits is not None, "spec batch finished without scoring logits"
+        policy = getattr(self.decode_manager.spec_depth_fn, "policy", None)
+        accepted: dict = {}
+        offset = 0
+        for req in batch.reqs:
+            span = 1 + req.spec_depth
+            if req.uid in spec_state:
+                base_len, draft_tokens, draft_logits = spec_state[req.uid]
+                depth = req.spec_depth
+                rows = spec_logits[offset : offset + span]
+                assert rows.shape[0] == depth + 1, (tuple(rows.shape), depth)
+                verdict = verify_and_finalize(
+                    req, draft_tokens=draft_tokens, draft_logits=draft_logits,
+                    target_logits=rows, base_len=base_len,
+                    cache_manager=self.cache_manager, accounting=self.spec_accounting,
+                    policy=policy)
+                assert verdict is not None
+                # Stochastic-consistency write-back: the forward's sampled rows agree
+                # with the verdict only under greedy sampling; a resample/bonus token
+                # differs, and the replay inputs plus the next step's anchor read the
+                # pool -- so the verified tokens land at [base+1, committed] here.
+                pool = self.token_pool
+                pool[req.table_idx, base_len + 1 : verdict.committed + 1] = torch.as_tensor(
+                    verdict.accepted, dtype=pool.dtype, device=pool.device)
+                if verdict.needs_replay and self.cache_manager.is_hybrid:
+                    self._replay_spec_suffix(req, verdict)
+                accepted[req.uid] = verdict.accepted
+            offset += span
+        batch.spec_accepted = accepted
+        batch.spec_finalized = True
+
+    def _replay_spec_suffix(self, req: Req, verdict) -> None:
+        """Refill the accepted-but-unplayed GDN span after a partial accept (hybrid-only).
+
+        ``finalize_spec_step`` restored the live slot to the pre-step journal while
+        lengths rotated past ``committed``; the span ``[replay_from, replay_to)`` runs
+        here as a one-request continuation chunk before the next scoring forward. Its
+        pages are still allocated, so this deliberately bypasses ``allocate_paged``
+        (which would steal fresh pages) and reads/writes the live page-table rows;
+        the chunk is framed exactly like a prefill continuation (positions, out_loc,
+        fla continuation metadata), so the GDN op refills state and advances its
+        tracking the normal way. The forward's sampled rows are discarded -- the
+        verdict already fixed every token -- and lengths are restored afterwards.
+        Runs on the engine stream (the only caller is the in-forward verify path).
+        """
+        saved_cached, saved_device = req.cached_len, req.device_len
+        req.cached_len, req.device_len = verdict.replay_from, verdict.replay_to
+        try:
+            batch = Batch(reqs=[req], phase="prefill")
+            batch.padded_reqs = batch.reqs
+            batch.positions = _make_positions(batch, self.device)
+            input_mapping = _make_input_tuple(batch, self.device)
+            # Verified tokens (the verify pass wrote them back over the forward's
+            # sampled rows): the replay must read authoritative inputs, not drafts.
+            batch.input_ids = self.token_pool[input_mapping]
+            batch.out_loc = self.engine.page_table[input_mapping]
+            if self.engine.linear_state_pool is not None:
+                batch.fla_metadata = build_fla_metadata(batch, self.device)
+            self.engine.attn_backend.prepare_metadata(batch)
+            self.engine.forward_batch(batch, self.engine.sampler.prepare(batch))
+        finally:
+            req.cached_len, req.device_len = saved_cached, saved_device
+
     def _forward(self, forward_input: ForwardInput) -> ForwardOutput:
         batch, sample_args, input_mapping, output_mapping = forward_input
+        spec_state = None
+        if batch.spec_active and self._mtp_enabled:
+            # Drafts are proposed from the previous step's anchor and placed into the
+            # token pool BEFORE the input gather, so the draft rows read them.
+            spec_state = self._open_spec_step(batch)
         batch.input_ids = self.token_pool[input_mapping]
         if self.toolcall_anchor_id is not None and not batch.is_prefill:
             self.cache_manager.snapshot_toolcall_anchor(batch.reqs)
+        if batch.spec_active:
+            # Journal every drafting request's pre-step GDN state BEFORE the forward reads
+            # and advances the live slot: a rejected suffix restores from this copy instead
+            # of replaying the accepted prefix. Same stream ordering as the anchor freeze
+            # above. No-op unless hybrid; plain batches never set spec_rows.
+            for req in batch.reqs:
+                self.cache_manager.spec_snapshot(req)
         forward_output = self.engine.forward_batch(batch, sample_args)
-        self.token_pool[output_mapping] = forward_output.next_tokens_gpu
+        # Retain this step's anchor residuals for the NEXT step's draft closure.
+        # MERGED, not replaced: concurrent requests advance through different
+        # forwards (a prefill for a new arrival must not drop a decoding
+        # request's anchor). A forward with no anchors (graph replay: the model
+        # body never ran, so any retained row would be stale) drops only its own
+        # requests' entries -- a later draft then fails loudly on the missing
+        # anchor instead of reading a stale one.
+        anchors = getattr(forward_output, "target_hidden_anchors", None)
+        kept = getattr(self, "_last_target_hidden", None)
+        if kept is None:
+            kept = self._last_target_hidden = {}
+        if anchors:
+            kept.update(anchors)
+        else:
+            for req in batch.reqs:
+                kept.pop(req.uid, None)
+        if spec_state is not None:
+            # Score the drafts against the target rows and commit the verdict
+            # (journal restore on partial accepts, host-tail rewrite, single-shot page
+            # release + length rotation, acceptance counters). The drain then streams
+            # the accepted tokens instead of re-appending row spans.
+            self._verify_spec_batch(batch, forward_output, spec_state)
+        if not getattr(batch, "spec_finalized", False):
+            # A finalized spec batch already holds its verified tokens in the pool
+            # (the verify pass wrote them back over the forward's sampled rows, which
+            # differ under stochastic sampling); writing the sampler's rows here
+            # would clobber verified tokens with unverified ones.
+            self.token_pool[output_mapping] = forward_output.next_tokens_gpu
         self.decode_manager.filter_reqs(forward_input.batch.reqs)
         return forward_output
 
 
 def _make_positions(batch: Batch, device: torch.device) -> torch.Tensor:
     needed_size = sum(r.extend_len for r in batch.padded_reqs)
-    indices_host = torch.empty(needed_size, dtype=torch.int32, pin_memory=True)
+    pin = torch.cuda.is_available()
+    indices_host = torch.empty(needed_size, dtype=torch.int32, pin_memory=pin)
     offset = 0
     for req in batch.padded_reqs:
         length = req.extend_len
@@ -891,7 +1312,8 @@ def _make_positions(batch: Batch, device: torch.device) -> torch.Tensor:
 
 
 def _make_input_tuple(batch: Batch, device: torch.device) -> Indice2D:
-    mapping_host = torch.empty(len(batch.positions), dtype=torch.int64, pin_memory=True)
+    pin = torch.cuda.is_available()
+    mapping_host = torch.empty(len(batch.positions), dtype=torch.int64, pin_memory=pin)
     offset = 0
     for req in batch.padded_reqs:
         length = req.extend_len
@@ -901,8 +1323,19 @@ def _make_input_tuple(batch: Batch, device: torch.device) -> Indice2D:
 
 
 def _make_write_tuple(batch: Batch, device: torch.device) -> Indice2D:
-    mapping_list = [req.table_idx for req in batch.reqs]
-    mapping_host = torch.tensor(mapping_list, dtype=torch.int64, pin_memory=True)
-    write_list = [(req.device_len if req.can_decode else -1) for req in batch.reqs]
-    write_host = torch.tensor(write_list, dtype=torch.int64, pin_memory=True)
+    """Token-pool slots one past each input row: the continuation each row samples into.
+
+    A plain batch writes one slot per request (the sampled token lands at device_len); a
+    multi-token (speculative) batch writes one slot per row -- the anchor's continuation and
+    each draft row's -- at cached_len + 1 + spec_index, beyond the reserved frame exactly the
+    way a plain decode writes its next-step anchor.
+    """
+    if batch.spec_active:
+        mapping_list = [req.table_idx for req, _ in batch.spec_rows]
+        write_list = [req.cached_len + 1 + spec_index for req, spec_index in batch.spec_rows]
+    else:
+        mapping_list = [req.table_idx for req in batch.reqs]
+        write_list = [(req.device_len if req.can_decode else -1) for req in batch.reqs]
+    mapping_host = torch.tensor(mapping_list, dtype=torch.int64, pin_memory=torch.cuda.is_available())
+    write_host = torch.tensor(write_list, dtype=torch.int64, pin_memory=torch.cuda.is_available())
     return mapping_host.to(device, non_blocking=True), write_host.to(device, non_blocking=True)

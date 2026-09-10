@@ -222,6 +222,7 @@ def load_weight(
     device: torch.device,
     *,
     include_moe_experts: bool = True,
+    include_mtp: bool = False,
 ) -> Iterator[Tuple[str, torch.Tensor]]:
     # FTW checkpoint: dense weights are stored post-iter_weights, so we replay them
     # model-agnostically instead of re-running the per-model reader. Which tensors exist is
@@ -245,12 +246,19 @@ def load_weight(
 
     _config, spec = _spec_for_model_path(model_path)
     iter_weights = _load_attr(spec.module, spec.iter_weights)
-    yield from iter_weights(
-        model_path,
-        device,
-        include_moe_experts=include_moe_experts,
-        include_non_moe=True,
-    )
+    # include_mtp is a qwen4_exp-only reader knob (other families' iter_weights do not
+    # take it): forward it only where supported so one engine call serves every model.
+    # The engine sets it exactly when the built model owns the draft module, keeping the
+    # default strict load inert.
+    kwargs: dict = dict(include_moe_experts=include_moe_experts, include_non_moe=True)
+    if include_mtp:
+        import inspect
+
+        params = inspect.signature(iter_weights).parameters.values()
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD
+               or p.name == "include_mtp" for p in params):
+            kwargs["include_mtp"] = True
+    yield from iter_weights(model_path, device, **kwargs)
 
 
 def load_q4_0_moe_expert_sources(

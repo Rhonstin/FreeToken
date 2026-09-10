@@ -151,8 +151,13 @@ class QSAKVCache(MHAKVCache):
     def kv_cost(cls, config) -> tuple[int, int, int, int]:
         from .base import spec_kv_bytes_per_token
         from freetoken.attention import AttnType
+        from freetoken.engine.mtp import draft_qsa_layer_ids
 
         num_req_slots = config.max_running_req + 1
+        # Draft depth widens the pending ring; draft layers add index slots. Both
+        # default to the plain path (depth 0, no draft ids) for non-MTP configs.
+        mtp_depth = max(0, int(getattr(config, "mtp_depth", 0) or 0))
+        num_draft = len(draft_qsa_layer_ids(config.model_config))
         per_token = 0
         fixed = 0
         for spec in config.model_config.kv_cache_group_specs():
@@ -160,9 +165,14 @@ class QSAKVCache(MHAKVCache):
                 continue
             per_token += spec_kv_bytes_per_token(spec, config)
             if spec.attn_type is AttnType.QSA:
+                # The compressed slab amortizes per token (one row per group); the
+                # ring + scratch rows are fixed per request slot. Draft index layers
+                # widen the row, the draft depth widens the ring.
+                per_token += spec.index_head_dim * num_draft * _INDEX_DTYPE_BYTES // spec.index_ratio
                 # One index-key row = all index layers at one position.
-                row = spec.index_head_dim * spec.num_index_layers * _INDEX_DTYPE_BYTES
-                fixed += num_req_slots * row * (cls.ring_capacity_for(spec.index_ratio) + 1)
+                row = spec.index_head_dim * (spec.num_index_layers + num_draft) * _INDEX_DTYPE_BYTES
+                fixed += num_req_slots * row * (
+                    cls.ring_capacity_for(spec.index_ratio, mtp_depth) + 1)
         return per_token * config.page_size, fixed, config.page_size, 0
 
     def unit_bytes(self) -> tuple[int, int]:

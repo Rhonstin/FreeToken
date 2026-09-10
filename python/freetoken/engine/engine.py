@@ -291,6 +291,15 @@ class ForwardOutput(NamedTuple):
     next_tokens_gpu: torch.Tensor
     next_tokens_cpu: torch.Tensor
     copy_done_event: torch.cuda.Event
+    # Scoring logits [num_rows, vocab] for a multi-token (speculative) decode step, else
+    # None. The verify driver slices per-request target rows out of these (row i holds
+    # p_{i+1}); plain batches pay nothing (no tensor is retained).
+    spec_logits: torch.Tensor | None = None
+    # Per-request anchor rows of the target's 4-stream residual (uid -> [4H] view),
+    # for the NEXT step's draft closure. Retained only for eager forwards of MTP runs
+    # (prefill chunk tails and spec/plain anchors); None for graph replays and for
+    # plain runs, which pay nothing.
+    target_hidden_anchors: dict | None = None
 
 
 class Engine:
@@ -337,6 +346,7 @@ class Engine:
         # graphs, or other processes. Cross-rank MIN, deterministic across ranks.
         self._post_weights_free = post_weights_free
         self.moe_offload_cache = None
+        self.mtp_offload_cache = None
         self.cpu_moe_executor = None
         # Host-side auxiliary stores (qwen4_exp's pinned PLE table): after the weights so a
         # load failure is not masked, before the MoE offload cache so the bank residency
@@ -468,12 +478,15 @@ class Engine:
         # _materialize casts each loaded tensor to its model-param dtype (model_state), so
         # models declaring per-tensor dtypes (e.g. DSV4's mixed fp8/fp32/bf16) are preserved;
         # offload models exclude experts (served from the offload cache, not dense weights).
+        # include_mtp follows the built model: the MTP head's dense mtp.* weights load only
+        # when the draft module exists, otherwise the loader stays strict-inert.
         return _materialize_loaded_weight_state_dict(
             model_state,
             load_weight(
                 config.model_path,
                 self.device,
                 include_moe_experts=not is_offload_moe_strategy(config.moe_strategy),
+                include_mtp=getattr(self.model, "mtp", None) is not None,
             ),
             device=self.device,
         )
@@ -506,7 +519,74 @@ class Engine:
             max_slots=method.slot_limit() if method is not None else None,
         )
 
+    def _init_mtp_draft_cache(self, config: EngineConfig):
+        """Stand up the MTP draft experts' dedicated bf16 offload cache (or None).
+
+        Runs before the target cache so the draft layers are already bound when
+        ``shared_offload_method`` scans the model (one cache holds one bank schema:
+        the bf16 draft banks cannot join the NVFP4 target cache). The draft cache is
+        sized to hold the whole draft layer resident (``cache_size == num_experts``) --
+        a draft step touches few experts per token but re-runs every step, so misses
+        would serialize on PCIe; the GPU-box tuning knob is this line (~E x bf16 row
+        bytes, ~5 GiB on the shipping geometry). Draft forwards always run as
+        prefill-phase batches, so the draft cache needs no CPU executor, no overlap
+        buffers and no rebuild wiring: only ``ensure``/``materialize`` move rows.
+        """
+        from freetoken.engine.mtp import (
+            attach_mtp_draft_cache,
+            build_mtp_draft_banks,
+            draft_moe_layers,
+        )
+        from freetoken.layers import OffloadMoELayer
+
+        if getattr(self.model, "mtp", None) is None:
+            return None
+        layers = draft_moe_layers(self.model)
+        if not layers:
+            return None
+        if not all(isinstance(layer, OffloadMoELayer) for layer in layers):
+            raise NotImplementedError(
+                "--mtp-depth needs an offload-family --moe-strategy: the draft MoE "
+                "layers must be bank-backed (resident experts have no mtp.* "
+                "state-dict keys to load from)")
+        num_mtp_layers = len(layers)
+        method = layers[0].quant_method
+        banks = build_mtp_draft_banks(
+            self.model, config.model_path, config.model_config, num_mtp_layers,
+            device=self.device, dummy=config.use_dummy_weight,
+        )
+        cache = OffloadMoeCache(
+            num_layers=num_mtp_layers,
+            num_experts=config.model_config.num_experts,
+            cache_size=config.model_config.num_experts,
+            device=self.device,
+            cache_policy=config.moe_cache_policy,
+            prefill_overlap=False,
+            quant_format=banks.quant_format,
+            decode_target="gpu",
+            layout=method.layout(),
+            max_slots=method.slot_limit(),
+            # The draft cache holds exactly one layer's worth of experts and only the
+            # draft prefill ever materializes it, so a materialized layer stays put:
+            # without this every draft step re-copied the whole layer (~E x row bytes,
+            # ~5 GiB per draft evaluation on the shipping geometry) over PCIe.
+            sticky_materialize=True,
+        )
+        cache.set_bank_sources(banks.sources, layer_residency=banks.layer_residency)
+        cache.set_alphas(banks.gate_up_alpha, banks.down_alpha)
+        attach_mtp_draft_cache(self.model, cache)
+        self.mtp_offload_cache = cache
+        logger.info_rank0(
+            f"MTP draft experts: {num_mtp_layers} layer(s) x "
+            f"{config.model_config.num_experts} bf16 experts "
+            f"({banks.quant_format}) in a dedicated cache")
+        return cache
+
     def _init_offload_moe_cache(self, config: EngineConfig) -> OffloadMoeCache:
+        # Draft banks first: attaching the draft layers to their dedicated bf16 cache
+        # keeps them out of shared_offload_method's agreement scan below (which would
+        # otherwise see nvfp4 target + bf16 draft methods and refuse).
+        self._init_mtp_draft_cache(config)
         method = shared_offload_method(self.model)
         num_moe_layers = config.model_config.num_moe_layers
         cpu_layer_ids = _resolve_cpu_layers(config, num_moe_layers, reserved=self._host_tables_bytes, method=method)
@@ -625,9 +705,25 @@ class Engine:
         # Must be set before CUDA graph capture so the (device-side) accumulation ops are
         # captured and re-run on every decode replay.
         cache.collect_stats = config.moe_collect_stats
+        # Same gate for the routing histogram (decode_routing_stats' oracle-wall readout).
+        cache.collect_decode_freq = config.moe_collect_stats
         layers = attach_offload_moe_cache(self.model, cache)
-        assert len(layers) == config.model_config.num_moe_layers
+        num_draft = (
+            self.mtp_offload_cache.num_layers if self.mtp_offload_cache is not None else 0
+        )
+        assert len(layers) == config.model_config.num_moe_layers + num_draft
+        if self.mtp_offload_cache is not None:
+            # Rebind the draft layers from the target cache to their draft rows
+            # (attach_mtp_draft_cache also drops their global ids to local rows).
+            from freetoken.engine.mtp import attach_mtp_draft_cache
+
+            attach_mtp_draft_cache(self.model, self.mtp_offload_cache)
         if cache.decode_target in ("cpu", "hybrid"):
+            if self.mtp_offload_cache is not None:
+                raise NotImplementedError(
+                    "--mtp-depth with a cpu/hybrid MoE decode target is not wired: the "
+                    "draft cache is GPU-only (no draft CPU executor, no hybrid fetch "
+                    "split for the draft rows)")
             self._init_cpu_moe_executor(config, cache, layers)
         self.ctx.moe_offload_cache = cache
         self.moe_offload_cache = cache
@@ -918,15 +1014,42 @@ class Engine:
             # -> stale expert outputs) as a loud error instead of silent corruption.
             self.cpu_moe_executor.raise_if_unhealthy()
 
-        for req in batch.reqs:
-            req.complete_one()
+        target_hidden_anchors = None
+        if not use_graph and getattr(self.config, "mtp_depth", 0) > 0:
+            # The next step's draft closure drafts from THESE anchors (prefill tails
+            # seed the first spec step). Views into the just-produced residual, kept
+            # alive one step by the scheduler; plain runs never enter here. Runs
+            # BEFORE the complete_n loop below: spec_anchor_hidden reads the
+            # forwarded row counts (extend_len / spec spans), which completion rewrites.
+            from freetoken.engine.mtp import spec_anchor_hidden
 
-        batch_logits = logits[: batch.size]
-        next_tokens_gpu = self.sampler.sample(batch_logits, args).to(torch.int32)
+            target_hidden_anchors = spec_anchor_hidden(
+                getattr(self.model, "last_target_hidden", None), batch)
+
+        for req in batch.reqs:
+            # Rows actually forwarded this step: the chunk for prefill, one row for plain
+            # decode, 1 anchor + spec_depth for a multi-token step. complete_one's
+            # cached_len = device_len is exactly extend_len == 1, so this generalizes it.
+            req.complete_n(req.extend_len)
+
+        if batch.spec_active:
+            # Multi-token (speculative) batches are always verified by the scheduler's
+            # driver, and the drain streams the VERIFIED tokens (batch.spec_accepted);
+            # these row samples are never read, so sampling every row (an argmax over a
+            # 248k vocab each) was pure overhead. The scoring logits still go to the
+            # verify pass.
+            spec_logits = logits
+            next_tokens_gpu = torch.empty(0, dtype=torch.int32, device=logits.device)
+        else:
+            batch_logits = logits[: batch.size]
+            next_tokens_gpu = self.sampler.sample(batch_logits, args).to(torch.int32)
+            spec_logits = None
         next_tokens_cpu = next_tokens_gpu.to("cpu", non_blocking=True)
         copy_done_event = torch.cuda.Event()
         copy_done_event.record(self.stream)
-        return ForwardOutput(next_tokens_gpu, next_tokens_cpu, copy_done_event)
+        return ForwardOutput(
+            next_tokens_gpu, next_tokens_cpu, copy_done_event,
+            spec_logits, target_hidden_anchors)
 
     @torch.inference_mode()
     def _warmup_prefill(self) -> None:
@@ -1275,8 +1398,13 @@ def _adjust_ftw_quant_backend(model_path: str, quant_backend: QuantBackend) -> Q
 def shared_offload_method(model):
     """The expert method every offload MoE layer of ``model`` uses, or None for models whose MoE layers carry none (GGUF).
 
-    The offload cache holds one bank layout, so the layers must agree on (kind, kernel)."""
-    layers = [l for l in iter_offload_moe_layers(model) if getattr(l, "quant_method", None) is not None]
+    The offload cache holds one bank layout, so the layers must agree on (kind, kernel).
+    Layers already bound to a cache (the MTP draft layers, attached to their dedicated
+    bf16 draft cache before this runs) are skipped: they pack through their own method
+    and never join the target cache."""
+    layers = [l for l in iter_offload_moe_layers(model)
+              if getattr(l, "quant_method", None) is not None
+              and getattr(l, "offload_cache", None) is None]
     if not layers:
         return None
     keys = {(layer.quant_method.kind, layer.quant_method.kernel.name) for layer in layers}

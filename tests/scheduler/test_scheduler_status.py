@@ -159,3 +159,39 @@ def test_usage_ratio_guard():
     assert _usage_ratio(0, 0) == 0.0
     assert _usage_ratio(5, 0) == 0.0
     assert _usage_ratio(5, 10) == 0.5
+
+
+def test_moe_stats_readout_is_opt_in_and_compact():
+    from freetoken.scheduler.status import _moe_msg
+
+    assert _moe_msg(None) == ""
+    assert _moe_msg({}) == ""
+    stats = {
+        "miss_rate": 0.42,
+        "slots_per_layer": 69.0,
+        "oracle_hit_at_slots": 0.81,
+        "working_set_mean": 91.4,
+        "working_set_max": 210,
+        "experts_for_90pct": 84.2,
+        "norm_entropy": 0.71,
+    }
+    assert _moe_msg(stats) == (
+        "moe miss: 0.42, oracle: 0.81@69slots, ws: 91/210, e90: 84, ent: 0.71, ")
+
+
+def test_scheduler_moe_stats_combines_cache_readouts():
+    from freetoken.scheduler.scheduler import Scheduler
+
+    sched = SimpleNamespace(engine=SimpleNamespace(moe_offload_cache=None))
+    assert Scheduler._moe_stats(sched) is None
+
+    class FakeCache:
+        def decode_miss_stats(self):
+            return {"miss_rate": 0.5}
+
+        def decode_routing_stats(self):
+            return {"oracle_hit_at_slots": 0.9, "slots_per_layer": 10.0}
+
+    sched = SimpleNamespace(engine=SimpleNamespace(moe_offload_cache=FakeCache()))
+    assert Scheduler._moe_stats(sched) == {
+        "miss_rate": 0.5, "oracle_hit_at_slots": 0.9, "slots_per_layer": 10.0}

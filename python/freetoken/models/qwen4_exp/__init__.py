@@ -11,8 +11,11 @@ Contracts shared across modules (do not rename):
 
 from .config import parse_config
 from .model import Qwen4ExpForCausalLM
+from .mtp import Qwen4ExpMTPHead
 from .weight import (
     ftw_side_files,
+    iter_mtp_expert_pieces,
+    mtp_expert_method,
     nvfp4_expert_spec,
     iter_weights,
     load_ple_table,
@@ -26,6 +29,9 @@ __all__ = [
     "ftw_side_files",
     "nvfp4_expert_spec",
     "Qwen4ExpForCausalLM",
+    "Qwen4ExpMTPHead",
+    "iter_mtp_expert_pieces",
+    "mtp_expert_method",
     "iter_weights",
     "load_ple_table",
     "parse_config",

@@ -56,9 +56,13 @@ def build_linear_mixer(config: ModelConfig, layer_id: int, prefix: str) -> BaseO
 class Qwen4ExpDecoderLayer(BaseOP):
     """One decoder layer over the hyper-connection streams (see the module docstring for the flow)."""
 
-    def __init__(self, config: ModelConfig, layer_id: int, *, prefix: str = "") -> None:
+    def __init__(self, config: ModelConfig, layer_id: int, *, prefix: str = "",
+                 force_full_attention: bool = False) -> None:
         self._layer_id = layer_id
-        self._is_linear = config.is_linear_layer(layer_id)
+        # The MTP draft head reuses this layer forced to full attention: its context is
+        # the projected draft sequence, never the prompt, so it needs no GDN state. The
+        # default keeps the config's layer-type split (target path unchanged).
+        self._is_linear = config.is_linear_layer(layer_id) if not force_full_attention else False
         if self._is_linear:
             self.linear_attn = build_linear_mixer(config, layer_id, f"{prefix}.linear_attn")
         else:
@@ -100,6 +104,13 @@ class Qwen4ExpModel(BaseOP):
         self.hyper_connection_mixer = GatedResidual(config, use_combine=False, prefix=f"{prefix}.hyper_connection_mixer")
         # plain tuple (not an OP child), so it never shows up in the state dict
         self._ple = tuple(layer.ple for layer in self.layers.op_list if layer.ple is not None)
+        # The final 4-stream residual of the last forward, for the MTP draft head
+        # (which consumes pre-mixer hidden, not the mixed single stream). A plain
+        # reference store -- no copy, no retain beyond one step (the engine slices
+        # per-request anchor rows out of it right after the forward). Storing it is
+        # CUDA-graph safe: graph replays never re-run this Python body, and the
+        # engine only reads it for eager (never graphed) forwards.
+        self.last_target_residual: torch.Tensor | None = None
 
     @property
     def ple_layers(self) -> List[PLELayer]:
@@ -121,11 +132,12 @@ class Qwen4ExpModel(BaseOP):
             # single writer: the layers only read the context, so a second PLE layer's
             # prefetch sees the un-rolled window
             commit_ngram_context(meta, getattr(batch, "fla_metadata", None))
+        self.last_target_residual = hidden
         return self.hyper_connection_mixer.mix(hidden)[0]
 
 
 class Qwen4ExpForCausalLM(BaseLLMModel):
-    def __init__(self, config: ModelConfig) -> None:
+    def __init__(self, config: ModelConfig, *, mtp_num_layers: int | None = None) -> None:
         self._config = config
         self.model = Qwen4ExpModel(config)
         self.lm_head = ParallelLMHead(
@@ -136,6 +148,21 @@ class Qwen4ExpForCausalLM(BaseLLMModel):
             quant_config=config.quant,
             prefix="lm_head",
         )
+        # The MTP draft head (None = absent: no ``mtp`` keys in the state dict, so the
+        # loader's strict load is unchanged). Explicit count wins; otherwise the config's
+        # opt-in field (0 by default -- HF configs carry no MTP depth).
+        if mtp_num_layers is None:
+            mtp_num_layers = config.qwen4_args.mtp_num_layers
+        self.mtp = None
+        if mtp_num_layers > 0:
+            from .mtp import Qwen4ExpMTPHead
+
+            self.mtp = Qwen4ExpMTPHead(config, mtp_num_layers)
+        # The previous forward's 4-stream anchor residual, for the MTP draft
+        # closure (engine/mtp.py::draft_forward via the scheduler). Mirrors
+        # model.last_target_residual after every forward; other model families
+        # leave this absent and the engine treats that as no hidden available.
+        self.last_target_hidden: torch.Tensor | None = None
         super().__init__()
 
     def load_host_tables(self, engine_config) -> int:
@@ -206,7 +233,9 @@ class Qwen4ExpForCausalLM(BaseLLMModel):
 
     def forward(self) -> torch.Tensor:
         batch = get_global_ctx().batch
-        return self.lm_head.forward(self.model.forward(batch.input_ids, batch))
+        hidden = self.model.forward(batch.input_ids, batch)
+        self.last_target_hidden = self.model.last_target_residual
+        return self.lm_head.forward(hidden)
 
 
 __all__ = ["Qwen4ExpDecoderLayer", "Qwen4ExpForCausalLM", "Qwen4ExpModel", "build_linear_mixer"]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Literal, Tuple
+from typing import TYPE_CHECKING, Dict, List, Literal, Tuple
 
 import torch
 
@@ -63,6 +63,17 @@ class Req:
     # handler must not free resources under an in-flight forward; it sets this flag and
     # _process_last_data frees the request when the batch drains (after copy_done.synchronize).
     aborted: bool = False
+    # Speculative (MTP) decode: draft rows scheduled THIS step beyond the anchor (0 = plain
+    # decode). The scheduler re-establishes the step frame from cached_len each batch
+    # (device_len = cached_len + 1 + spec_depth), so the anchor row and every draft row keep
+    # positions contiguous and their KV pages are reserved up front -- an un-accepted draft
+    # row's reservation is released at the verify commit (commit_spec/release_spec_reservation).
+    spec_depth: int = 0
+    # Speculative (MTP) GDN journal: LinearStatePool slot holding this request's pre-step
+    # recurrent + conv state (a whole-sequence snapshot via pool.copy_from, including the
+    # PLE slot_states riding the same slots). Allocated on the first spec_snapshot and
+    # freed at finish. A rejected draft suffix rolls back with one copy instead of a replay.
+    spec_journal_slot: int | None = None
 
     def __post_init__(self) -> None:
         assert self.input_ids.is_cpu
@@ -88,6 +99,53 @@ class Req:
         self.cached_len = self.device_len
         self.device_len += 1
 
+    def complete_n(self, n: int) -> None:
+        """Variable-step advancement: the forwarded batch cached ``n`` rows for this request
+        (a prefill chunk, one plain decode row, or 1 anchor + up to ``spec_depth`` draft
+        rows), so the verified suffix extends by ``n`` and the next step's frame
+        (device_len) is re-established by its scheduler. Callers pass the rows actually
+        forwarded -- ``req.extend_len`` at forward time; hard-coding 1 corrupts chunked
+        prefill frames whose extend exceeds one row."""
+        assert n >= 1, n
+        self.cached_len += n
+        self.device_len = self.cached_len + 1
+
+    def reserve_spec(self, depth: int) -> None:
+        """Schedule side of a (speculative) step: establish the device frame for ``depth``
+        draft rows after the anchor.
+
+        The frame is SET from cached_len (device_len = cached_len + 1 + depth), not grown, so
+        a scheduler that re-establishes it each step is idempotent and a stale un-drained
+        reservation is overwritten. The anchor row keeps a plain decode's contract (input at
+        cached_len, continuation written one past it), each draft row extends the frame one
+        position further, so positions / KV allocation / the token-pool write map generalize
+        without branching. Called by the DecodeManager right before building the batch.
+        """
+        assert depth >= 0, depth
+        # The deepest write is the last row's continuation at cached_len + 1 + depth,
+        # and a full accept commits it -- it must index the id buffer (size max_device_len),
+        # so one slot past the frame stays free.
+        assert (
+            self.cached_len + 1 + depth < self.max_device_len
+        ), f"cannot reserve {depth} draft rows, only {self.max_device_len - self.cached_len - 2} fit"
+        self.device_len = self.cached_len + 1 + depth
+        self.spec_depth = depth
+
+    def commit_spec(self, committed: int) -> None:
+        """Post-verification commit of a speculative step: ``committed`` is the sequence
+        length the request is authoritative through; the frame rotates past it the plain
+        decode way (cached_len = committed, device_len frames the next anchor) and the
+        un-accepted reservation is dropped without touching pages -- page release is the
+        separate ``CacheManager.free_token_tail`` call."""
+        self.cached_len = committed
+        self.device_len = committed + 1
+        self.spec_depth = 0
+
+    def release_spec_reservation(self) -> None:
+        """Drop this step's draft-row reservation without a commit (abort / drain path)."""
+        self.device_len = self.cached_len + 1
+        self.spec_depth = 0
+
     def append_host(self, next_token: torch.Tensor) -> None:
         n = self.input_ids.numel()
         m = n + next_token.numel()
@@ -95,6 +153,22 @@ class Req:
         self._ids_buf[n:m] = next_token
         self.input_ids = self._ids_buf[:m]
 
+    def accept_spec_tail(self, accepted: list[int], committed: int) -> None:
+        """Rewrite the reserved frame's draft inputs with the verification verdict.
+
+        Positions [cached_len+1, committed] already hold the accepted drafts (they were
+        the forward's inputs); the slot at ``committed`` holds the rejected draft the
+        resample/bonus replaces, so the whole accepted list is written uniformly and the
+        view truncates past it. Lengths still show the pre-commit frame here -- the
+        caller rotates them next (commit_spec). The bonus slot (committed == device_len
+        on full acceptance) fits because the id buffer spans the whole output budget.
+        """
+        base = self.cached_len
+        assert len(accepted) == committed - base, (len(accepted), committed, base)
+        assert committed + 1 <= self.max_device_len, (committed, self.max_device_len)
+        self._ids_buf[base + 1 : committed + 1] = torch.as_tensor(
+            accepted, dtype=self._ids_buf.dtype)
+        self.input_ids = self._ids_buf[: committed + 1]
     @property
     def can_decode(self) -> bool:
         return self.remain_len > 0
@@ -145,6 +219,21 @@ class Batch:
     # _prepare_batch succeeds. Continuation chunks leave this empty, so accounting is
     # exactly-once.
     prompt_admissions: List[Tuple[int, int, int]] = field(default_factory=list, init=False)
+    # Speculative (MTP) multi-row decode: the anchor + draft rows of this batch, flat in
+    # padded_reqs order as (req, draft_index) with draft_index 0..spec_depth (0 = anchor).
+    # None for plain one-row-per-request batches; CUDA graphs decline such batches until
+    # per-depth capture lands (419.6).
+    spec_rows: "List[Tuple[Req, int]] | None" = None
+    # Set by the MTP verify driver after a speculative scoring forward: per-request
+    # accepted token lists keyed by uid (already in input_ids via accept_spec_tail) and
+    # the flag telling the drain NOT to re-append row spans for this batch. Both stay
+    # at their defaults for plain batches.
+    spec_finalized: bool = False
+    spec_accepted: "Dict[int, List[int]] | None" = None
+
+    @property
+    def spec_active(self) -> bool:
+        return self.spec_rows is not None
 
     @property
     def is_prefill(self) -> bool:
@@ -161,6 +250,12 @@ class Batch:
     @property
     def padded_size(self) -> int:
         return len(self.padded_reqs)
+
+    @property
+    def num_rows(self) -> int:
+        """Scheduled forward rows: 1 per request for plain batches, 1 + spec_depth for
+        multi-token (speculative) decode rows."""
+        return len(self.spec_rows) if self.spec_rows is not None else len(self.reqs)
 
 
 @dataclass

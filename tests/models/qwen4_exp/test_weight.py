@@ -17,6 +17,7 @@ from freetoken.distributed import set_tp_info, try_get_tp_info
 from freetoken.kernel.aot_models import SUPPORTED_MODELS, expert_bank_row_bytes
 from freetoken.models.qwen4_exp.weight import (
     _ZERO_CENTERED_NORM_SUFFIXES,
+    iter_mtp_expert_pieces,
     iter_weights,
     load_ple_table,
 )
@@ -122,6 +123,9 @@ def _raw_checkpoint() -> dict[str, torch.Tensor]:
     raw.update({
         "mtp.hyper_connection_mixer.hc_norm.weight": _bf16(HCH),
         "mtp.layers.0.self_attn.q_proj.weight": _bf16(2 * QH * AHD, H),
+        "mtp.layers.0.self_attn.k_proj.weight": _bf16(KVH * AHD, H),
+        "mtp.layers.0.self_attn.v_proj.weight": _bf16(KVH * AHD, H),
+        "mtp.layers.0.self_attn.o_proj.weight": _bf16(H, QH * AHD),
         "mtp.layers.0.mlp.experts.gate_up_proj": _bf16(E, 2 * I, H),
         "mtp.layers.0.mlp.experts.down_proj": _bf16(E, H, I),
         "model.visual.blocks.0.attn.qkv.weight": _bf16(3 * H, H),
@@ -207,6 +211,154 @@ def test_mtp_visual_experts_and_table_never_loaded(loaded):
         assert ".mlp.experts." not in name
         assert "ngram_embedding" not in name
         assert not name.endswith((".weight_scale", ".weight_scale_2", ".input_scale"))
+
+
+@pytest.fixture(scope="module")
+def mtp_loaded(checkpoint):
+    folder, _raw = checkpoint
+    return {
+        name: tensor.clone()
+        for name, tensor in iter_weights(
+            folder, torch.device("cpu"), include_moe_experts=True, include_non_moe=True, include_mtp=True
+        )
+    }
+
+
+def test_mtp_dense_keys_load_when_requested(mtp_loaded, loaded):
+    """include_mtp=True adds the head's dense tensors under their mtp. keys; qkv fuses in-namespace."""
+    assert set(mtp_loaded) - set(loaded) == {
+        "mtp.hyper_connection_mixer.hc_norm.weight",
+        "mtp.layers.0.self_attn.qkv_proj.weight",
+        "mtp.layers.0.self_attn.o_proj.weight",
+    }
+
+
+def test_mtp_stacked_experts_never_enter_the_state_dict(mtp_loaded, checkpoint):
+    _folder, raw = checkpoint
+    for name in mtp_loaded:
+        assert not name.startswith("mtp.layers.0.mlp.experts.")
+    # the dense tensors ride through byte-exact
+    assert torch.equal(
+        mtp_loaded["mtp.hyper_connection_mixer.hc_norm.weight"],
+        raw["mtp.hyper_connection_mixer.hc_norm.weight"],
+    )
+
+
+def test_mtp_qkv_fusion_slices_back_to_q_k_v(mtp_loaded, checkpoint):
+    _folder, raw = checkpoint
+    mtp = "mtp.layers.0.self_attn"
+    parts = [raw[f"{mtp}.{p}_proj.weight"] for p in ("q", "k", "v")]
+    fused = mtp_loaded[f"{mtp}.qkv_proj.weight"]
+    for part, back in zip(parts, torch.split(fused, [p.shape[0] for p in parts], dim=0)):
+        assert torch.equal(part, back)
+
+
+# ======================================================================================
+# MTP stacked dense-bf16 experts -> bf16 draft banks
+# ======================================================================================
+#
+# Checkpoint ground truth (RadixArk/Qwen3.8-Flash-Next-NVFP4): the MTP experts are
+# dense BF16 stacked tensors with NO _scale_inv companions -- not block-fp8. The
+# reader yields {gate, up, down} bf16 pieces for the draft layers' own
+# (unquantized) method to pack.
+
+MTP_E, MTP_H, MTP_I = 4, 256, 128
+MTP_TARGET_MOE_LAYERS = 6
+
+
+@pytest.fixture(scope="module")
+def mtp_expert_checkpoint(tmp_path_factory):
+    torch.manual_seed(1)
+    folder = tmp_path_factory.mktemp("qwen4_exp_mtp_experts")
+    raw = {
+        "mtp.layers.0.mlp.experts.gate_up_proj": torch.randn(MTP_E, 2 * MTP_I, MTP_H, dtype=torch.bfloat16),
+        "mtp.layers.0.mlp.experts.down_proj": torch.randn(MTP_E, MTP_H, MTP_I, dtype=torch.bfloat16),
+    }
+    save_file(raw, str(folder / "model-bf16-00001.safetensors"))
+    return str(folder), raw
+
+
+def _mtp_model_config():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        num_experts=MTP_E,
+        hidden_size=MTP_H,
+        moe_intermediate_size=MTP_I,
+        num_experts_per_tok=2,
+        hidden_act="silu",
+        num_moe_layers=MTP_TARGET_MOE_LAYERS,
+    )
+
+
+def test_mtp_expert_pieces_slice_the_stacked_tensors(mtp_expert_checkpoint):
+    folder, raw = mtp_expert_checkpoint
+    pieces = list(iter_mtp_expert_pieces(folder, _mtp_model_config(), batch=2))
+    assert [(li, e0, e1) for li, e0, e1, _ in pieces] == [(MTP_TARGET_MOE_LAYERS, 0, 2), (MTP_TARGET_MOE_LAYERS, 2, 4)]
+    stacked_gu = raw["mtp.layers.0.mlp.experts.gate_up_proj"]
+    stacked_down = raw["mtp.layers.0.mlp.experts.down_proj"]
+    for _li, e0, e1, piece in pieces:
+        assert set(piece) == {"gate", "up", "down"}
+        assert torch.equal(piece["gate"], stacked_gu[e0:e1, :MTP_I])
+        assert torch.equal(piece["up"], stacked_gu[e0:e1, MTP_I:])
+        assert torch.equal(piece["down"], stacked_down[e0:e1])
+        assert piece["gate"].dtype is torch.bfloat16
+
+
+def test_mtp_expert_method_layout_is_the_fp8_block_kernel_layout(mtp_expert_checkpoint):
+    from freetoken.kernel.aot_models import fp8_block_scale_pad
+    from freetoken.models.qwen4_exp.weight import mtp_expert_method
+
+    method = mtp_expert_method(_mtp_model_config())
+    layout = method.layout()
+    B = 128  # the fp8_block scheme's block
+    assert set(layout) == {"gate_up", "gate_up_scale", "down", "down_scale"}
+    assert (layout["gate_up"].shape, layout["gate_up"].dtype) == ((2 * MTP_I, MTP_H), torch.float8_e4m3fn)
+    assert layout["gate_up_scale"].shape == (2 * MTP_I // B, fp8_block_scale_pad(2 * MTP_I // B, MTP_H // B))
+    assert (layout["down"].shape, layout["down"].dtype) == ((MTP_H, MTP_I), torch.float8_e4m3fn)
+    assert layout["down_scale"].shape == (MTP_H // B, fp8_block_scale_pad(MTP_H // B, MTP_I // B))
+
+
+def test_mtp_experts_pack_into_bf16_draft_banks(mtp_expert_checkpoint):
+    """The MTP reader's pieces pack through the bf16 (unquantized) kernel layout into
+    per-draft-layer banks: gate/up halves fuse back into gate_up, down copies over."""
+    from freetoken.layers.quantization import LayerKind, QuantKind, method_class
+    from freetoken.layers.quantization.moe.base import MoEConfig
+    from freetoken.layers.quantization.quant_backend import get_quant_backend
+    from freetoken.moe.expert_banks import build_expert_banks
+    from freetoken.models.qwen4_exp.weight import iter_mtp_expert_pieces
+
+    folder, raw = mtp_expert_checkpoint
+    cfg = _mtp_model_config()
+    cls = method_class(QuantKind.NONE, LayerKind.MOE)
+    method = cls(
+        MoEConfig(num_experts=MTP_E, hidden=MTP_H, intermediate=MTP_I, top_k=2),
+        get_quant_backend().select(LayerKind.MOE, QuantKind.NONE),
+    )
+    assert set(method.layout()) == {"gate_up", "down"}
+
+    def _local_pieces():
+        for bank_id, e0, e1, piece in iter_mtp_expert_pieces(folder, cfg):
+            yield bank_id - MTP_TARGET_MOE_LAYERS, e0, e1, piece
+
+    banks = build_expert_banks(
+        method, num_layers=1, pieces=_local_pieces(), device=torch.device("cpu"))
+
+    assert set(banks.sources) == {"gate_up", "down"}
+    assert len(banks.sources["gate_up"]) == 1
+    assert torch.equal(banks.sources["gate_up"][0], raw["mtp.layers.0.mlp.experts.gate_up_proj"])
+    assert torch.equal(banks.sources["down"][0], raw["mtp.layers.0.mlp.experts.down_proj"])
+
+
+def test_mtp_expert_pieces_reject_a_shape_mismatch(mtp_expert_checkpoint, tmp_path):
+    folder, raw = mtp_expert_checkpoint
+    bad = dict(raw)
+    bad["mtp.layers.0.mlp.experts.down_proj"] = torch.randn(MTP_E, MTP_H, MTP_I + 1, dtype=torch.bfloat16)
+    bad_folder = tmp_path / "bad"
+    bad_folder.mkdir()
+    save_file(bad, str(bad_folder / "model-bf16-00001.safetensors"))
+    with pytest.raises(ValueError, match="down_proj"):
+        list(iter_mtp_expert_pieces(str(bad_folder), _mtp_model_config()))
 
 
 def test_hc_merge_is_down_then_inject_then_zero_pad(loaded, checkpoint):

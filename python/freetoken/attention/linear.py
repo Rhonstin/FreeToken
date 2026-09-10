@@ -19,10 +19,17 @@ class FLAMetadata:
 
     Fields:
       cu_seqlens          query indptr; decode = arange(bs+1) (1 token/req), prefill =
-                          cumsum of extend_len. int32 on device.
-      cache_indices       per-request recurrent/conv state slot (= Req.table_idx). int32.
-      has_initial_state   prefill only: whether each request continues a cached prefix
-                          (cached_len > 0). None for decode (state always present).
+                          cumsum of extend_len. A multi-token (speculative) decode batch
+                          forwards 1 + depth rows per request and frames each request's
+                          span as ONE sequence, so its indptr is the cumsum of the flat
+                          spec_rows spans (sequential recurrence, like a continuation).
+                          int32 on device.
+      cache_indices       recurrent/conv state slot: per-request for plain decode (and
+                          one per request for spec batches), per request for prefill.
+                          Plain decode reuses ``batch.linear_table_idx`` as-is.
+      has_initial_state   prefill / speculative decode: whether each request continues a
+                          cached prefix (cached_len > 0). Spec batches are always True.
+                          None for plain decode (state always present).
       fresh_state_indices prefill only: the state-pool slots whose sequence is fresh
                           (cached_len == 0) and must be zeroed before the chunk kernel
                           reads them in place. None if there are none / for decode.
@@ -54,6 +61,10 @@ def build_fla_metadata(batch: "Batch", device: torch.device) -> FLAMetadata:
     CUDA graph the decode ``FLAMetadata`` is instead built directly in
     ``GraphCaptureBuffer.set_batch`` against the persistent buffers (stable addresses); this
     builder serves the eager scheduler path and direct-op test callers.
+
+    A multi-token (speculative) decode batch forwards one row per draft (the anchor plus
+    each draft row, flat in spec_rows order), so the indptr spans rows, not requests, and
+    ``linear_table_idx`` must already hold one slot per row (staged by the scheduler).
     """
     reqs = batch.padded_reqs
     pin = {"device": "cpu", "pin_memory": torch.cuda.is_available()}
@@ -65,6 +76,35 @@ def build_fla_metadata(batch: "Batch", device: torch.device) -> FLAMetadata:
 
     if batch.is_decode:
         bs = len(reqs)
+        if batch.spec_active:
+            # A speculative step verifies its whole span in one forward. Frame each
+            # request's anchor + draft rows as ONE continuation sequence with a single
+            # live slot, so the recurrent/conv ops process the rows SEQUENTIALLY.
+            # Parallel same-slot rows would race: both the per-row outputs the
+            # verification compares against AND the written state come out wrong
+            # (live: garbage tokens at high acceptance rates).
+            spans: list[int] = []
+            slots: list[int] = []
+            i = 0
+            rows = batch.spec_rows
+            while i < len(rows):
+                req = rows[i][0]
+                span = 1
+                while i + span < len(rows) and rows[i + span][0] is req:
+                    span += 1
+                spans.append(span)
+                slots.append(gdn_slot(req))
+                i += span
+            cu_host = torch.tensor([0, *spans], dtype=torch.int64, **pin).cumsum_(0)
+            idx_host = torch.tensor(slots, dtype=torch.int32, **pin)
+            # every spec step continues a cached prefix (the scheduler only drafts
+            # running requests), so nothing needs zeroing
+            has_init = torch.ones(len(spans), dtype=torch.bool, device=device)
+            return FLAMetadata(
+                cu_seqlens=cu_host.to(device, non_blocking=True).to(torch.int32),
+                cache_indices=idx_host.to(device, non_blocking=True),
+                has_initial_state=has_init,
+            )
         cu_seqlens = torch.arange(bs + 1, dtype=torch.int32, device=device)
         # the scheduler stages linear_table_idx from gdn_slot (decode), reused as-is here
         assert batch.linear_table_idx is not None

@@ -695,3 +695,124 @@ def test_decode_graph_replay_matches_eager():
     graph.replay()
     torch.cuda.synchronize()
     assert torch.equal(static_out, replayed)
+
+
+def test_disk_fill_uses_anchor_rows_for_spec_batches():
+    """PLE-disk n-gram runs for a spec batch: one run per request holding the anchor
+    context plus ALL its row inputs (anchor + drafts, the staged shape chunked
+    prefill uses). Draft rows past input_ids must never be indexed from the host
+    (live IndexError: device_len runs past the host ids into the reservation) --
+    their tokens come from the gathered batch inputs."""
+    from freetoken.models.qwen4_exp.ple_disk import DiskRowTable
+
+    filled = []
+    table = SimpleNamespace(
+        eos_token_id=7,
+        fill=lambda runs, graph: filled.append((runs, graph)),
+    )
+    # committed prefix [0..10], anchor input at 10, two drafts reserved past it
+    req = SimpleNamespace(
+        input_ids=torch.arange(11, dtype=torch.int64),
+        cached_len=10, device_len=13, spec_depth=2,
+    )
+    batch = SimpleNamespace(
+        is_decode=True, reqs=[req],
+        spec_rows=[(req, 0), (req, 1), (req, 2)],
+        input_ids=torch.tensor([10, 77, 78], dtype=torch.int64),  # anchor + drafts
+    )
+    DiskRowTable.host_fill_batch(table, batch, False)
+    assert len(filled) == 1
+    runs, graph = filled[0]
+    assert graph is False
+    assert len(runs) == 1
+    # context [8, 9] + anchor 10 + drafts 77, 78 (the device hashes every row)
+    assert runs[0].tolist() == [8, 9, 10, 77, 78]
+
+
+def test_disk_fill_plain_decode_unchanged():
+    from freetoken.models.qwen4_exp.ple_disk import DiskRowTable
+
+    filled = []
+    table = SimpleNamespace(
+        eos_token_id=7,
+        fill=lambda runs, graph: filled.append((runs, graph)),
+    )
+    req = SimpleNamespace(
+        input_ids=torch.arange(11, dtype=torch.int64),
+        cached_len=10, device_len=11, spec_depth=0,
+    )
+    batch = SimpleNamespace(
+        is_decode=True, reqs=[req],
+        input_ids=torch.tensor([10], dtype=torch.int64),
+    )
+    DiskRowTable.host_fill_batch(table, batch, False)
+    assert filled[0][0][0].tolist() == [8, 9, 10]
+
+
+def test_spec_row_contexts_roll_from_committed_and_flat_rows():
+    """PLE decode metadata for a spec batch: per-row slots repeat the request slot;
+    the anchor keeps the rolled pre-step state while each draft row's context is the
+    ctx_len ids before its position (flat rows above the anchor, committed prefix
+    below it)."""
+    from types import SimpleNamespace
+
+    from freetoken.models.qwen4_exp.ple import build_ple_metadata
+
+    args = SimpleNamespace(ngram_size=3, ngram_boundary_token_id=7)
+    pool = torch.tensor([[70, 71], [80, 81]], dtype=torch.int64)  # pre-step states
+    r1 = SimpleNamespace(cached_len=10, table_idx=0, spec_depth=2)
+    r2 = SimpleNamespace(cached_len=5, table_idx=1, spec_depth=0)
+    batch = SimpleNamespace(
+        is_decode=True,
+        padded_reqs=[r1, r2], reqs=[r1, r2],
+        spec_rows=[(r1, 0), (r1, 1), (r1, 2), (r2, 0)],
+        input_ids=torch.tensor([100, 101, 102, 200], dtype=torch.int64),
+        linear_table_idx=torch.tensor([0, 1], dtype=torch.int32),
+        fla_metadata=None,
+    )
+    meta = build_ple_metadata(batch, args, torch.device("cpu"), context_pool=pool)
+    assert meta.state_slots.tolist() == [0, 0, 0, 1]
+    assert meta.input_ids.tolist() == [100, 101, 102, 200]
+    # anchor rows keep the rolled state; r1 drafts roll [.., 100, 101, 102]:
+    # row (r1,1) at position 11 <- [100 predecessors: 71? no: positions 9,10]
+    # committed prefix is abstract here: below-base tokens read anchor state cols.
+    # position 11 needs [tok9, tok10] = anchor_state[1], 100 -> [71, 100]
+    # position 12 needs [tok10, tok11] = [100, 101]
+    assert meta.ngram_context.tolist() == [
+        [70, 71],    # (r1, anchor): pre-step state
+        [71, 100],   # (r1, draft1) position 11 <- [tok9=71, tok10=100]
+        [100, 101],  # (r1, draft2) position 12 <- [100, 101]
+        [80, 81],    # (r2, anchor): pre-step state
+    ]
+
+
+def test_commit_keeps_each_slots_last_row_on_spec_spans():
+    """index_copy_ with duplicate slot indices is nondeterministic: on spec spans only
+    each slot's last row may write (its rolled context is the state past the span)."""
+    from freetoken.models.qwen4_exp.ple import commit_ngram_context
+
+    pool = torch.zeros(2, 2, dtype=torch.int64)
+    meta = SimpleNamespace(
+        is_decode=True,
+        input_ids=torch.tensor([100, 101, 102, 200], dtype=torch.int64),
+        ngram_context=torch.tensor(
+            [[70, 71], [71, 100], [100, 101], [80, 81]], dtype=torch.int64),
+        state_slots=torch.tensor([0, 0, 0, 1]),
+    )
+    commit_ngram_context(meta, None, context_pool=pool)
+    # slot 0 <- last row of its span ([101, 102]); slot 1 <- its single row
+    assert pool.tolist() == [[101, 102], [81, 200]]
+
+
+def test_commit_plain_decode_unchanged():
+    from freetoken.models.qwen4_exp.ple import commit_ngram_context
+
+    pool = torch.zeros(2, 2, dtype=torch.int64)
+    meta = SimpleNamespace(
+        is_decode=True,
+        input_ids=torch.tensor([100, 200], dtype=torch.int64),
+        ngram_context=torch.tensor([[70, 71], [80, 81]], dtype=torch.int64),
+        state_slots=torch.tensor([0, 1]),
+    )
+    commit_ngram_context(meta, None, context_pool=pool)
+    assert pool.tolist() == [[71, 100], [81, 200]]

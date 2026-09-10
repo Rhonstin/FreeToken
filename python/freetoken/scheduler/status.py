@@ -34,6 +34,8 @@ class SchedulerStatusReporter:
         page_size: int,
         mamba_slots: tuple[int, int] | None = None,
         swa_tokens: tuple[int, int] | None = None,
+        spec: dict | None = None,
+        moe: dict | None = None,
     ) -> None:
         if batch.is_prefill:
             self._report_prefill(
@@ -55,6 +57,8 @@ class SchedulerStatusReporter:
                 page_size=page_size,
                 mamba_slots=mamba_slots,
                 swa_tokens=swa_tokens,
+                spec=spec,
+                moe=moe,
             )
 
     def _report_prefill(
@@ -101,9 +105,14 @@ class SchedulerStatusReporter:
         page_size: int,
         mamba_slots: tuple[int, int] | None = None,
         swa_tokens: tuple[int, int] | None = None,
+        spec: dict | None = None,
+        moe: dict | None = None,
     ) -> None:
         self._decode_forward_count += 1
-        self._decode_generated_tokens += len(batch.reqs)
+        # A finalized spec step generates its whole accepted span, not one token per
+        # request: count the accepted tokens beyond the anchor so gen throughput is real
+        # tok/s under speculation. Plain batches (no spec_accepted) are unchanged.
+        self._decode_generated_tokens += len(batch.reqs) + _spec_extra_tokens(batch)
         if self._decode_forward_count % self.decode_log_interval != 0:
             return
 
@@ -120,12 +129,62 @@ class SchedulerStatusReporter:
             f"{_swa_msg(swa_tokens)}"
             f"{_mamba_msg(mamba_slots)}"
             f"gen throughput (token/s): {gen_throughput:.2f}, "
+            f"{_spec_msg(spec)}"
+            f"{_moe_msg(moe)}"
             f"#queue-req: {queue_reqs}"
         )
 
 
 def _usage_ratio(used: int, total: int) -> float:
     return used / total if total > 0 else 0.0
+
+
+def _spec_extra_tokens(batch: Batch) -> int:
+    """Accepted tokens beyond one per request on a finalized spec batch, else 0.
+
+    Reads the verify driver's ``spec_accepted`` map (uid -> accepted span, which always
+    includes the trailing resample/bonus token); plain batches carry no map and count
+    exactly as before. Duck-typed via getattr so schedule-time test doubles without
+    the field keep working.
+    """
+    accepted = getattr(batch, "spec_accepted", None)
+    if not accepted:
+        return 0
+    return sum(len(span) - 1 for span in accepted.values())
+
+
+def _spec_msg(spec: dict | None) -> str:
+    """The MTP acceptance-rate fragment for the decode log line (the 419.8 benchmark
+    reads the same ``SpecAccounting.snapshot`` shape); empty unless steps verified, so
+    plain-decode lines are byte-identical."""
+    if not spec or not spec.get("steps"):
+        return ""
+    return (
+        f"spec accept: {spec['accepted']}/{spec['proposed']} "
+        f"({spec['accepted'] / spec['proposed'] if spec['proposed'] else 0.0:.2f}), "
+    )
+
+
+def _moe_msg(moe: dict | None) -> str:
+    """Opt-in MoE cache readout (--moe-collect-stats): realized miss rate, the routing
+    working set / 90%-mass expert count, and the per-layer-LRU oracle hit at the
+    current slots per layer. Empty unless the flag is on, so plain lines stay
+    byte-identical."""
+    if not moe:
+        return ""
+    parts = []
+    if "miss_rate" in moe:
+        parts.append(f"miss: {moe['miss_rate']:.2f}")
+    if "oracle_hit_at_slots" in moe:
+        parts.append(
+            f"oracle: {moe['oracle_hit_at_slots']:.2f}@{moe['slots_per_layer']:.0f}slots")
+    if "working_set_mean" in moe:
+        parts.append(f"ws: {moe['working_set_mean']:.0f}/{moe['working_set_max']}")
+    if "experts_for_90pct" in moe:
+        parts.append(f"e90: {moe['experts_for_90pct']:.0f}")
+    if "norm_entropy" in moe:
+        parts.append(f"ent: {moe['norm_entropy']:.2f}")
+    return "moe " + ", ".join(parts) + ", " if parts else ""
 
 
 def _mamba_msg(mamba_slots: tuple[int, int] | None) -> str:

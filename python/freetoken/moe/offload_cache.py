@@ -144,6 +144,15 @@ class OffloadMoeCache:
     # bank layout from the expert kernel (a BankSpec per role); when given it replaces the _BANK_SCHEMAS lookup and the slot cap comes from max_slots
     layout: dict | None = None
     max_slots: int | None = None
+    # Dedicated single-layer caches (the MTP draft experts) can promise that a
+    # materialized layer STAYS in slots [0, E) until something else writes slots:
+    # capacity == num_experts means the LRU never evicts it, and nothing but the
+    # draft prefill (which always materializes the same layer) touches the cache.
+    # With this set, a repeated materialize of the marked layer stages nothing and
+    # copy_missing no-ops, instead of re-copying the whole layer (~E x row bytes)
+    # every draft step. The mark is dropped by any ensure_experts (LRU remap) and
+    # by a materialize of a different layer (which overwrites slots [0, E)).
+    sticky_materialize: bool = False
 
     def __post_init__(self) -> None:
         policy_ids = {"lru": 0}
@@ -209,6 +218,9 @@ class OffloadMoeCache:
             self.bank_schema = _BANK_SCHEMAS[self.quant_format]
         self.bank_sources: dict[str, list[torch.Tensor]] = {}
         self.bank_caches: dict[str, torch.Tensor] = {}
+        # Layers this cache can serve straight from slots [0, E) without re-staging;
+        # only consulted when ``sticky_materialize`` is set (see the field doc).
+        self._materialized_layers: set[int] = set()
         # per-layer host residency: the GPU movement paths require "pinned"; LOCKED/PAGEABLE layers decode on the CPU executor and prefill via copy_missing's pageable branch
         # _unpinned_layers is the derived id set the hot paths test against
         self.layer_residency: list[str] = []
@@ -843,6 +855,10 @@ class OffloadMoeCache:
     def ensure_experts(self, layer_id: int, expert_ids: torch.Tensor) -> None:
         from freetoken.moe.offload_kernels import ensure_experts
 
+        if self._materialized_layers:
+            # The LRU remap rewrites slot_for_id for this layer; any sticky layer
+            # claim may no longer describe the slots.
+            self._materialized_layers.clear()
         if self.collect_decode_freq:
             # ``expert_ids`` still holds raw expert ids here (the kernel rewrites them to
             # slot ids in place), so snapshot the routing histogram before that happens.
@@ -864,6 +880,8 @@ class OffloadMoeCache:
         miss count (for stats). All device-side / fixed-shape, so it is CUDA-graph safe."""
         from freetoken.moe.offload_kernels import ensure_experts_hybrid
 
+        if self._materialized_layers:
+            self._materialized_layers.clear()
         if self.collect_decode_freq:
             ids = expert_ids.reshape(-1).long()
             self.decode_freq[layer_id].scatter_add_(0, ids, torch.ones_like(ids))
@@ -874,16 +892,29 @@ class OffloadMoeCache:
         )
 
     def materialize_layer(self, layer_id: int) -> None:
+        if self.sticky_materialize and layer_id in self._materialized_layers:
+            # The whole layer already sits in slots [0, E) (see the field doc): a
+            # re-stage would schedule a redundant layer-size H2D copy, and pairing
+            # copy_missing with a None staging is a no-op below.
+            self._pending_src_layer = None
+            self._pending_whole_layer = False
+            return
         from freetoken.moe.offload_kernels import materialize_layer
 
         self._pending_src_layer = layer_id
         self._pending_whole_layer = True
         materialize_layer(self, layer_id)
+        # Pairing contract: the caller runs copy_missing next on the same stream
+        # (prefill paths always do); the mark is dropped by ensure_experts and by a
+        # different layer's materialize (both rewrite the slots or their mapping).
+        if self.sticky_materialize:
+            self._materialized_layers = {layer_id}
 
     def reset(self) -> None:
         from freetoken.moe.offload_kernels import reset_cache
 
         reset_cache(self)
+        self._materialized_layers.clear()
         # Per-expert recency is not cache_size-shaped, so reset_cache leaves it alone; wipe
         # it here so a new sequence starts with cold hybrid fetch priorities.
         self.expert_recency.fill_(-1)
@@ -1009,9 +1040,12 @@ class OffloadMoeCache:
         }
 
     def copy_missing(self) -> None:
-        assert self.banks, "set_bank_sources must register the banks first"
         layer_id = self._pending_src_layer
-        assert layer_id is not None, "no staged misses (ensure_experts/materialize_layer first)"
+        if layer_id is None:
+            if self.sticky_materialize:
+                return  # nothing staged: the sticky layer is already resident
+            raise AssertionError("no staged misses (ensure_experts/materialize_layer first)")
+        assert self.banks, "set_bank_sources must register the banks first"
         if layer_id in self._unpinned_layers:
             if not self._pending_whole_layer:
                 raise RuntimeError(

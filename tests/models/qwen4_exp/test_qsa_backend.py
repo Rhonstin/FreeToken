@@ -248,3 +248,96 @@ def test_two_qsa_layers_keep_separate_slab_slots(monkeypatch):
 
     slab = fixture.pool.cmp_k_cache
     assert not torch.equal(slab(0), slab(1))
+
+
+# ---------------------------------------------------------------- CPU slot-map only
+
+
+def _cpu_pool_and_backend(config, depth: int):
+    """A CPU QSA pool + backend for the slot-map contract (no kernels run)."""
+    from dataclasses import replace
+
+    from freetoken.attention.qsa_sparse import QSASparseAttnBackend
+    from freetoken.kvcache import create_kvcache_pool
+
+    from .common import fresh_ctx
+
+    config = replace(
+        config, qwen4_args=replace(config.qwen4_args, mtp_num_layers=1))
+    pool = create_kvcache_pool(
+        model_config=config, num_pages=5, page_size=64, dtype=torch.bfloat16,
+        device=torch.device("cpu"), num_req_slots=4,
+        num_speculative_tokens=depth,
+    )
+    ctx = fresh_ctx(
+        page_size=64, page_table=torch.zeros(4, 64 * 8, dtype=torch.int32),
+        kv_cache=pool)
+    return pool, QSASparseAttnBackend(config), ctx
+
+
+def test_backend_slot_map_extends_to_the_draft_layers():
+    """Pool and backend agree slot-for-slot: target ids keep their slots, each draft
+    id takes the next one (the order draft_qsa_layer_ids names)."""
+    from freetoken.attention.qsa_sparse import QSASparseAttnBackend
+
+    config = parsed_config()
+    group = QSASparseAttnBackend._qsa_group(config)
+    pool, backend, _ctx = _cpu_pool_and_backend(config, depth=2)
+    assert backend._idx_slot == {
+        lid: i for i, lid in enumerate([*group.layer_ids, config.num_moe_layers])}
+    assert backend.ring_capacity == pool.ring_capacity
+    draft_slot = backend._idx_slot[config.num_moe_layers]
+    assert draft_slot == len(group.layer_ids)
+    # storage and index tiers exist behind every mapped slot
+    pool.k_cache(config.num_moe_layers)
+    pool.cmp_k_cache(draft_slot)
+    pool.pending_ring(draft_slot)
+
+
+def test_backend_slot_map_without_mtp_is_untouched():
+    from freetoken.attention.qsa_sparse import QSASparseAttnBackend
+    from freetoken.kvcache import create_kvcache_pool
+
+    config = parsed_config()
+    group = QSASparseAttnBackend._qsa_group(config)
+    pool = create_kvcache_pool(
+        model_config=config, num_pages=5, page_size=64, dtype=torch.bfloat16,
+        device=torch.device("cpu"), num_req_slots=4,
+    )
+    from .common import fresh_ctx
+
+    fresh_ctx(
+        page_size=64, page_table=torch.zeros(4, 64 * 8, dtype=torch.int32),
+        kv_cache=pool)
+    backend = QSASparseAttnBackend(config)
+    assert backend._idx_slot == {lid: i for i, lid in enumerate(group.layer_ids)}
+
+
+def test_snapshot_decode_expands_token_map_over_spec_rows(monkeypatch):
+    import freetoken.attention.qsa_sparse as qsa_mod
+
+    monkeypatch.setattr(qsa_mod, "_CPU_PINNED", {})
+    """Eager-decode snapshot row fields span forward rows: a (1 + depth)-row spec
+    request maps every row to its request (live ValueError: 1 mapped row vs 3
+    query rows on the scoring forward). Plain batches keep the arange map."""
+    from freetoken.attention.qsa_sparse import QSASparseAttnBackend
+
+    backend = QSASparseAttnBackend.__new__(QSASparseAttnBackend)
+    backend.device = torch.device("cpu")
+    backend._block_table = lambda idx: torch.zeros(len(idx), 2, dtype=torch.int32)
+    r1 = SimpleNamespace(table_idx=3, spec_depth=2)
+    r2 = SimpleNamespace(table_idx=5, spec_depth=0)
+    md = SimpleNamespace(kv_len_cpu=torch.tensor([80, 40]))
+    batch = SimpleNamespace(
+        padded_reqs=[r1, r2],
+        spec_rows=[(r1, 0), (r1, 1), (r1, 2), (r2, 0)])
+    QSASparseAttnBackend._snapshot_decode(backend, md, batch)
+    assert md.token_to_req.tolist() == [0, 0, 0, 1]
+    assert md.cu_seqlens.tolist() == [0, 1, 2, 3, 4]
+    assert md.ring_slots.tolist() == [3, 5]
+
+    plain = SimpleNamespace(padded_reqs=[r1, r2], spec_rows=None)
+    md2 = SimpleNamespace(kv_len_cpu=torch.tensor([80, 40]))
+    QSASparseAttnBackend._snapshot_decode(backend, md2, plain)
+    assert md2.token_to_req.tolist() == [0, 1]
+    assert md2.cu_seqlens.tolist() == [0, 1, 2]

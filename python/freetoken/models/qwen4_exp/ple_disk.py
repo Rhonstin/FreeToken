@@ -218,8 +218,24 @@ class DiskRowTable:
                 return _complete
             # launch-gating: this D2H is the step's readback and orders the fill after sampling
             tokens = batch.input_ids.to("cpu").to(torch.int64).tolist()
-            runs = [torch.tensor([*_context(r.input_ids, r.device_len - 1, eos), t], dtype=torch.int64)
-                    for r, t in zip(reqs, tokens)]
+            if getattr(batch, "spec_rows", None) is None:
+                runs = [torch.tensor([*_context(r.input_ids, r.device_len - 1, eos), t], dtype=torch.int64)
+                        for r, t in zip(reqs, tokens)]
+            else:
+                # Speculative rows: every row needs its n-gram embedding, so each
+                # request stages one run holding the anchor context plus ALL its row
+                # inputs (anchor + drafts, already in batch.input_ids flat in span
+                # order) -- exactly the variable-length run shape chunked prefill
+                # stages. The context ends at the committed anchor position; draft
+                # rows past input_ids read their tokens from the gathered inputs.
+                runs = []
+                offset = 0
+                for r in reqs:
+                    n = 1 + r.spec_depth
+                    runs.append(torch.tensor(
+                        [*_context(r.input_ids, r.cached_len, eos),
+                         *tokens[offset : offset + n]], dtype=torch.int64))
+                    offset += n
             self.fill(runs, graph=use_graph)
             return None
         runs = [

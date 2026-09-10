@@ -39,6 +39,25 @@ class EngineConfig:
     moe_cache_rate: float | None = None
     moe_cache_auto: bool = False
     kv_reserve_tokens: int = 8192  # KV floor for --moe-cache-auto; small by design (MoE-priority)
+    # MTP speculative decoding: drafts proposed per decode step (gamma). 0 = plain
+    # decode (the draft head is not built, no spec rows are scheduled, logs are
+    # byte-identical). > 0 builds the qwen4_exp draft module and installs the
+    # scheduler's spec_depth_fn; the checkpoint must ship the mtp.* head.
+    mtp_depth: int = 0
+    # Let each request's draft depth track its own acceptance (start at mtp_depth,
+    # grow on full accepts, shrink on all-rejects). Matches the --speculative-adaptive
+    # name the GDN kernel's stride comment already references.
+    mtp_adaptive: bool = False
+    # Draft-free speculation: propose up to `lookup_draft` tokens from the continuation
+    # of the most recent earlier occurrence of the request's token suffix (prompt
+    # look-up). 0 = off; the same exact verify path decides, so quality is unchanged.
+    # Mutually exclusive with mtp_depth (one drafter per run).
+    lookup_draft: int = 0
+    # Longest suffix length the look-up matcher considers.
+    lookup_ngram: int = 6
+    # Shortest match length: weak (short) matches on non-repetitive text draft rows
+    # that almost surely reject, and every verify row costs expert fetches.
+    lookup_min_ngram: int = 2
     moe_cache_policy: str = "lru"
     moe_prefill_overlap: bool = True
     # Prefill hit/miss split: serve cache-resident experts D2D during prefill
@@ -89,6 +108,13 @@ class EngineConfig:
     num_token_override: int | None = None
 
     def __post_init__(self):
+        if self.mtp_depth < 0:
+            raise ValueError(f"mtp_depth must be >= 0, got {self.mtp_depth}")
+        if self.lookup_draft < 0:
+            raise ValueError(f"lookup_draft must be >= 0, got {self.lookup_draft}")
+        if self.lookup_draft and self.mtp_depth:
+            raise ValueError(
+                "lookup_draft and mtp_depth are mutually exclusive (one drafter per run)")
         if self.moe_backend is None:
             return
         if self.moe_strategy != "auto":
@@ -106,7 +132,10 @@ class EngineConfig:
         spec = get_model_spec(self.hf_config.architectures[0])
         parse_config = _load_attr(spec.module, spec.parse_config)
         model_config = parse_config(self.hf_config)
-        return replace(model_config, quant=checkpoint_quant_config(self.model_path, self.hf_config, spec))
+        return replace(
+            apply_mtp_override(model_config, self.mtp_depth),
+            quant=checkpoint_quant_config(self.model_path, self.hf_config, spec),
+        )
 
     @property
     def max_seq_len(self) -> int:
@@ -121,6 +150,29 @@ class EngineConfig:
     @property
     def distributed_addr(self) -> str:
         return "tcp://127.0.0.1:2333"
+
+
+def apply_mtp_override(model_config, mtp_depth: int):
+    """Opt the model config into the MTP draft head when the CLI asks for drafts.
+
+    Pure (CPU-testable): with ``mtp_depth <= 0`` the config passes through untouched
+    (plain decode, byte-identical). Otherwise the model must carry ``qwen4_args``; a
+    parsed ``mtp_num_layers`` > 0 (from ``num_nextn_predict_layers`` when the HF config
+    provides it) is kept, while 0 falls back to 1 -- the shipping checkpoint's
+    ``mtp.layers.0`` -- because HF configs omit the field (transformers ignores
+    ``mtp.*``). A checkpoint without the head then fails loudly at strict load, never
+    silently.
+    """
+    if mtp_depth <= 0:
+        return model_config
+    args = getattr(model_config, "qwen4_args", None)
+    if args is None:
+        raise ValueError(
+            f"mtp_depth={mtp_depth} needs a qwen4_exp (MTP) model, "
+            f"got {getattr(model_config, 'model_type', '?')}")
+    if args.mtp_num_layers > 0:
+        return model_config
+    return replace(model_config, qwen4_args=replace(args, mtp_num_layers=1))
 
 
 def checkpoint_quant_config(model_path: str, hf_config: Any, spec: Any):

@@ -91,8 +91,7 @@ class DetokenizeManager:
         self.decode_map.pop(uid, None)
 
     def detokenize(self, msgs: List[DetokenizeMsg]) -> List[str]:
-        read_ids: List[List[int]] = []
-        surr_ids: List[List[int]] = []
+        incremental_strs: List[str] = []
         for msg in msgs:
             if msg.uid not in self.decode_map:
                 self.decode_map[msg.uid] = DecodeStatus(
@@ -105,15 +104,13 @@ class DetokenizeManager:
             s = self.decode_map[msg.uid]
             if not (msg.finished and msg.next_token in self.eos_token_ids):
                 s.decoded_ids.append(msg.next_token)
-            read_ids.append(s.decoded_ids[s.surr_offset :])
-            surr_ids.append(s.decoded_ids[s.surr_offset : s.read_offset])
-
-        read_texts = self.tokenizer.batch_decode(read_ids)
-        surr_texts = self.tokenizer.batch_decode(surr_ids)
-
-        incremental_strs: List[str] = []
-        for msg, read_str, surr_str in zip(msgs, read_texts, surr_texts, strict=True):
-            s = self.decode_map[msg.uid]
+            # One message at a time: a multi-token (speculative) drain delivers several
+            # messages for one uid in a single batch, and each message must advance the
+            # offsets before the next delta is measured -- otherwise the following
+            # message's slice still covers the previous token and its text repeats in
+            # the delta (live: " need" then " need answer").
+            read_str = self.tokenizer.decode(s.decoded_ids[s.surr_offset :])
+            surr_str = self.tokenizer.decode(s.decoded_ids[s.surr_offset : s.read_offset])
             new_text = read_str[len(surr_str) :]
             # Streaming chunk: update the decode status
             if len(new_text) > 0 and not new_text.endswith("�"):
