@@ -113,6 +113,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="GPU for the serve: a UUID or nvidia-smi index (as ft serve --gpu)")
     p.add_argument("--no-graph", action="store_true", help="eager decode instead of CUDA graph")
     p.add_argument(
+        "--kv-cache-dtype",
+        default="auto",
+        choices=["auto", "bf16", "fp8"],
+        help="server --kv-cache-dtype (fp8 halves the KV bytes where the pool supports it)",
+    )
+    p.add_argument(
+        "--dump-text", default=None,
+        help="write the measured run's generated text here (quality comparisons)",
+    )
+    p.add_argument(
         "--max-seq-len",
         type=int,
         default=0,
@@ -220,6 +230,8 @@ def serve_cmd(args: argparse.Namespace, backend: str, port: int, depth: int) -> 
         "--cuda-graph-max-bs", "0" if args.no_graph else "1",
         "--moe-hybrid-max-fetch", str(args.hybrid_fetch),
     ]
+    if args.kv_cache_dtype != "auto":
+        cmd += ["--kv-cache-dtype", args.kv_cache_dtype]
     if depth > 0:
         cmd += ["--mtp-depth", str(depth)]
         if args.spec_adaptive:
@@ -453,6 +465,8 @@ def run_one(args: argparse.Namespace, backend: str, depth: int) -> dict:
           f"(event p50 {row['event_ms_p50']:.3f} / p99 {row['event_ms_p99']:.3f} ms, "
           f"{len(stamps)} events)")
     print(f"  vram (server)     : {row['vram_gib']:8.2f} GiB")
+    if args.dump_text:
+        Path(args.dump_text).write_text(r["text"])
     sha_note = "greedy" if args.greedy else "sampled, per-server deterministic"
     print(f"  output sha1       : {row['output_sha1']}  ({sha_note}; compare across backends)")
     print(f"  output sample     : {r['text'][:240]!r}")
