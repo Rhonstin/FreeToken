@@ -76,6 +76,27 @@ def resolve_pool_class(model_config: ModelConfig) -> type[BaseKVCachePool]:
     return MHAKVCache
 
 
+def _reject_unsupported_quant(pool: str, kv_quant: str) -> None:
+    """A pool family that has no fp8 store/scale-read path must say so at startup,
+    not silently serve a 16-bit cache the budget priced for an fp8 one."""
+    if kv_quant != "none":
+        raise ValueError(
+            f"--kv-cache-dtype {kv_quant} is not implemented for the {pool} KV pool; "
+            "use --kv-cache-dtype bf16."
+        )
+
+
+def _quant_storage_pending(pool: str, kv_quant: str) -> None:
+    """Temporary gate: the config contract allows fp8 for these families, but the
+    code/scale buffers land with the FP8 storage tasks -- refuse loudly instead of
+    silently serving the compute-dtype cache."""
+    if kv_quant != "none":
+        raise NotImplementedError(
+            f"--kv-cache-dtype {kv_quant} storage is not wired into the {pool} pool yet; "
+            "keep --kv-cache-dtype auto/bf16 until the FP8 storage tasks land."
+        )
+
+
 def create_kv_pool(config, num_pages: int, device: torch.device, dtype: torch.dtype):
     """Build the engine's KV pool for ``num_pages`` USABLE pages (the dummy page and every
     secondary tier -- window pool, index slab, state rings -- are derived here or inside
@@ -85,10 +106,12 @@ def create_kv_pool(config, num_pages: int, device: torch.device, dtype: torch.dt
     from .dsv4_paged_pool import DSV4PagedKVCache
 
     model_config = config.model_config
+    kv_quant = getattr(config, "kv_quant", "none")
     if resolve_pool_class(model_config) is DSV4PagedKVCache:
         # DSV4 is driven by the generic CacheManager over the shared page table; the pool is
         # the only DSV4-specific piece (the swa_pool plug-in: window tier + cmp/idx/state
         # shadows). Sizing reads dsv4_args, never the group spec.
+        _reject_unsupported_quant("DSV4 paged", kv_quant)
         pool = DSV4PagedKVCache(
             sizes=_dsv4_pool_sizes(config, num_pages + 1),  # +1 for dummy page
             args=model_config.dsv4_args,
@@ -99,6 +122,8 @@ def create_kv_pool(config, num_pages: int, device: torch.device, dtype: torch.dt
         )
         pool._init_paged_state(config.max_running_req, config.cache_type != "naive")
         return pool
+
+    _quant_storage_pending("paged/SWA/QSA/DSA/MLA", kv_quant)
 
     num_swa_tokens = None
     # Both the naive and radix SWA paths share the global-paged swa pool; radix sizes it by
@@ -119,6 +144,7 @@ def create_kv_pool(config, num_pages: int, device: torch.device, dtype: torch.dt
         num_req_slots=config.max_running_req + 1,  # + 1 for the dummy request row
         # MTP draft depth widens the QSA pending ring (0 = plain decode, unchanged).
         num_speculative_tokens=max(0, int(getattr(config, "mtp_depth", 0) or 0)),
+        kv_quant=kv_quant,
     )
 
 
@@ -131,6 +157,7 @@ def create_kvcache_pool(
     num_swa_tokens: int | None = None,
     num_req_slots: int | None = None,
     num_speculative_tokens: int = 0,
+    kv_quant: str = "none",
 ) -> BaseKVCachePool:
     if model_config.has_swa_attention:
         from .hybrid_swa_pool import HybridSWAKVCache
@@ -170,6 +197,7 @@ def create_kvcache_pool(
     if len(kv_specs) == 1 and kv_specs[0].attn_type == _AttnType.BSA:
         from .bsa_pool import BSAKVCache
 
+        _reject_unsupported_quant("block-sparse (BSA)", kv_quant)
         spec = kv_specs[0]
         assert layer_ids is None, "hybrid-linear x BSA has no pool support yet"
         return BSAKVCache(
