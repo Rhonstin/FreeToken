@@ -13,6 +13,25 @@ logger = init_logger(__name__)
 FP8_KV_SCALE_BYTES = 4
 
 
+# What the cache actually stores, for the startup log and /v1/stats. "compute dtype"
+# means the pool hands back the same values the model produces; the others name the
+# codec AND the sidecar scales that must be read with it.
+_KV_QUANT_LABELS = {
+    "none": "compute dtype",
+    "fp8": "e4m3 codes + fp32 row scales",
+    "nvfp4": "packed E2M1 + E4M3 block scales + fp32 row scales",
+}
+
+
+def kv_quant_label(config) -> str:
+    """Human-readable storage format of the KV pool (kvcache/base.py contract)."""
+    quant = getattr(config, "kv_quant", "none")
+    label = _KV_QUANT_LABELS.get(quant)
+    if label is None:
+        raise ValueError(f"unknown kv_quant {quant!r}")
+    return f"{quant} ({label})" if quant != "none" else label
+
+
 class CacheRebuildRejected(Exception):
     """A runtime cache rebuild was rejected BEFORE any destructive free (e.g. the
     requested geometry does not fit). The old caches are intact and serving continues --
@@ -122,8 +141,8 @@ class BaseKVCachePool(ABC):
         assert num_pages > 1, "Not enough memory for KV cache, try reducing --num-pages"
         real_kv_size = num_pages * cache_per_page + fixed_cache_size
         logger.info(
-            f"Allocating {num_pages * config.page_size} tokens for KV cache, "
-            f"K + V = {mem_GB(real_kv_size)}"
+            f"Allocating {num_pages * config.page_size} tokens for KV cache "
+            f"[{kv_quant_label(config)}], K + V = {mem_GB(real_kv_size)}"
         )
         return num_pages
 

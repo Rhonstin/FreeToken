@@ -358,3 +358,16 @@ def test_status_meta_includes_pools():
     meta = compute_cache_status_meta(eng)
     assert meta["pools"]["num_pages"] == 100
     assert meta["pools"]["page_size"] == 16
+
+
+def test_kv_quant_label_names_the_storage_format():
+    from types import SimpleNamespace
+
+    from freetoken.kvcache.base import kv_quant_label
+
+    assert kv_quant_label(SimpleNamespace(kv_quant="none")) == "compute dtype"
+    assert kv_quant_label(SimpleNamespace(kv_quant="fp8")) == \
+        "fp8 (e4m3 codes + fp32 row scales)"
+    assert kv_quant_label(SimpleNamespace(kv_quant="nvfp4")).startswith("nvfp4 (packed E2M1")
+    with pytest.raises(ValueError, match="unknown kv_quant"):
+        kv_quant_label(SimpleNamespace(kv_quant="q8"))

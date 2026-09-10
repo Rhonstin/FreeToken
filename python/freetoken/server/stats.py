@@ -139,7 +139,8 @@ def build_stats(state: Any, p95_ms: int, ttft_mean_ms: int) -> dict:
     uptime_s = max(0, int(time.monotonic() - ready_at)) if ready_at is not None else 0
     kv = (
         {"used_pages": tr.kv_used_pages, "total_pages": tr.kv_total_pages,
-         "page_size": getattr(config, "page_size", 1)}
+         "page_size": getattr(config, "page_size", 1),
+         "quant": getattr(config, "kv_quant", "none")}
         if tr.kv_total_pages > 0 else None
     )
     mamba = (
