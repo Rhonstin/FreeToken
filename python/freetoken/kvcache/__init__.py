@@ -87,9 +87,9 @@ def _reject_unsupported_quant(pool: str, kv_quant: str) -> None:
 
 
 def _quant_storage_pending(pool: str, kv_quant: str) -> None:
-    """Temporary gate: the config contract allows fp8 for these families, but the
-    attention backends cannot read the scale sidecar yet (and most pools have no code
-    buffers) -- refuse loudly instead of silently serving a wrong-dtype cache."""
+    """Gate for pool families whose fp8 storage/read path is not ported yet: the config
+    contract allows them, but they have no code buffers and no scale-reading backend --
+    refuse loudly instead of silently serving a wrong-dtype cache."""
     if kv_quant != "none":
         raise NotImplementedError(
             f"--kv-cache-dtype {kv_quant} storage is not wired into the {pool} pool yet; "
@@ -123,7 +123,19 @@ def create_kv_pool(config, num_pages: int, device: torch.device, dtype: torch.dt
         pool._init_paged_state(config.max_running_req, config.cache_type != "naive")
         return pool
 
-    _quant_storage_pending("paged/SWA/QSA/DSA/MLA", kv_quant)
+    if kv_quant != "none":
+        # Verified pairs (tasks 5y2.4-5y2.9): plain paged (MHA), hybrid-SWA and QSA
+        # pools store codes + row scales, and their triton readers apply them. The
+        # remaining families (DSA/MLA -- and DSV4/BSA above) have no scale-read path
+        # in this tree yet.
+        from .hybrid_swa_pool import HybridSWAKVCache
+        from .mha_pool import MHAKVCache
+        from .qsa_pool import QSAKVCache
+
+        if resolve_pool_class(model_config) not in (
+            MHAKVCache, HybridSWAKVCache, QSAKVCache,
+        ):
+            _quant_storage_pending("DSA/MLA", kv_quant)
 
     num_swa_tokens = None
     # Both the naive and radix SWA paths share the global-paged swa pool; radix sizes it by
