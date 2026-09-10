@@ -72,6 +72,37 @@ ft serve --model ... --gpu GPU-9e8d7c6b  # the same card by UUID (a unique prefi
 | `--page-size` | 1 | KV page size; DSV4 forces 128, the TRTLLM backend needs 16/32/64, SWA models require 1 |
 | `--cache-type` | radix | `radix` (prefix reuse; SWA/GDN-aware variants picked automatically) or `naive` |
 | `--attention-backend`, `--attn` | auto | `trtllm`/`fi`/`fa`/`triton`/`dsv4_sparse`/`dsa`; `prefill,decode` pair allowed; auto picks per model + GPU |
+| `--kv-cache-dtype` | `auto` | `auto`/`bf16` = compute dtype (no quantization), `fp8` = e4m3 codes plus one fp32 row scale per (token, kv head) |
+
+#### KV-cache quantization (`--kv-cache-dtype fp8`)
+
+FP8 KV storage keeps the pool's **compute dtype** for every kernel signature and the
+attention scratch, and only the paged K/V rows are stored as e4m3 codes: one byte per
+element plus one fp32 scale per (token, slab, layer, kv head). Decoding multiplies the
+row back at read time, so a bf16/fp16 attention never sees a different dtype. The
+compressed index tiers some models keep (QSA index keys, DSA index slab, GDN state,
+PLE) are NOT quantized; the format changes only at restart, never at runtime.
+
+Support matrix (verified on RTX 3090, sm_86, software codec -- no native fp8 needed):
+
+| pool / backend | fp8 | notes |
+|---|---|---|
+| plain paged (MHA) + `triton` | yes | paged, decode, extend and split-K paths |
+| hybrid-SWA + `triton` | yes | full and window groups, translated slots |
+| QSA sparse + `qsa_sparse` | yes | K/V rows only; index keys stay 16-bit |
+| MLA/DSA, DSV4, block-sparse | no | rejected at startup (no scale-read path yet) |
+
+Measured on Qwen3.8-Flash-Next-NVFP4 (head_dim 256, 2 KV heads, 12 QSA layers): a token
+costs 13.2 KB (fp8) vs 25.3 KB (bf16), so a fixed ~6.8 GiB KV budget holds **1.9x** more
+tokens (299k vs 155k) at unchanged decode throughput (+-2% at 4k-128k) and equal quality in
+the campaign (needle retrieval 9/9 in both modes). Prefill is within ~1% at the default
+8192-token ubatch; the same budget freed from KV funds ~+390 expert-cache slots.
+
+```bash
+# Verified RTX 3090 commands
+ft serve --model <ckpt> --kv-cache-dtype fp8                      # auto sizing
+ft serve --model <ckpt> --kv-cache-dtype fp8 --num-tokens 131072  # 128k context, fp8 KV
+```
 
 ### MoE offload
 
