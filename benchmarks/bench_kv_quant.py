@@ -30,7 +30,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-MODES = ("bf16", "fp8")
+MODES = ("bf16", "fp8", "nvfp4")
 
 
 def free_port() -> int:
@@ -164,11 +164,15 @@ def needle_prompt(text: str, needle: str, depth: float) -> str:
 def quality_rows(origin: str, model_id: str, prompts: dict[str, str],
                  args: argparse.Namespace, mode: str) -> list[dict]:
     rows = []
-    for label in ("4k", "16k", "32k"):
+    labels = ["4k", "16k", "32k"]
+    if args.quality_long:
+        labels += ["64k", "128k"]
+    for label in labels:
         base = prompts.get(label)
         if not base:
             continue
-        for depth in (0.25, 0.5, 0.75):
+        depths = (0.25, 0.5, 0.75) if label in ("4k", "16k", "32k") else (0.5,)
+        for depth in depths:
             needle = f"XKCD-{label}-{int(depth * 100)}"
             r = stream(origin, model_id, needle_prompt(base, needle, depth), args,
                        args.quality_tokens)
@@ -214,6 +218,8 @@ def main(argv=None) -> int:
     p.add_argument("--repeats-short", type=int, default=3, help="runs after warmup for <=32k")
     p.add_argument("--repeats-long", type=int, default=1, help="runs after warmup for >32k")
     p.add_argument("--quality", action="store_true", help="run the quality phase too")
+    p.add_argument("--quality-long", action="store_true",
+                   help="add single-depth retrieval at 64k/128k (slow prefills)")
     p.add_argument("--quality-tokens", type=int, default=512,
                    help="max_tokens for the quality prompts (reasoning models need room)")
     p.add_argument("--num-tokens", type=int, default=0,
@@ -318,32 +324,37 @@ def main(argv=None) -> int:
                 pump.join(timeout=10)
         flush()
 
-    # Comparison: per context, fp8 vs bf16 warm decode and warm TTFT.
+    # Comparison: per context, every quantized mode vs bf16 warm decode and warm TTFT.
+    modes_run = [m for m in MODES if m not in skip]
     summary = []
     for label in contexts:
         pair = {m: [r for r in report["rows"]
                     if r["mode"] == m and r["context"] == label
-                    and not r.get("aggregate")] for m in MODES}
-        if not pair["bf16"] or not pair["fp8"]:
+                    and not r.get("aggregate")] for m in modes_run}
+        if not pair.get("bf16"):
             continue
         b = pair["bf16"][-1]
-        f = pair["fp8"][-1]
-        summary.append({
-            "context": label,
-            "decode_slowdown_pct": (b["decode_tok_s"] - f["decode_tok_s"]) / b["decode_tok_s"] * 100,
-            "ttft_delta_pct": (f["ttft_ms"] - b["ttft_ms"]) / b["ttft_ms"] * 100,
-        })
+        for m in modes_run:
+            if m == "bf16" or not pair.get(m):
+                continue
+            f = pair[m][-1]
+            summary.append({
+                "context": label, "mode": m,
+                "decode_slowdown_pct": (b["decode_tok_s"] - f["decode_tok_s"]) / b["decode_tok_s"] * 100,
+                "ttft_delta_pct": (f["ttft_ms"] - b["ttft_ms"]) / b["ttft_ms"] * 100,
+            })
     report["summary"] = summary
     if args.quality:
-        for label in ("4k", "16k", "32k"):
-            hit = {m: [q for q in report["quality"] if q["kind"] == "retrieval"
-                       and q["mode"] == m and q["context"] == label] for m in MODES}
-            if hit["bf16"] and hit["fp8"]:
-                report.setdefault("quality_summary", []).append({
-                    "context": label,
-                    "retrieval_bf16": sum(q["hit"] for q in hit["bf16"]) / len(hit["bf16"]),
-                    "retrieval_fp8": sum(q["hit"] for q in hit["fp8"]) / len(hit["fp8"]),
-                })
+        for label in sorted({q["context"] for q in report["quality"]
+                             if q["kind"] == "retrieval"}):
+            row = {"context": label}
+            for m in modes_run:
+                hits = [q for q in report["quality"] if q["kind"] == "retrieval"
+                        and q["mode"] == m and q["context"] == label]
+                if hits:
+                    row[f"retrieval_{m}"] = sum(q["hit"] for q in hits) / len(hits)
+            if len(row) > 1:
+                report.setdefault("quality_summary", []).append(row)
     flush()
     print(f"[bench] report: {out_path}", flush=True)
     for row in summary:
