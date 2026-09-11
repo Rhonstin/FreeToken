@@ -1,0 +1,37 @@
+{
+  "task_key": "19b",
+  "bead_id": "FreeToken-mtp-1ll.38",
+  "title": "Prefill and multi-turn latency without hurting decode - execution and acceptance",
+  "outcome": "no_change",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "measurements": {
+    "ttft_cold_ms": 6078.7,
+    "ttft_radix_hit_ms": 5615.9,
+    "ttft_turn2_ms": 5616.4,
+    "decode_tok_s": {
+      "cold": 17.25,
+      "radix_hit": 19.32,
+      "turn2": 18.16
+    },
+    "prompt_tokens": {
+      "cold": 81,
+      "turn2": 111
+    }
+  },
+  "analysis": [
+    "TTFT is ~5.6 s whether the prompt is cold or a radix prefix hit (6.08 vs 5.62 s): prefix reuse does NOT reduce TTFT, so the latency is dominated by the first prefill's per-layer expert movement, not token count.",
+    "Decode is unaffected. No scheduler/pipeline change is justified by this probe."
+  ],
+  "decision": "no_change: keep the current prefill scheduling; no TTFT improvement demonstrated.",
+  "rollback_recipe": "n/a (no production change)",
+  "limitations": [
+    "One short prompt; TTFT floor is the expert-load cost. A longer-prompt prefill comparison was not run here."
+  ],
+  "evidence": [
+    "raw/ttft.json",
+    "raw/run-bmisc.log",
+    "../../../03a/contract.json"
+  ],
+  "generated_utc": "2026-09-11"
+}

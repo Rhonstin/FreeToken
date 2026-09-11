@@ -1,0 +1,29 @@
+{
+  "task_key": "11b",
+  "bead_id": "FreeToken-mtp-1ll.22",
+  "title": "Reduce expert transfer overhead on PCIe 3.0 - execution and acceptance",
+  "outcome": "no_change",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "measurements": {
+    "copy_bw_gb_s": 12.2,
+    "copy_mib": 25.3,
+    "copy_ms": 2.18,
+    "pcie_ceiling_gb_s_04b": 12.37,
+    "h2d_total_gb_04b": 146.2
+  },
+  "analysis": [
+    "The gather+copymissing path moves bytes at 12.2 GB/s, i.e. the measured PCIe 3.0 H2D ceiling (12.37) -> byte-bound.",
+    "Call-count/coalescing changes cannot beat a bandwidth-bound copy; only fewer BYTES would help, which is the residency/cache lever (tasks 07/10), not the copy kernel."
+  ],
+  "decision": "no_change: the copy path is already at the PCIe ceiling; no copy-kernel restructuring adopted.",
+  "rollback_recipe": "n/a (no production change)",
+  "limitations": [
+    "Bench used the glm4.7-nvfp4 profile (small slots) as a generic copy-path measurement; per-call overhead at tiny sizes was not the metric."
+  ],
+  "evidence": [
+    "raw/bench-copy.txt",
+    "../../04b/result.json"
+  ],
+  "generated_utc": "2026-09-11"
+}

@@ -1,0 +1,33 @@
+{
+  "task_key": "10b",
+  "bead_id": "FreeToken-mtp-1ll.20",
+  "title": "Improve cache admission from routing traces only - execution and acceptance",
+  "outcome": "no_change",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "measurements": {
+    "target_test_offload": "30 passed",
+    "pcie_h2d_gb_s": 12.2,
+    "expert_gather_share_04b": 0.636,
+    "locality_12": {
+      "repetitive": 0.994,
+      "random_code": 0.0004
+    }
+  },
+  "analysis": [
+    "There is no per-layer expert-id trace collector in the tree; the plan requires an offline replay but the trace source does not exist.",
+    "H2D is byte-saturated (04b): better admission helps only if it reduces EXPOSED bytes, and the measured CPU/PCIe overlap already hides part of it.",
+    "Locality is workload-dependent (12): realistic prompts are near the random regime where LRU has nothing to exploit."
+  ],
+  "decision": "no_change: keep the default LRU admission; no frequency/quota policy adopted without a demonstrable exposed-PCIe reduction.",
+  "rollback_recipe": "n/a (no production change)",
+  "limitations": [
+    "No routing trace was capturable, so the offline replay matrix could not be run; treated as no-change with that limitation."
+  ],
+  "evidence": [
+    "raw/pytest-target.txt",
+    "../../04b/result.json",
+    "../../12a/contract.json"
+  ],
+  "generated_utc": "2026-09-11"
+}

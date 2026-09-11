@@ -1,0 +1,40 @@
+{
+  "task_key": "09b",
+  "bead_id": "FreeToken-mtp-1ll.18",
+  "title": "Calibrate the hybrid split by real expert time - execution and acceptance",
+  "outcome": "no_change",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "measurements": {
+    "fetch_sweep_4k_05b": {
+      "fetch0": 14.04,
+      "fetch1": 24.32,
+      "fetch2": 26.12,
+      "note": "05b; fetch2 edge at 4k did not hold at 16k/32k"
+    },
+    "prod_shape_49": {
+      "fetch1_16k": 25.2,
+      "fetch1_64k": 25.09,
+      "adopted_16k": 27.95
+    },
+    "offload_same_shape": {
+      "16k": 21.88,
+      "64k": 21.91
+    }
+  },
+  "analysis": [
+    "Static --moe-hybrid-max-fetch 1 is the best robust choice; the ideal-bandwidth ratio (0.3192) is already captured by fetch1.",
+    "An adaptive/hysteresis policy was not implemented because no measurement showed a benefit beyond noise over static fetch1, and the plan forbids per-layer synchronous readback."
+  ],
+  "decision": "no_change: keep the static hybrid fetch=1 (already adopted in 49); no adaptive max-fetch introduced.",
+  "rollback_recipe": "n/a (no production change)",
+  "limitations": [
+    "Adaptive policy not built; concluded from measured static sweep + prod-shape validation."
+  ],
+  "evidence": [
+    "../../49/result.json",
+    "raw/pytest-target.txt",
+    "../../05b/result.json"
+  ],
+  "generated_utc": "2026-09-11"
+}

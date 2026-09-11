@@ -1,0 +1,64 @@
+.FF..                                                                    [100%]
+=================================== FAILURES ===================================
+_______________________ test_load_hybrid_fetch_fraction ________________________
+
+tmp_path = PosixPath('/tmp/pytest-of-rhonstin/pytest-16/test_load_hybrid_fetch_fractio0')
+
+    def test_load_hybrid_fetch_fraction(tmp_path):
+        prof = {
+            "gpu": {"name": "FAKE GPU"},
+            "dtype_kernels": {
+                "bf16": {"cpu_moe_gbs": 100.0, "pcie_gather_gbs": 40.0},
+                # overlapped (contended) pair wins over the standalone numbers when present
+                "nvfp4_x": {"cpu_moe_gbs": 100.0, "pcie_gather_gbs": 40.0,
+                            "cpu_moe_overlap_gbs": 90.0, "pcie_gather_overlap_gbs": 30.0},
+            },
+            "workloads": {
+                "m": {"kernels": {"ds_fp4": {"cpu_moe_gbs": 80.0, "pcie_gather_gbs": 50.0}}}
+            },
+        }
+        path = tmp_path / "benchbw.json"
+        path.write_text(json.dumps(prof))
+        # standalone fallback: full-contention assumption -> pcie / cpu
+>       assert load_hybrid_fetch_fraction("bf16", path=str(path)) == pytest.approx(0.4)
+E       assert None == 0.4 ± 4.0e-07
+E         
+E         comparison failed
+E         Obtained: None
+E         Expected: 0.4 ± 4.0e-07
+
+tests/moe/test_hybrid_fetch.py:59: AssertionError
+----------------------------- Captured stdout call -----------------------------
+[1m[2026-09-11|22:15:47][0m [33mWARNING [0m benchbw profile /tmp/pytest-of-rhonstin/pytest-16/test_load_hybrid_fetch_fractio0/benchbw.json has no usable schema_version (got None, want 5); treating it as informational only
+------------------------------ Captured log call -------------------------------
+WARNING  freetoken.moe.bench_profile:bench_profile.py:365 benchbw profile /tmp/pytest-of-rhonstin/pytest-16/test_load_hybrid_fetch_fractio0/benchbw.json has no usable schema_version (got None, want 5); treating it as informational only
+________________ test_profile_lookup_prefers_the_gpu_uuid_file _________________
+
+tmp_path = PosixPath('/tmp/pytest-of-rhonstin/pytest-16/test_profile_lookup_prefers_th0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7c5c59818180>
+
+    def test_profile_lookup_prefers_the_gpu_uuid_file(tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+        monkeypatch.delenv("FREETOKEN_BENCHBW_PATH", raising=False)
+        uuid = "GPU-2f3a9b1c-0000-1111-2222-333344445555"
+    
+        def write(path, name, verdict):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                json.dump({"gpu": {"name": name}, "dtypes": {"bf16": verdict}}, f)
+    
+        # legacy single file only: used when the name matches, ignored otherwise
+        write(default_profile_path(), "FAKE GPU", "hybrid")
+>       assert load_backend_recommendation("bf16", gpu_name="FAKE GPU", gpu_uuid=uuid) == "hybrid"
+E       AssertionError: assert None == 'hybrid'
+E        +  where None = load_backend_recommendation('bf16', gpu_name='FAKE GPU', gpu_uuid='GPU-2f3a9b1c-0000-1111-2222-333344445555')
+
+tests/moe/test_hybrid_fetch.py:81: AssertionError
+----------------------------- Captured stdout call -----------------------------
+[1m[2026-09-11|22:15:47][0m [33mWARNING [0m benchbw profile /tmp/pytest-of-rhonstin/pytest-16/test_profile_lookup_prefers_th0/freetoken/benchbw.json has no usable schema_version (got None, want 5); treating it as informational only
+------------------------------ Captured log call -------------------------------
+WARNING  freetoken.moe.bench_profile:bench_profile.py:365 benchbw profile /tmp/pytest-of-rhonstin/pytest-16/test_profile_lookup_prefers_th0/freetoken/benchbw.json has no usable schema_version (got None, want 5); treating it as informational only
+=========================== short test summary info ============================
+FAILED tests/moe/test_hybrid_fetch.py::test_load_hybrid_fetch_fraction - asse...
+FAILED tests/moe/test_hybrid_fetch.py::test_profile_lookup_prefers_the_gpu_uuid_file
+2 failed, 3 passed in 6.65s

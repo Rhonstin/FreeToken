@@ -1,0 +1,28 @@
+{
+  "task_key": "13b",
+  "bead_id": "FreeToken-mtp-1ll.26",
+  "title": "PLE I/O overlap and thread-pool tuning - execution and acceptance",
+  "outcome": "no_change",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "measurements": {
+    "target_test_ple_disk": "4 passed",
+    "ple_share_of_tpot_12": 0.005,
+    "rows_per_step": 16,
+    "warm_row_us": 1.19
+  },
+  "analysis": [
+    "PLE is <0.5% of TPOT (12): 16 rows x 1.19 us ~= 19 us vs ~46 ms/step = 0.04%.",
+    "There is no headroom >=5% for overlap/thread tuning to win; the C++ extension could not add value here."
+  ],
+  "decision": "no_change: keep the current PLE disk path; no overlap/thread-pool change adopted.",
+  "rollback_recipe": "n/a (no production change)",
+  "limitations": [
+    "Workload-dependent PLE locality (12); no new measurement beyond the 12 analysis."
+  ],
+  "evidence": [
+    "raw/pytest-target.txt",
+    "../../12a/result.json"
+  ],
+  "generated_utc": "2026-09-11"
+}

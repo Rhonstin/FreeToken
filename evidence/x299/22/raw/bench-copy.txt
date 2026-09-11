@@ -1,0 +1,6 @@
+gpu NVIDIA GeForce RTX 3090
+
+glm4.7-nvfp4 (nvfp4, 6 banks, L=89 E=160 k=8) ensure_experts + copy_missing | cache_slots=256 (3.2 GiB) | expert_bytes=12.67 MiB
+bs active miss_rate misses time_ms copy_MiB bw_GBps tok_ms
+-- ------ --------- ------ ------- -------- ------- ------
+ 1      8      0.25      2   2.180     25.3    12.2 194.03
