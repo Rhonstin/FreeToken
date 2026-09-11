@@ -171,6 +171,23 @@ def create_kvcache_pool(
     num_speculative_tokens: int = 0,
     kv_quant: str = "none",
 ) -> BaseKVCachePool:
+    if kv_quant == "nvfp4":
+        # Verified pairs (task 5y2.15): the plain paged (MHA), hybrid-SWA and QSA
+        # pools store packed codes + E4M3 block scales + fp32 row scales, and their
+        # Triton readers apply both. MLA/DSA storage/read paths are backlog 5y2.18
+        # and the remaining families never had one, so reject them here rather than
+        # silently hand back a 16-bit slab the budget priced as packed.
+        from freetoken.attention import AttnType
+
+        if any(
+            spec.attn_type not in (AttnType.FULL, AttnType.SWA, AttnType.QSA)
+            or spec.head_dim % 16
+            for spec in model_config.kv_cache_group_specs()
+        ):
+            raise ValueError(
+                "--kv-cache-dtype nvfp4 requires paged FULL, hybrid-SWA, or QSA groups "
+                "with head_dim divisible by 16"
+            )
     if model_config.has_swa_attention:
         from .hybrid_swa_pool import HybridSWAKVCache
 

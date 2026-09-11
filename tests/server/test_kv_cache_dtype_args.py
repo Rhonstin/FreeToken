@@ -34,6 +34,7 @@ def test_kv_cache_dtype_spellings_parse():
     assert _parse(["--kv-cache-dtype", "auto"]).kv_quant == "auto"
     assert _parse(["--kv-cache-dtype", "bf16"]).kv_quant == "bf16"
     assert _parse(["--kv-cache-dtype", "fp8"]).kv_quant == "fp8"
+    assert _parse(["--kv-cache-dtype", "nvfp4"]).kv_quant == "nvfp4"
 
 
 def test_kv_cache_dtype_rejects_unknown_spellings():
