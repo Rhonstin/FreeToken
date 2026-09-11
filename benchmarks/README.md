@@ -84,3 +84,26 @@ python benchmarks/bench_kv_quant.py ... --cache 0 --num-tokens 36864 --contexts 
   expert cache from the whole pool budget and leaves only the default 8,192-token KV
   reserve, so long prompts are dropped ("Input sequence length ... exceeds"). Pin the KV
   reserve for long-context auto-cache runs.
+
+### NVFP4 KV (2026-09-11)
+
+Same harness, three modes (`--kv-cache-dtype` auto/bf16, fp8, nvfp4), fixed ~6.76 GiB KV
+budget, cache 2600, mem-ratio 0.90, greedy, 4k..128k + single-depth retrieval at 64k/128k:
+
+| mode | KV tokens (fixed budget) | capacity vs bf16 | decode delta (4k-128k) | TTFT delta | retrieval |
+|---|---|---|---|---|---|
+| bf16 | 155,392 (3.67 GiB) | 1.0x | - | - | 11/11 |
+| fp8 | 299,328 (3.69 GiB) | 1.93x | -0.4%..+5.3% | -0.3%..+1.2% | 11/11 |
+| **nvfp4** | **500,608 (3.67 GiB)** | **3.22x** | **-2.2%..+1.4%** | -0.1%..+6.0% | **11/11** |
+
+- The restore-path slowdown reported in PR #408 does NOT reproduce on the RTX 3090 in
+  this workload (offload decode is expert-fetch bound): nvfp4 event p50/p99 are within
+  noise of bf16, e.g. 32k p50 56.6 vs 56.2 ms, 128k p50 61.4 vs 62.1 ms.
+- Quality: needle retrieval 11/11 in every mode (4k/16k/32k at three depths, 64k/128k at
+  0.5), coding check passes in all three, outputs coherent; the free-form JSON check
+  fails in all three (methodology), NLL/PPL remains blocked (no logprob API).
+- Release decision: `--kv-cache-dtype nvfp4` is **opt-in, experimental** -- capacity is
+  the win (3.2x over bf16, 1.67x over fp8) with no measured speed or retrieval cost, but
+  PPL-class quality and long-context NLL are not yet measured and MLA/DSA remain
+  unsupported (backlog 5y2.18). Keep fp8 as the default-quantized choice until a PPL
+  harness exists.

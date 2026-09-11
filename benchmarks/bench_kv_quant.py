@@ -146,7 +146,10 @@ def run_row(origin: str, model_id: str, prompt: str, args: argparse.Namespace,
 
 def parse_capacity(log_path: Path) -> dict:
     text = log_path.read_text(errors="ignore")
-    allocs = re.findall(r"Allocating (\d+) tokens for KV cache, K \+ V = ([\d.]+) GiB", text)
+    allocs = re.findall(
+        r"Allocating (\d+) tokens for KV cache(?: \[[^\]]+\])?, K \+ V = ([\d.]+) GiB",
+        text,
+    )
     moe = re.findall(r"moe miss: ([\d.]+)%", text)
     return {
         "kv_tokens": int(allocs[-1][0]) if allocs else None,
