@@ -1,0 +1,92 @@
+{
+  "task_key": "15a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "cases": [
+    {
+      "id": "15a-C1-invariant",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-C2-full-cost",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-C3-displacement",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-C4-tests",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-C5-metrics",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-C6-candidates",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-N1-accept",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-N2-eos",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-N3-maxlen",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-N4-stochastic",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-N5-cancel",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    },
+    {
+      "id": "15a-N6-rollback",
+      "status": "pass",
+      "command_id": "15a-CMD1..2",
+      "log_path": "raw/mtp-baseline.txt"
+    }
+  ],
+  "measurements": [],
+  "failures": [],
+  "limitations": [
+    "MTP correctness oracle must pass before any speed number is accepted.",
+    "The 24 GiB card is the binding constraint: MTP banks trade against main expert residency."
+  ],
+  "rollback_result": "not_required (no code change)",
+  "key_findings": {
+    "mtp_total_gib": 4.856,
+    "baseline_no_spec_bs1": 19.63,
+    "prod_mtp_depth": 0,
+    "hypothesis": "VRAM displacement of the main expert cache makes MTP net-negative"
+  }
+}

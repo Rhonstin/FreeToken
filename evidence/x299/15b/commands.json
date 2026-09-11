@@ -1,0 +1,44 @@
+[
+  {
+    "id": "15b-CMD1",
+    "argv": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/engine/test_mtp_driver.py",
+      "tests/models/qwen4_exp/test_mtp.py",
+      "tests/engine/test_spec_verify.py",
+      "-m",
+      "not slow"
+    ],
+    "cwd": "dev worktree",
+    "timeout_s": 600,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "../15a/raw/mtp-baseline.txt"
+  },
+  {
+    "id": "15b-CMD2",
+    "argv": [
+      "/opt/freetoken-venv/bin/ft",
+      "serve",
+      "--moe-strategy",
+      "offload",
+      "--moe-cache-size",
+      "2600|--moe-cache-auto",
+      "--mtp-depth",
+      "0|1",
+      "--kv-cache-dtype",
+      "nvfp4",
+      "--num-tokens",
+      "220032",
+      "--moe-collect-stats"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1500,
+    "expected_exit": 0,
+    "phase": "b"
+  }
+]

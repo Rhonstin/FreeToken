@@ -1,0 +1,42 @@
+[
+  {
+    "id": "15a-CMD1",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "-m",
+      "pytest",
+      "--collect-only",
+      "-q",
+      "tests/engine/test_mtp_driver.py",
+      "tests/models/qwen4_exp/test_mtp.py",
+      "tests/engine/test_spec_verify.py"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 300,
+    "expected_exit": 0,
+    "phase": "a"
+  },
+  {
+    "id": "15a-CMD2",
+    "argv": [
+      "/opt/freetoken-venv/bin/ft",
+      "serve",
+      "--moe-strategy",
+      "offload",
+      "--mtp-depth",
+      "<0|1|2|3>",
+      "--moe-cache-size",
+      "2600",
+      "--kv-cache-dtype",
+      "nvfp4",
+      "--moe-collect-stats",
+      "... fixed ..."
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1500,
+    "expected_exit": 0,
+    "phase": "b"
+  }
+]

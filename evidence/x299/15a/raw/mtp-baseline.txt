@@ -1,0 +1,7 @@
+### collect-only
+
+99 tests collected in 2.37s
+### run not slow (dev, CPU; GPU skips)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+97 passed, 2 skipped, 1 warning in 5.29s

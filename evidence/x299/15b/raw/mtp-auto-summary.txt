@@ -1,0 +1,2 @@
+auto depth=0 rc=0 vram_mib=22892 resolved moe_cache_size=3447 num_pages=3438 (prefill_overlap=True) moe miss: 0.29 
+auto depth=1 NOT READY
