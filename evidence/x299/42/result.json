@@ -1,0 +1,58 @@
+{
+  "task_key": "42",
+  "bead_id": "FreeToken-mtp-1ll.42",
+  "title": "Measure decode concurrency 2/4 (p50/p95) on X299",
+  "outcome": "implemented",
+  "protocol": "hybrid --moe-hybrid-max-fetch 1 --moe-cache-auto --max-running-requests 4 (cache 2774), 220032 nvfp4, DISTINCT ~16k prompts, 128-token greedy decode",
+  "measurements": {
+    "n1": {
+      "per_req_tok_s": 24.93,
+      "it_ms_p50": 39.02,
+      "it_ms_p95": 53.0,
+      "aggregate_tok_s": 11.78,
+      "wall_s": 10.7
+    },
+    "n2": {
+      "per_req_tok_s": [
+        16.5,
+        16.5
+      ],
+      "it_ms_p50": 58.04,
+      "it_ms_p95": 82.7,
+      "aggregate_tok_s": 10.61,
+      "wall_s": 23.76
+    },
+    "n4": {
+      "per_req_tok_s": [
+        6.27,
+        3.49,
+        10.82,
+        6.27
+      ],
+      "it_ms_p50": 82.7,
+      "it_ms_p95": [
+        208.35,
+        208.29,
+        205.25,
+        208.35
+      ],
+      "aggregate_tok_s": 10.18,
+      "wall_s": 49.53
+    }
+  },
+  "analysis": [
+    "Inter-token p50 rises 39 -> 58 -> 83 ms and p95 53 -> 83 -> 208 ms as concurrency goes 1 -> 2 -> 4: every request slows down.",
+    "Aggregate throughput does NOT scale (11.8 -> 10.6 -> 10.2 tok/s): the shared PCIe expert gather is the bottleneck, so more concurrent requests just share it.",
+    "This matches the 45 finding on identical-prompt radix sharing; with distinct prompts concurrency is net-negative, which is why prod uses --max-running-requests 1."
+  ],
+  "decision": "informational: keep prod at max-running-requests 1 (single-request speed); concurrency offers no aggregate gain on this box.",
+  "evidence": [
+    "raw/parallel.jsonl",
+    "raw/run-42.log",
+    "raw/geom.txt"
+  ],
+  "limitations": [
+    "16k prompts, mr=4 test server (prod is mr=1); hybrid config. p50/p95 from inter-token arrival stamps in the client stream."
+  ],
+  "generated_utc": "2026-09-11"
+}
