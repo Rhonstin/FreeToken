@@ -1,0 +1,39 @@
+{
+  "task_key": "49",
+  "bead_id": "FreeToken-mtp-1ll.49",
+  "title": "Move prod to hybrid fetch1 after the 48 quality gate (220k/auto/mr1 validation)",
+  "outcome": "implemented",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "adoption": {
+    "file": "/etc/systemd/system/freetoken.service.d/mtp-test.conf",
+    "before": "--moe-strategy offload --moe-cache-auto --max-running-requests 1",
+    "after": "--moe-strategy hybrid --moe-hybrid-max-fetch 1 --moe-cache-auto --max-running-requests 1",
+    "backup": "/opt/FreeToken/.x299-backup/mtp-test.conf.before-49",
+    "keep": ["num-tokens 220032", "kv-reserve-tokens 220032", "kv-cache-dtype nvfp4", "memory-ratio 0.90"]
+  },
+  "measurements": {
+    "resolved_cache": 3447, "num_pages": 3438,
+    "offload_16k_tok_s": 21.88, "hybrid_16k_tok_s": 25.20, "gain_16k_pct": 15.2,
+    "offload_64k_tok_s": 21.91, "hybrid_64k_tok_s": 25.09, "gain_64k_pct": 14.5,
+    "max_prefill_tokens": 217853, "max_prefill_ttft_s": 239.94, "max_prefill_decode_tok_s": 23.49,
+    "sustained_217k_decode_tok_s": 24.93,
+    "gsm8k_sanity": "10/10 correct",
+    "vram_used_mib": 23822,
+    "moe_miss": {"16k": 0.43, "64k": 0.38, "note": "hybrid counts CPU-computed experts as misses; not comparable to offload 0.28"}
+  },
+  "cases": [
+    {"id": "49-C1-perf", "status": "pass", "detail": "+15.2% @16k and +14.5% @64k vs the adopted offload config (>=5%)"},
+    {"id": "49-C2-fit", "status": "pass", "detail": "217853-token prefill + sustained decode, no OOM, VRAM 23.8 GiB"},
+    {"id": "49-C3-quality", "status": "pass", "detail": "GSM8K sanity 10/10; 48 showed 40/40 answer parity"},
+    {"id": "49-C4-rollback", "status": "pass", "detail": "drop-in backup + documented recipe"}
+  ],
+  "rollback_recipe": "sudo cp /opt/FreeToken/.x299-backup/mtp-test.conf.before-49 /etc/systemd/system/freetoken.service.d/mtp-test.conf && sudo systemctl daemon-reload && sudo systemctl restart freetoken.service (restores offload@auto/mr1).",
+  "limitations": [
+    "hybrid uses the 6 CPU threads, which contend with PLE disk reads; gains measured single-request.",
+    "16k/64k numbers come from the test server (same flags as the adopted drop-in).",
+    "GSM8K sanity is 10 items here; the 40-item parity is task 48."
+  ],
+  "evidence": ["raw/run-49.log", "raw/probe.jsonl", "raw/maxprefill.json", "raw/gsm8k.jsonl", "raw/geom.txt"],
+  "generated_utc": "2026-09-11"
+}

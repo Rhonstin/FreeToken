@@ -1,0 +1,5 @@
+[
+ {"id":"49-CMD1","argv":["/opt/freetoken-venv/bin/ft","serve","--moe-strategy","hybrid","--moe-hybrid-max-fetch","1","--moe-cache-auto","--kv-cache-dtype","nvfp4","--num-tokens","220032","--kv-reserve-tokens","220032","--memory-ratio","0.90","--max-running-requests","1"],"cwd":"/opt/FreeToken","target":"llmserver","timeout_s":900,"expected_exit":0,"note":"hybrid@prod-shape test server; cache 3447"},
+ {"id":"49-CMD2","argv":["/opt/freetoken-venv/bin/python","evidence/x299/45/maxprefill_probe.py","--origin","http://127.0.0.1:2101"],"cwd":"/opt/FreeToken","target":"llmserver","timeout_s":900,"expected_exit":0,"artifact":"raw/maxprefill.json","note":"217853-token prefill, no OOM"},
+ {"id":"49-CMD3","argv":["/opt/freetoken-venv/bin/python","evidence/x299/48/gsm8k_eval.py","--origin","http://127.0.0.1:2101","--data","raw/gsm8k10.jsonl"],"cwd":"/opt/FreeToken","target":"llmserver","timeout_s":1200,"expected_exit":0,"artifact":"raw/gsm8k.jsonl","note":"quality sanity 10/10"}
+]

@@ -1,0 +1,3 @@
+hybrid-f1-16k rc=0 vram=23822 moe miss: 0.43
+hybrid-f1-64k rc=0 vram=23822 moe miss: 0.38
+maxprefill rc=0 vram=23824
