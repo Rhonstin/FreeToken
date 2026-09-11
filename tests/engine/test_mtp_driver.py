@@ -666,10 +666,13 @@ def test_spec_anchor_hidden_takes_plain_decode_rows():
     assert base2 == 7 and torch.equal(span2, hidden[1:2])
 
 
-def test_draft_forward_needs_a_gpu_not_hidden_states():
+def test_draft_forward_refuses_without_a_gpu_and_a_head():
+    """Both preconditions fail loudly on the machine where they hold: with CUDA present
+    the head guard fires first, without it the GPU guard does. Pinning either message
+    keeps the test honest on both CPU CI and a GPU box."""
     from freetoken.engine.mtp import draft_forward
 
-    with pytest.raises(RuntimeError, match="needs a GPU"):
+    with pytest.raises(RuntimeError, match="needs a GPU|needs a model with an MTP head"):
         draft_forward(object(), torch.zeros(1), torch.zeros(1, 4), None)
 
 

@@ -201,9 +201,14 @@ def test_fc_projection_path_matches_manual_torch():
     for s in range(hc):
         want[:, s] = (F.linear(want_e, head.fc_embedding.weight)
                       + F.linear(want_h.view(T, hc, H)[:, s], head.fc_hidden.weight))
-    assert torch.equal(head.project(embeds, hidden), want.view(T, hc * H))
-    # determinism: the projection is a pure function of its inputs
-    assert torch.equal(head.project(embeds, hidden), want.view(T, hc * H))
+    # The reference is a different GEMM decomposition of the same math, so CUDA
+    # kernels may round differently; a stream/pooling bug moves values by far more
+    # than this tolerance, while bit-equality only holds on the CPU path.
+    torch.testing.assert_close(
+        head.project(embeds, hidden), want.view(T, hc * H), rtol=2e-2, atol=2e-3
+    )
+    # determinism: the projection is a pure function of its inputs (same call, same bits)
+    assert torch.equal(head.project(embeds, hidden), head.project(embeds, hidden))
 
 
 def test_project_rejects_a_single_stream_hidden():
