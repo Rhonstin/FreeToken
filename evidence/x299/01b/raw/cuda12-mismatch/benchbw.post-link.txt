@@ -1,0 +1,2 @@
+name, pcie.link.gen.current, pcie.link.width.current
+NVIDIA GeForce RTX 3090, 3, 16

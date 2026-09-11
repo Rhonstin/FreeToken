@@ -1,0 +1,105 @@
+### bench_decode_moe --help
+usage: bench_decode_moe.py [-h] --model MODEL [--backend BACKEND]
+                           [--aime AIME] [--problem PROBLEM] [--decode DECODE]
+                           [--cache CACHE] [--cache-rate CACHE_RATE]
+                           [--hybrid-fetch HYBRID_FETCH]
+                           [--mem-ratio MEM_RATIO] [--gpu GPU] [--no-graph]
+                           [--kv-cache-dtype {auto,bf16,fp8}]
+                           [--dump-text DUMP_TEXT]
+                           [--max-extend-length MAX_EXTEND_LENGTH]
+                           [--max-seq-len MAX_SEQ_LEN]
+                           [--spec-depth SPEC_DEPTH] [--spec-adaptive]
+                           [--min-prefix-ratio MIN_PREFIX_RATIO] [--greedy]
+                           [--server-timeout SERVER_TIMEOUT] [--json JSON_OUT]
+
+Single-stream (bs=1) decode benchmark for any MoE model on any offload backend.
+
+Measures through the real serving path: for each backend the bench spawns ``ft serve``,
+sends a warmed chat request over /v1/chat/completions with ``stream=true``, and
+timestamps every SSE event as it arrives. Numbers therefore include the scheduler,
+detokenizer, and HTTP/SSE hop -- what a client actually sees -- not bare engine forwards.
+
+Method -- at bs=1 the server emits one delta event per decode step, and the final chunk
+(``stream_options.include_usage``) reports exact token counts, so
+
+    decode_tok_s = (completion_tokens - 1) / (t_last_event - t_first_event)
+
+which stays correct even when the detokenizer coalesces a few tokens into one event
+(multibyte characters): the window is still anchored on the first and last token's
+arrival. ``ignore_eos`` keeps the step count at exactly ``D`` regardless of sampling.
+TTFT is the measured run's warm first-token latency (template rendering + prefill
+included). Engine-internal diagnostics (expert-cache miss rate, hybrid fetch split) are
+not exposed over the API and are not reported; VRAM is the server's live /v1/stats figure.
+
+Prompt: an AIME-25 problem sent as a chat message with thinking enabled -- a real
+reasoning workload, so expert routing is representative. The server renders the chat
+template (including checkpoint-shipped encoders like DSV4's ``encoding_dsv4.py``). The
+problems come from the ``math-ai/aime25`` dataset on the Hub, downloaded into the usual
+HF cache on first run; ``--aime`` points at a local jsonl instead.
+
+Sampling: the checkpoint's recommended params (``generation_config.json``), falling back
+to temperature 1.0 / top_p 0.95 / top_k 64 for fields the checkpoint does not specify --
+resolved here and sent explicitly, because the server's own unspecified-field defaults
+are greedy and would silently degrade the routing workload for checkpoints without a
+full sampling recommendation. The generated text is per-server-process deterministic
+(fresh server, fixed request sequence), so one text sha1 per backend is a real
+cross-backend check; token ids are not visible over the API, so this is a weaker
+invariant than the old in-process id hash. ``--greedy`` sends temperature 0 for the
+stricter comparison.
+
+Run (one backend):
+    CUDA_VISIBLE_DEVICES=0 PYTHONPATH=python python benchmarks/bench_decode_moe.py         --model /path/to/model
+
+Run (all three backends, one server per backend):
+    ... --model /path/to/model --backend offload,cpu,hybrid --json out.json
+
+Speculative decoding (MTP): ``--spec-depth 0,2`` runs plain and depth-2 servers in one
+invocation. Acceptance is parsed from each spawned server's ``spec accept: A/P`` log
+line (API does not expose it), and every depth > 0 run is quality-gated against the
+depth-0 output: a greedy spec run whose text shares less than ``--min-prefix-ratio``
+of the plain output's characters as a common prefix fails the run (a broken verifier
+collapses to ~0). Note that spec decode is not bit-identical to plain by design
+(batched rows round differently), so the gate is a floor, not an equality check.
+
+options:
+  -h, --help            show this help message and exit
+  --model MODEL         checkpoint dir (or .ftw)
+  --backend BACKEND     comma list of offload|cpu|hybrid; one server per
+                        backend
+  --aime AIME           local jsonl instead of downloading math-ai/aime25;
+                        default $FREETOKEN_AIME25_JSONL
+  --problem PROBLEM     0-based AIME problem index
+### bench_kv_quant --help
+usage: bench_kv_quant.py [-h] --model MODEL --prompt-dir PROMPT_DIR
+                         [--contexts CONTEXTS] [--decode DECODE]
+                         [--cache CACHE] [--mem-ratio MEM_RATIO]
+                         [--max-seq-len MAX_SEQ_LEN]
+                         [--max-running MAX_RUNNING] [--no-graph]
+                         [--repeats-short REPEATS_SHORT]
+                         [--repeats-long REPEATS_LONG] [--quality]
+                         [--quality-long] [--quality-tokens QUALITY_TOKENS]
+                         [--num-tokens NUM_TOKENS] [--parallel PARALLEL]
+                         --json JSON_OUT [--skip-modes SKIP_MODES]
+
+options:
+  -h, --help            show this help message and exit
+  --model MODEL
+  --prompt-dir PROMPT_DIR
+                        dir with prompt_<label>.jsonl files
+  --contexts CONTEXTS
+  --decode DECODE
+  --cache CACHE         expert cache slots; 0 = auto
+  --mem-ratio MEM_RATIO
+  --max-seq-len MAX_SEQ_LEN
+  --max-running MAX_RUNNING
+  --no-graph
+  --repeats-short REPEATS_SHORT
+                        runs after warmup for <=32k
+  --repeats-long REPEATS_LONG
+                        runs after warmup for >32k
+  --quality             run the quality phase too
+  --quality-long        add single-depth retrieval at 64k/128k (slow prefills)
+  --quality-tokens QUALITY_TOKENS
+### AIME env
+FREETOKEN_AIME25_JSONL=unset
+### prompt dirs

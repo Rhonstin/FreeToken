@@ -1,0 +1,33 @@
+### baseline_git_sha
+3d919e9bd94fc5454bdb50e09659648443e30f5e
+### tracked_diff_sha256 (git diff --binary)
+dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb  -
+### porcelain_sha256 (git status --porcelain)
+24d9950f2f5d9aff72e7361cc5b8e5ffa3304c5b69784869d9e2bf838c1b3464  -
+### untracked_files
+benchmarks/bench_kv_quant.py
+python/freetoken/engine/lookup.py
+python/freetoken/engine/mtp.py
+python/freetoken/engine/spec.py
+python/freetoken/kernel/triton/kv_nvfp4.py
+python/freetoken/kernel/triton/kv_quant.py
+python/freetoken/models/qwen4_exp/mtp.py
+tests/engine/test_kv_quant_config.py
+tests/engine/test_lookup_draft.py
+tests/engine/test_mtp_driver.py
+tests/engine/test_spec_verify.py
+tests/kernels/test_kv_fp8.py
+tests/kernels/test_kv_nvfp4.py
+tests/kernels/test_qsa_fp8.py
+tests/kernels/test_qsa_nvfp4.py
+tests/kvcache/test_qsa_pool_fp8.py
+tests/models/qwen4_exp/test_mtp.py
+tests/scheduler/test_multi_token_decode.py
+tests/scheduler/test_score_prefill.py
+tests/scheduler/test_spec_commit_rollback.py
+tests/server/test_kv_cache_dtype_args.py
+tests/server/test_lookup_draft_args.py
+tests/server/test_score_api.py
+tests/tokenizer/test_detokenize_multi_token.py
+### modified_count
+64

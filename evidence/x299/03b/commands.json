@@ -1,0 +1,66 @@
+[
+  {
+    "id": "03b-CMD1",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "benchmarks/bench_decode_moe.py",
+      "--model",
+      "$FT_MODEL",
+      "--backend",
+      "offload",
+      "--decode",
+      "256",
+      "--cache",
+      "2600",
+      "--greedy",
+      "--json",
+      "evidence/x299/03b/raw/decode-rows.jsonl"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1800,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/decode-rows.jsonl"
+  },
+  {
+    "id": "03b-CMD2",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "benchmarks/bench_kv_quant.py",
+      "--model",
+      "$FT_MODEL",
+      "--prompt-dir",
+      "evidence/x299/03b/fixtures",
+      "--contexts",
+      "4k,16k,32k,64k",
+      "--decode",
+      "128",
+      "--cache",
+      "2600",
+      "--repeats-short",
+      "3",
+      "--repeats-long",
+      "1",
+      "--skip-modes",
+      "fp8",
+      "--json",
+      "evidence/x299/03b/raw/kvq-rows.json",
+      "--raw-jsonl",
+      "evidence/x299/03b/raw/kvq-raw.jsonl"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 3600,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/kvq-raw.jsonl"
+  },
+  {
+    "id": "03b-CMD3-pytest",
+    "applicable": false,
+    "argv": [],
+    "phase": "b",
+    "reason": "no test module covers benchmarks/; extension verified by running both benches and the schema assertions."
+  }
+]

@@ -1,0 +1,10 @@
+....................................ssssssssssssssssssssssssssssssssssss [ 35%]
+ssssssss...............s...ss.ssss........s..s.......ss................. [ 70%]
+.............................................................            [100%]
+=============================== warnings summary ===============================
+tests/models/qwen4_exp/test_mtp.py::test_default_model_builds_no_mtp_submodule
+  /opt/FreeToken-mtp/python/freetoken/kernel/fla/utils.py:224: UserWarning: Triton is not supported on current platform, roll back to CPU.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+150 passed, 55 skipped, 2 deselected, 1 warning in 3.65s

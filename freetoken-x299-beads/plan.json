@@ -1,0 +1,427 @@
+{
+  "schema_version": 2,
+  "plan_id": "freetoken-x299-qwen38-20260910-v2",
+  "repository": "https://github.com/Rhonstin/FreeToken",
+  "baseline": "b647a420cea3e4c4dc1c6660d8cfe1a2b5bff54d",
+  "tasks": [
+    {
+      "key": "01a",
+      "title": "Зафіксувати X299 topology і реальний bandwidth — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [],
+      "body": "tasks/01a.md"
+    },
+    {
+      "key": "01b",
+      "title": "Зафіксувати X299 topology і реальний bandwidth — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "01a"
+      ],
+      "body": "tasks/01b.md"
+    },
+    {
+      "key": "02a",
+      "title": "Закріпити checkpoint Qwen3.8 та бюджет RAM/VRAM — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "01b"
+      ],
+      "body": "tasks/02a.md"
+    },
+    {
+      "key": "02b",
+      "title": "Закріпити checkpoint Qwen3.8 та бюджет RAM/VRAM — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "02a"
+      ],
+      "body": "tasks/02b.md"
+    },
+    {
+      "key": "03a",
+      "title": "Розширити наявний benchmark під decode latency — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "02b"
+      ],
+      "body": "tasks/03a.md"
+    },
+    {
+      "key": "03b",
+      "title": "Розширити наявний benchmark під decode latency — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "03a"
+      ],
+      "body": "tasks/03b.md"
+    },
+    {
+      "key": "04a",
+      "title": "Профілювати критичний шлях одного decode step — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "03b"
+      ],
+      "body": "tasks/04a.md"
+    },
+    {
+      "key": "04b",
+      "title": "Профілювати критичний шлях одного decode step — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "04a"
+      ],
+      "body": "tasks/04b.md"
+    },
+    {
+      "key": "05a",
+      "title": "Знайти найшвидшу конфігурацію без нового runtime коду — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "04b"
+      ],
+      "body": "tasks/05a.md"
+    },
+    {
+      "key": "05b",
+      "title": "Знайти найшвидшу конфігурацію без нового runtime коду — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "05a"
+      ],
+      "body": "tasks/05b.md"
+    },
+    {
+      "key": "06a",
+      "title": "CPU thread/affinity/ISA tuning для конкретного i7 — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "05b"
+      ],
+      "body": "tasks/06a.md"
+    },
+    {
+      "key": "06b",
+      "title": "CPU thread/affinity/ISA tuning для конкретного i7 — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "06a"
+      ],
+      "body": "tasks/06b.md"
+    },
+    {
+      "key": "07a",
+      "title": "Оптимізувати expert-cache/KV/PLE memory split — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "05b"
+      ],
+      "body": "tasks/07a.md"
+    },
+    {
+      "key": "07b",
+      "title": "Оптимізувати expert-cache/KV/PLE memory split — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "07a"
+      ],
+      "body": "tasks/07b.md"
+    },
+    {
+      "key": "08a",
+      "title": "Виправити ключі й актуальність hardware profile — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "06b"
+      ],
+      "body": "tasks/08a.md"
+    },
+    {
+      "key": "08b",
+      "title": "Виправити ключі й актуальність hardware profile — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "08a"
+      ],
+      "body": "tasks/08b.md"
+    },
+    {
+      "key": "09a",
+      "title": "Калібрувати hybrid split за реальним часом експертів — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "06b",
+        "08b",
+        "04b"
+      ],
+      "body": "tasks/09a.md"
+    },
+    {
+      "key": "09b",
+      "title": "Калібрувати hybrid split за реальним часом експертів — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "09a"
+      ],
+      "body": "tasks/09b.md"
+    },
+    {
+      "key": "10a",
+      "title": "Покращити cache admission лише за routing traces — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "07b",
+        "04b"
+      ],
+      "body": "tasks/10a.md"
+    },
+    {
+      "key": "10b",
+      "title": "Покращити cache admission лише за routing traces — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "10a"
+      ],
+      "body": "tasks/10b.md"
+    },
+    {
+      "key": "11a",
+      "title": "Зменшити overhead expert transfers на PCIe 3.0 — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "04b",
+        "07b"
+      ],
+      "body": "tasks/11a.md"
+    },
+    {
+      "key": "11b",
+      "title": "Зменшити overhead expert transfers на PCIe 3.0 — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "11a"
+      ],
+      "body": "tasks/11b.md"
+    },
+    {
+      "key": "12a",
+      "title": "Bounded RAM row cache для дискового PLE — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "02b",
+        "04b"
+      ],
+      "body": "tasks/12a.md"
+    },
+    {
+      "key": "12b",
+      "title": "Bounded RAM row cache для дискового PLE — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "12a"
+      ],
+      "body": "tasks/12b.md"
+    },
+    {
+      "key": "13a",
+      "title": "PLE I/O overlap і thread-pool tuning — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "12b",
+        "06b"
+      ],
+      "body": "tasks/13a.md"
+    },
+    {
+      "key": "13b",
+      "title": "PLE I/O overlap і thread-pool tuning — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "13a"
+      ],
+      "body": "tasks/13b.md"
+    },
+    {
+      "key": "14a",
+      "title": "Ampere kernel tuning для QSA/GDN і MoE — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "04b",
+        "05b"
+      ],
+      "body": "tasks/14a.md"
+    },
+    {
+      "key": "14b",
+      "title": "Ampere kernel tuning для QSA/GDN і MoE — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "14a"
+      ],
+      "body": "tasks/14b.md"
+    },
+    {
+      "key": "15a",
+      "title": "Приймання існуючого MTP: correctness і повний cost — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "03b",
+        "07b"
+      ],
+      "body": "tasks/15a.md"
+    },
+    {
+      "key": "15b",
+      "title": "Приймання існуючого MTP: correctness і повний cost — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "15a"
+      ],
+      "body": "tasks/15b.md"
+    },
+    {
+      "key": "16a",
+      "title": "MTP depth policy за latency, не лише acceptance — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "15b",
+        "09b"
+      ],
+      "body": "tasks/16a.md"
+    },
+    {
+      "key": "16b",
+      "title": "MTP depth policy за latency, не лише acceptance — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "16a"
+      ],
+      "body": "tasks/16b.md"
+    },
+    {
+      "key": "17a",
+      "title": "Оцінити prompt lookup як дешевшу speculation — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "15b"
+      ],
+      "body": "tasks/17a.md"
+    },
+    {
+      "key": "17b",
+      "title": "Оцінити prompt lookup як дешевшу speculation — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "17a"
+      ],
+      "body": "tasks/17b.md"
+    },
+    {
+      "key": "18a",
+      "title": "Спільний tuning KV quantization та expert residency — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "07b",
+        "14b"
+      ],
+      "body": "tasks/18a.md"
+    },
+    {
+      "key": "18b",
+      "title": "Спільний tuning KV quantization та expert residency — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "18a"
+      ],
+      "body": "tasks/18b.md"
+    },
+    {
+      "key": "19a",
+      "title": "Prefill і multi-turn latency без шкоди decode — контракт і fixtures",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "05b",
+        "13b"
+      ],
+      "body": "tasks/19a.md"
+    },
+    {
+      "key": "19b",
+      "title": "Prefill і multi-turn latency без шкоди decode — виконання та приймання",
+      "type": "task",
+      "priority": 2,
+      "depends_on": [
+        "19a"
+      ],
+      "body": "tasks/19b.md"
+    },
+    {
+      "key": "20a",
+      "title": "Профілі X299/3090 і фінальний regression campaign — контракт і fixtures",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "08b",
+        "09b",
+        "10b",
+        "11b",
+        "12b",
+        "13b",
+        "14b",
+        "16b",
+        "17b",
+        "18b",
+        "19b"
+      ],
+      "body": "tasks/20a.md"
+    },
+    {
+      "key": "20b",
+      "title": "Профілі X299/3090 і фінальний regression campaign — виконання та приймання",
+      "type": "task",
+      "priority": 1,
+      "depends_on": [
+        "20a"
+      ],
+      "body": "tasks/20b.md"
+    }
+  ]
+}

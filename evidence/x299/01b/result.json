@@ -1,0 +1,114 @@
+{
+  "task_key": "01b",
+  "outcome": "no_change",
+  "outcome_reason": "Baseline measured and accepted; no production runtime change is proposed or implied by task 01.",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "01b-C1-ceilings",
+      "status": "pass",
+      "command_id": "01b-CMD1..3",
+      "log_path": "raw/benchbw.log"
+    },
+    {
+      "id": "01b-C2-real-kernels",
+      "status": "pass",
+      "command_id": "01b-CMD1..3",
+      "log_path": "raw/benchbw.log"
+    },
+    {
+      "id": "01b-C3-link-under-load",
+      "status": "pass",
+      "command_id": "01b-CMD1..3",
+      "log_path": "raw/benchbw.log"
+    },
+    {
+      "id": "01b-C4-prod-restart",
+      "status": "pass",
+      "command_id": "01b-CMD1..3",
+      "log_path": "raw/benchbw.log"
+    },
+    {
+      "id": "01b-C5-memory-reserve",
+      "status": "pass",
+      "command_id": "01b-CMD1..3",
+      "log_path": "raw/benchbw.log"
+    },
+    {
+      "id": "01b-N1-cuda-toolkit-mismatch",
+      "status": "pass",
+      "command_id": "01b-CMD1..3",
+      "log_path": "raw/benchbw.log"
+    },
+    {
+      "id": "01b-N2-no-platform-mutation",
+      "status": "pass",
+      "command_id": "01b-CMD1..3",
+      "log_path": "raw/benchbw.log"
+    },
+    {
+      "id": "01b-N3-no-full-ram",
+      "status": "pass",
+      "command_id": "01b-CMD1..3",
+      "log_path": "raw/benchbw.log"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "01b-bench-cu13",
+      "raw_path": "raw/benchbw.json",
+      "sha256": "90d03a370f87b33a43b6f11429c48096c665f60558d6cd77925f4d0c6f170c36"
+    },
+    {
+      "run_id": "01b-bench-cuda12-mismatch",
+      "raw_path": "raw/cuda12-mismatch/benchbw.json",
+      "sha256": "930589030922d83e5bfc8b84467a7006beb1eafadb428c856e47cba39d7c08aa"
+    },
+    {
+      "run_id": "01b-link-idle",
+      "raw_path": "raw/benchbw.idle-link.txt",
+      "sha256": "17d2f11008d75cf8d8de0f5606d64e53ebd8b67c94e1c94d8a9390b4614a4cee"
+    },
+    {
+      "run_id": "01b-link-under-load",
+      "raw_path": "raw/benchbw.under-load-link.txt",
+      "sha256": "b9750d7e1ff8391c33d004610ed16b7e4dcef42576577f4c71666967e89279fc"
+    },
+    {
+      "run_id": "01b-link-post",
+      "raw_path": "raw/benchbw.post-link.txt",
+      "sha256": "92b1d7508b5d2231f8f69a98e320f5a36285ee735307491d42f55c868c9822f1"
+    },
+    {
+      "run_id": "01b-runlog",
+      "raw_path": "raw/run.log",
+      "sha256": "63af70fe52b53f65035a13666bfb9530571847a88227c07c038b4990e5942d76"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "CPU STREAM read varied 43.9-47.1 GB/s across the two runs (first with system nvcc, second cu13); treat ~44-47 GB/s as the range.",
+    "PCIe-gather and CPU-MoE kernels use the bench's canonical dtype geometry, not the Qwen3.8 H=2560/I=640/E=512/top-10 geometry; the runtime decision is dtype-keyed.",
+    "benchbw recommends hybrid for nvfp4 (ratio 2.50 > 2.0) while prod runs --moe-strategy offload; this is a candidate for tasks 05/09, not a decision taken here.",
+    "No routing trace yet, so the per-token PCIe transfer floor (miss bytes / gather GB/s) is not computed; task 11.",
+    "Mixed DDR4 DIMMs (channels A/B 16+4 GB, C/D 16+16 GB) may make effective bandwidth asymmetric; a channel-pair sweep is not done here."
+  ],
+  "rollback_result": "not_required (no production code changed; prod restarted and reached serving)",
+  "key_findings": {
+    "cpu_stream_read_gbs_range": [
+      43.86,
+      47.1
+    ],
+    "pcie_linear_h2d_gbs": 12.21,
+    "pcie_linear_d2h_gbs": 13.2,
+    "pcie_link": "Gen3 x16 under load, Gen2 x16 idle",
+    "nvfp4": {
+      "cpu_moe_gbs": 30.88,
+      "pcie_gather_gbs": 12.36,
+      "ratio": 2.498,
+      "recommended": "hybrid"
+    },
+    "prod_restarted_serving": true
+  }
+}

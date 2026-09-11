@@ -1,0 +1,3 @@
+{"status":"ok","model":"Qwen3.8-Flash-Next-NVFP4","instance_id":"314051ed-b5dd-496c-b3c8-ac1b987d8b47","uptime_s":56,"maintenance":"serving","version":"0.1.2"}
+dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb  -
+active

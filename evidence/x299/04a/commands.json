@@ -1,0 +1,80 @@
+[
+  {
+    "id": "04a-CMD1",
+    "argv": [
+      "grep",
+      "-aE",
+      "Decode batch",
+      "<server.log>"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 20,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/existing-counters.txt"
+  },
+  {
+    "id": "04a-CMD2",
+    "argv": [
+      "nsys",
+      "--version"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 20,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/existing-counters.txt"
+  },
+  {
+    "id": "04a-CMD3",
+    "argv": [
+      "nsys",
+      "profile",
+      "-o",
+      "evidence/x299/04b/raw/decode.nsys-rep",
+      "--capture-range=cudaProfilerApi",
+      "--stats=true",
+      "--",
+      "/opt/freetoken-venv/bin/ft",
+      "serve",
+      "--model",
+      "$FT_MODEL",
+      "--moe-strategy",
+      "offload",
+      "--moe-cache-size",
+      "2600",
+      "--moe-collect-stats",
+      "--cuda-graph-max-bs",
+      "0"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1800,
+    "expected_exit": 0,
+    "phase": "b",
+    "note": "eager (graph off) trace into a steady decode; GPU exclusive"
+  },
+  {
+    "id": "04a-CMD4",
+    "argv": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/moe/test_offload.py",
+      "tests/moe/test_hybrid_fetch.py",
+      "tests/moe/test_fused_copy.py",
+      "tests/scheduler/test_scheduler_status.py",
+      "tests/engine/test_moe_cpu_layers.py",
+      "-m",
+      "not slow"
+    ],
+    "cwd": "dev worktree",
+    "timeout_s": 600,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/pytest-profile-related.txt"
+  }
+]

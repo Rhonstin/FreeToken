@@ -1,0 +1,175 @@
+{
+  "task_key": "03b",
+  "outcome": "implemented",
+  "outcome_reason": "Extended the two existing benchmarks in place (no competing framework) and ran the paired sweep.",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "9b7893793ef7fe038e2e16afe29759546892fe55cbee9b7250708d766aa18793",
+  "cases": [
+    {
+      "id": "03b-C1-schema-v2",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/kvq-raw.jsonl"
+    },
+    {
+      "id": "03b-C2-p95",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/kvq-raw.jsonl"
+    },
+    {
+      "id": "03b-C3-actual-tokens",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/kvq-raw.jsonl"
+    },
+    {
+      "id": "03b-C4-raw-immutable",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/kvq-raw.jsonl"
+    },
+    {
+      "id": "03b-C5-contexts",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/kvq-raw.jsonl"
+    },
+    {
+      "id": "03b-C6-paired-repeats",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/kvq-raw.jsonl"
+    },
+    {
+      "id": "03b-C7-bs1-decode",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/kvq-raw.jsonl"
+    },
+    {
+      "id": "03b-N1-sse-multi-token",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/negative-fixtures.txt"
+    },
+    {
+      "id": "03b-N2-eos-early",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/negative-fixtures.txt"
+    },
+    {
+      "id": "03b-N3-timeout",
+      "status": "skip",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/negative-fixtures.txt"
+    },
+    {
+      "id": "03b-N4-server-crash",
+      "status": "skip",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/negative-fixtures.txt"
+    },
+    {
+      "id": "03b-N5-empty-output",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/negative-fixtures.txt"
+    },
+    {
+      "id": "03b-N6-missing-usage",
+      "status": "pass",
+      "command_id": "03b-CMD1..2",
+      "log_path": "raw/negative-fixtures.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "03b-decode",
+      "raw_path": "raw/decode-rows.jsonl",
+      "sha256": "a44e2a1a4d0d619e9fe0be2509a891eaf22339b5808694b82c3867e7f754ef49"
+    },
+    {
+      "run_id": "03b-kvq-report",
+      "raw_path": "raw/kvq-rows.json",
+      "sha256": "6648bd036d31db0cfbb41499e291b6001a8ce71085464360af97dd2aaf155e64"
+    },
+    {
+      "run_id": "03b-kvq-raw",
+      "raw_path": "raw/kvq-raw.jsonl",
+      "sha256": "369f68ff9022f7e23c41f4825a872ecd94bf1d500122873a02a8855c97eb150d"
+    },
+    {
+      "run_id": "03b-decode-log",
+      "raw_path": "raw/decode.log",
+      "sha256": "cc4a37e04f635e6a8f850e17896a4f09ad5117a2ca8dbf6b957339465388668b"
+    },
+    {
+      "run_id": "03b-kvq-log",
+      "raw_path": "raw/kvq.log",
+      "sha256": "a08ecd91ca43154be04cb48bfb53d4867e6946a04272d01f21f3691a4762d61d"
+    },
+    {
+      "run_id": "03b-negative",
+      "raw_path": "raw/negative-fixtures.txt",
+      "sha256": "be58709dbe4b4aee886adc7f90ac78045cc4465eccfe92348de761bbb7aaa7c4"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Concurrency 2/4 (secondary) not run in 03b; bench_kv_quant --parallel exists but was out of the bounded run.",
+    "Server per-request prefill/decode phase times still not exposed; only client times + capacity.",
+    "timeout and server-crash negatives were not injected; guards exist but are not exercised.",
+    "64k ran and passed fit (warm decode 18.2-18.4 tok/s nvfp4); 128k not attempted."
+  ],
+  "rollback_result": "backup present at /opt/FreeToken/.x299-backup/; not rolled back (extension is intentionally kept)",
+  "key_findings": {
+    "bs1_offload_decode_tok_s": 19.63,
+    "bs1_offload_p95_ms": 76.08,
+    "bs1_ttft_warm_ms": 5876.4,
+    "bs1_ttft_cold_ms": 7169.0,
+    "warm_decode_tok_s_by_context": {
+      "4k": {
+        "bf16": 18.501,
+        "nvfp4": 17.788
+      },
+      "16k": {
+        "bf16": 17.843,
+        "nvfp4": 18.686
+      },
+      "32k": {
+        "bf16": 17.747,
+        "nvfp4": 18.342
+      },
+      "64k": {
+        "bf16": 17.212,
+        "nvfp4": 18.444
+      }
+    },
+    "nvfp4_vs_bf16_decode_delta_pct": {
+      "4k": -5.15,
+      "16k": -2.42,
+      "32k": -6.93,
+      "64k": -7.16
+    },
+    "nvfp4_vs_bf16_decode_delta_median_pct": {
+      "4k": 3.85,
+      "16k": -4.72,
+      "32k": -3.35,
+      "64k": -7.16
+    },
+    "kv_capacity": {
+      "bf16": {
+        "kv_tokens": 155456,
+        "kv_gib": 3.67,
+        "moe_miss_pct_last": null
+      },
+      "nvfp4": {
+        "kv_tokens": 500288,
+        "kv_gib": 3.67,
+        "moe_miss_pct_last": null
+      }
+    }
+  }
+}

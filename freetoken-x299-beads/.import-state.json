@@ -1,0 +1,290 @@
+{
+  "plan_id": "freetoken-x299-qwen38-20260910-v2",
+  "repo": "/opt/FreeToken-mtp",
+  "ids": {
+    "EPIC": "FreeToken-mtp-1ll",
+    "01a": "FreeToken-mtp-1ll.1",
+    "01b": "FreeToken-mtp-1ll.2",
+    "02a": "FreeToken-mtp-1ll.3",
+    "02b": "FreeToken-mtp-1ll.4",
+    "03a": "FreeToken-mtp-1ll.5",
+    "03b": "FreeToken-mtp-1ll.6",
+    "04a": "FreeToken-mtp-1ll.7",
+    "04b": "FreeToken-mtp-1ll.8",
+    "05a": "FreeToken-mtp-1ll.9",
+    "05b": "FreeToken-mtp-1ll.10",
+    "06a": "FreeToken-mtp-1ll.11",
+    "06b": "FreeToken-mtp-1ll.12",
+    "07a": "FreeToken-mtp-1ll.13",
+    "07b": "FreeToken-mtp-1ll.14",
+    "08a": "FreeToken-mtp-1ll.15",
+    "08b": "FreeToken-mtp-1ll.16",
+    "09a": "FreeToken-mtp-1ll.17",
+    "09b": "FreeToken-mtp-1ll.18",
+    "10a": "FreeToken-mtp-1ll.19",
+    "10b": "FreeToken-mtp-1ll.20",
+    "11a": "FreeToken-mtp-1ll.21",
+    "11b": "FreeToken-mtp-1ll.22",
+    "12a": "FreeToken-mtp-1ll.23",
+    "12b": "FreeToken-mtp-1ll.24",
+    "13a": "FreeToken-mtp-1ll.25",
+    "13b": "FreeToken-mtp-1ll.26",
+    "14a": "FreeToken-mtp-1ll.27",
+    "14b": "FreeToken-mtp-1ll.28",
+    "15a": "FreeToken-mtp-1ll.29",
+    "15b": "FreeToken-mtp-1ll.30",
+    "16a": "FreeToken-mtp-1ll.31",
+    "16b": "FreeToken-mtp-1ll.32",
+    "17a": "FreeToken-mtp-1ll.33",
+    "17b": "FreeToken-mtp-1ll.34",
+    "18a": "FreeToken-mtp-1ll.35",
+    "18b": "FreeToken-mtp-1ll.36",
+    "19a": "FreeToken-mtp-1ll.37",
+    "19b": "FreeToken-mtp-1ll.38",
+    "20a": "FreeToken-mtp-1ll.39",
+    "20b": "FreeToken-mtp-1ll.40"
+  },
+  "edges": [
+    [
+      "01b",
+      "01a"
+    ],
+    [
+      "02a",
+      "01b"
+    ],
+    [
+      "02b",
+      "02a"
+    ],
+    [
+      "03a",
+      "02b"
+    ],
+    [
+      "03b",
+      "03a"
+    ],
+    [
+      "04a",
+      "03b"
+    ],
+    [
+      "04b",
+      "04a"
+    ],
+    [
+      "05a",
+      "04b"
+    ],
+    [
+      "05b",
+      "05a"
+    ],
+    [
+      "06a",
+      "05b"
+    ],
+    [
+      "06b",
+      "06a"
+    ],
+    [
+      "07a",
+      "05b"
+    ],
+    [
+      "07b",
+      "07a"
+    ],
+    [
+      "08a",
+      "06b"
+    ],
+    [
+      "08b",
+      "08a"
+    ],
+    [
+      "09a",
+      "06b"
+    ],
+    [
+      "09a",
+      "08b"
+    ],
+    [
+      "09a",
+      "04b"
+    ],
+    [
+      "09b",
+      "09a"
+    ],
+    [
+      "10a",
+      "07b"
+    ],
+    [
+      "10a",
+      "04b"
+    ],
+    [
+      "10b",
+      "10a"
+    ],
+    [
+      "11a",
+      "04b"
+    ],
+    [
+      "11a",
+      "07b"
+    ],
+    [
+      "11b",
+      "11a"
+    ],
+    [
+      "12a",
+      "02b"
+    ],
+    [
+      "12a",
+      "04b"
+    ],
+    [
+      "12b",
+      "12a"
+    ],
+    [
+      "13a",
+      "12b"
+    ],
+    [
+      "13a",
+      "06b"
+    ],
+    [
+      "13b",
+      "13a"
+    ],
+    [
+      "14a",
+      "04b"
+    ],
+    [
+      "14a",
+      "05b"
+    ],
+    [
+      "14b",
+      "14a"
+    ],
+    [
+      "15a",
+      "03b"
+    ],
+    [
+      "15a",
+      "07b"
+    ],
+    [
+      "15b",
+      "15a"
+    ],
+    [
+      "16a",
+      "15b"
+    ],
+    [
+      "16a",
+      "09b"
+    ],
+    [
+      "16b",
+      "16a"
+    ],
+    [
+      "17a",
+      "15b"
+    ],
+    [
+      "17b",
+      "17a"
+    ],
+    [
+      "18a",
+      "07b"
+    ],
+    [
+      "18a",
+      "14b"
+    ],
+    [
+      "18b",
+      "18a"
+    ],
+    [
+      "19a",
+      "05b"
+    ],
+    [
+      "19a",
+      "13b"
+    ],
+    [
+      "19b",
+      "19a"
+    ],
+    [
+      "20a",
+      "08b"
+    ],
+    [
+      "20a",
+      "09b"
+    ],
+    [
+      "20a",
+      "10b"
+    ],
+    [
+      "20a",
+      "11b"
+    ],
+    [
+      "20a",
+      "12b"
+    ],
+    [
+      "20a",
+      "13b"
+    ],
+    [
+      "20a",
+      "14b"
+    ],
+    [
+      "20a",
+      "16b"
+    ],
+    [
+      "20a",
+      "17b"
+    ],
+    [
+      "20a",
+      "18b"
+    ],
+    [
+      "20a",
+      "19b"
+    ],
+    [
+      "20b",
+      "20a"
+    ]
+  ],
+  "pending": null
+}

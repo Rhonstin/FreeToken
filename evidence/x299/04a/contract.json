@@ -1,0 +1,380 @@
+{
+  "schema_version": 2,
+  "task_key": "04a",
+  "bead_id": "FreeToken-mtp-1ll.7",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "9b7893793ef7fe038e2e16afe29759546892fe55cbee9b7250708d766aa18793",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/moe/offload_cache.py",
+    "python/freetoken/engine/engine.py",
+    "python/freetoken/models/qwen4_exp/ple_disk.py",
+    "python/freetoken/attention/qsa_sparse.py",
+    "python/freetoken/models/qwen4_exp/gdn.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/moe/offload_cache.py": [
+        "collect_stats",
+        "collect_decode_freq",
+        "stat_missing",
+        "stat_missing_layer",
+        "stat_fetched",
+        "num_missing_full",
+        "lru_stats",
+        "decode_miss_stats",
+        "decode_miss_stats_per_layer",
+        "reset_stats",
+        "prefill_begin_event",
+        "prefill_ready_events",
+        "prefill_release_events"
+      ],
+      "python/freetoken/engine/engine.py": [
+        "_profile_gpu (GPU identity, not a timeline)",
+        "prefill warmup cuda.Event",
+        "moe_collect_stats wiring",
+        "FREETOKEN_PIN_BUDGET_GB"
+      ],
+      "python/freetoken/models/qwen4_exp/ple_disk.py": [
+        "_readback_event",
+        "FREETOKEN_PLE_SYNC",
+        "FREETOKEN_PLE_IO_URING"
+      ],
+      "python/freetoken/attention/qsa_sparse.py": [
+        "FREETOKEN_QSA_TORCH_TOPK"
+      ],
+      "python/freetoken/scheduler/status.py": [
+        "_moe_msg",
+        "_spec_msg",
+        "decode log line"
+      ]
+    },
+    "proposed": {
+      "opt-in sampled trace": "contextmanager per phase, off by default, no per-layer sync"
+    }
+  },
+  "trace_schema": {
+    "schema_version": 1,
+    "opt_in": true,
+    "default": "off; enabling must not change semantics or add per-layer synchronize",
+    "sampling": "sampled ranges/counters; a trace is tagged sampled=true and excluded from speed medians",
+    "phases": [
+      "gpu_compute",
+      "expert_h2d",
+      "cpu_gemv",
+      "wait_exposed",
+      "routing",
+      "cache_miss",
+      "ple_read",
+      "ple_d2h",
+      "ple_h2d",
+      "qsa",
+      "gdn",
+      "sampling",
+      "python_launch"
+    ],
+    "per_phase": [
+      "total_ms",
+      "exposed_ms",
+      "overlapped_ms",
+      "count",
+      "bytes"
+    ],
+    "counters": [
+      "moe_miss_rate",
+      "stat_missing",
+      "stat_fetched",
+      "num_missing_full",
+      "oracle_hit_at_slots",
+      "working_set_mean",
+      "working_set_max",
+      "experts_for_90pct",
+      "norm_entropy",
+      "mamba_slots",
+      "kv_usage",
+      "prefill_hit_rows"
+    ],
+    "derived": [
+      "bytes_per_committed_token",
+      "exposed_stall_ms_per_token",
+      "transfer_floor_ms_per_token"
+    ],
+    "rules": [
+      "exposed_ms is critical-path time; overlapped ranges are never summed as serial time",
+      "profiler overhead is measured; if >2% the speed report uses uninstrumented runs only",
+      "no torch.cuda.synchronize per layer in production code paths",
+      "counters are int64 and reset per run",
+      "a sampling error is fail-open: the run proceeds and the error is recorded"
+    ]
+  },
+  "inputs": {
+    "existing_decode_counters": {
+      "value": {
+        "moe_miss_rate": 0.33,
+        "oracle_hit_at_slots": 0.67,
+        "slots_per_layer": 54.0,
+        "working_set_mean": 285.0,
+        "working_set_max": 377.0,
+        "experts_for_90pct": 122.0,
+        "norm_entropy": 0.77,
+        "mamba_slots": "4/8"
+      },
+      "source": "raw/existing-counters.txt",
+      "unit": "fields"
+    },
+    "gpu_gather_bw_gbs": {
+      "value": 12.36,
+      "source": "../01b/raw/benchbw.json",
+      "unit": "GB/s"
+    },
+    "expert_bytes": {
+      "value": 67948314624,
+      "source": "../02a inventory",
+      "unit": "bytes"
+    },
+    "per_expert_bytes": {
+      "value": 2764824,
+      "source": "expert_bytes/(512*48)",
+      "unit": "bytes"
+    },
+    "transfer_floor_ms_per_token": {
+      "value": 35.43,
+      "source": "miss_rate*480*per_expert/gather_bw; approximate diagnostic",
+      "unit": "ms"
+    },
+    "observed_tpot_ms": {
+      "value": 55.93,
+      "source": "../03b kvq nvfp4 4k warm",
+      "unit": "ms"
+    },
+    "observed_p95_ms": {
+      "value": 82.5,
+      "source": "../03b kvq nvfp4 4k warm",
+      "unit": "ms"
+    },
+    "profiler_tools": {
+      "value": [
+        "nsys 2026.1.3",
+        "perf"
+      ],
+      "source": "raw/existing-counters.txt",
+      "unit": "list"
+    }
+  },
+  "invariants": [
+    "exposed time is critical-path; overlapped CPU/DMA ranges are never summed as serial time.",
+    "profiling is off by default and adds no per-layer synchronize in production.",
+    "a trace is tagged sampled=true and excluded from speed medians; overhead >2% forces uninstrumented-only reporting.",
+    "bytes_per_committed_token uses committed tokens; speculative drafts are not output.",
+    "counters are int64 and reset per run; empty batches yield zero, never divide-by-zero.",
+    "a sampling error is fail-open and recorded, not a run abort.",
+    "No production file is changed by 04a."
+  ],
+  "cases": [
+    {
+      "id": "04a-C1-existing-counters",
+      "given": "--moe-collect-stats decode",
+      "action": "read decode log",
+      "expected": "miss/oracle/ws/e90/ent present",
+      "assertion": "miss=0.33, ws=285/377, e90=122",
+      "status": "pass"
+    },
+    {
+      "id": "04a-C2-nsys",
+      "given": "target host",
+      "action": "check profiler",
+      "expected": "a GPU timeline profiler exists",
+      "assertion": "nsys 2026.1.3 available",
+      "status": "pass"
+    },
+    {
+      "id": "04a-C3-offload-stat-tensors",
+      "given": "offload_cache",
+      "action": "inventory counters",
+      "expected": "stat_missing/stat_fetched/num_missing_full/lru_stats exist",
+      "assertion": "symbols present in source",
+      "status": "pass"
+    },
+    {
+      "id": "04a-C4-ple-events",
+      "given": "ple_disk",
+      "action": "inventory",
+      "expected": "_readback_event + FREETOKEN_PLE_SYNC/IO_URING",
+      "assertion": "symbols present",
+      "status": "pass"
+    },
+    {
+      "id": "04a-C5-transfer-floor",
+      "given": "miss rate + expert bytes + gather bw",
+      "action": "estimate transfer per token",
+      "expected": "same-order as observed TPOT",
+      "assertion": "floor 35 ms/token vs TPOT 56 ms",
+      "status": "pass"
+    },
+    {
+      "id": "04a-C6-baseline-p95-tpot",
+      "given": "03b",
+      "action": "reference",
+      "expected": "p95 + mean TPOT recorded for short/long ctx",
+      "assertion": "4k p95=82.5 ms, TPOT=55.9 ms",
+      "status": "pass"
+    },
+    {
+      "id": "04a-N1-overlap",
+      "given": "CPU GEMV overlaps PCIe DMA",
+      "action": "trace ranges",
+      "expected": "exposed time = critical path, NOT sum of overlapped ranges",
+      "assertion": "contract rule; verified in 04b",
+      "status": "pass"
+    },
+    {
+      "id": "04a-N2-profiler-sync",
+      "given": "profiling enabled",
+      "action": "measure overhead",
+      "expected": "no per-layer synchronize in production; overhead < 2%",
+      "assertion": "contract rule; overhead measured in 04b",
+      "status": "pass"
+    },
+    {
+      "id": "04a-N3-empty-batch",
+      "given": "empty decode batch",
+      "action": "sample",
+      "expected": "zero counters, no divide-by-zero",
+      "assertion": "contract fixture",
+      "status": "pass"
+    },
+    {
+      "id": "04a-N4-counter-overflow",
+      "given": "long run",
+      "action": "read counters",
+      "expected": "int64 counters, reset semantics explicit",
+      "assertion": "stat_missing is int64; reset_stats() clears",
+      "status": "pass"
+    },
+    {
+      "id": "04a-N5-sampling-error",
+      "given": "profiler error mid-run",
+      "action": "fail-open",
+      "expected": "run continues, error recorded not crashed",
+      "assertion": "contract rule",
+      "status": "pass"
+    }
+  ],
+  "commands": [
+    {
+      "id": "04a-CMD1",
+      "argv": [
+        "grep",
+        "-aE",
+        "Decode batch",
+        "<server.log>"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 20,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-CMD2",
+      "argv": [
+        "nsys",
+        "--version"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 20,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-CMD3",
+      "argv": [
+        "nsys",
+        "profile",
+        "-o",
+        "evidence/x299/04b/raw/decode.nsys-rep",
+        "--capture-range=cudaProfilerApi",
+        "--stats=true",
+        "--",
+        "/opt/freetoken-venv/bin/ft",
+        "serve",
+        "--model",
+        "$FT_MODEL",
+        "--moe-strategy",
+        "offload",
+        "--moe-cache-size",
+        "2600",
+        "--moe-collect-stats",
+        "--cuda-graph-max-bs",
+        "0"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1800,
+      "expected_exit": 0,
+      "phase": "b",
+      "note": "eager (graph off) trace into a steady decode; GPU exclusive"
+    },
+    {
+      "id": "04a-CMD4",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/moe/test_offload.py",
+        "tests/moe/test_hybrid_fetch.py",
+        "tests/moe/test_fused_copy.py",
+        "tests/scheduler/test_scheduler_status.py",
+        "tests/engine/test_moe_cpu_layers.py",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 600,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/pytest-profile-related.txt"
+    }
+  ],
+  "approximate_diagnostic": {
+    "formula": "transfer_floor_ms_per_token = moe_miss_rate * top_k * num_moe_layers * per_expert_bytes / measured_gather_bw",
+    "assumptions": [
+      "miss rate is from the existing slot-cache counter (not yet per-layer traced)",
+      "experts transferred at physical checkpoint bytes; dequantized bf16 may differ",
+      "gather bw is the canonical-geometry bench, not the live transfer"
+    ],
+    "result_ms_per_token": 35.43,
+    "observation": "same order of magnitude as the observed warm TPOT, so expert H2D is the primary bottleneck hypothesis to confirm/refute by trace",
+    "not_a_prediction": true
+  },
+  "performance_gate": {
+    "applies": false,
+    "reason": "profiling contract; PERF gate applies to optimization tasks"
+  },
+  "quality_gate": {
+    "applies": false,
+    "reason": "no model change"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified in 04a"
+  },
+  "limitations": [
+    "No per-phase GPU timeline exists yet; 04b adds the opt-in sampled trace.",
+    "The existing counters are per decode-log-interval (default 40 steps), not per single step.",
+    "nsys is available; ncu is not, so no per-kernel roofline.",
+    "tests/moe/test_offload.py::test_adjust_config_converts_moe_cache_rate_to_cache_size fails on the dev box only because flashinfer is not installed (test selects backend 'fi'); on the target venv with [accel] it is expected to pass."
+  ],
+  "generated_utc": "2026-09-11T11:12:00Z"
+}

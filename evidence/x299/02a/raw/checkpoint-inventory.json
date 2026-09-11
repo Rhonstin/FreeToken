@@ -1,0 +1,145 @@
+{
+  "index_sha256": "da5ca9c3b65e48e151329e64e141c2fa700bf2f99aec53cc014e4b52a6ff7a84",
+  "index_total_size": 135195303851,
+  "sum_tensor_nbytes": 135156121594,
+  "num_shards_in_index": 206,
+  "num_tensors": 296475,
+  "components": {
+    "attention": {
+      "bytes": 5407737600,
+      "tensors": 432,
+      "gib": 5.036
+    },
+    "embed_tokens": {
+      "bytes": 1271398400,
+      "tensors": 1,
+      "gib": 1.184
+    },
+    "experts": {
+      "bytes": 67948314624,
+      "tensors": 294912,
+      "gib": 63.282
+    },
+    "hyper_connection": {
+      "bytes": 1279262720,
+      "tensors": 290,
+      "gib": 1.191
+    },
+    "lm_head": {
+      "bytes": 1271398400,
+      "tensors": 1,
+      "gib": 1.184
+    },
+    "mtp": {
+      "bytes": 5214301696,
+      "tensors": 31,
+      "gib": 4.856
+    },
+    "norm": {
+      "bytes": 2240000,
+      "tensors": 207,
+      "gib": 0.002
+    },
+    "ple": {
+      "bytes": 51265925402,
+      "tensors": 138,
+      "gib": 47.745
+    },
+    "router": {
+      "bytes": 125829120,
+      "tensors": 48,
+      "gib": 0.117
+    },
+    "shared_expert": {
+      "bytes": 472104960,
+      "tensors": 192,
+      "gib": 0.44
+    },
+    "visual": {
+      "bytes": 897608672,
+      "tensors": 223,
+      "gib": 0.836
+    }
+  },
+  "components_by_dtype": {
+    "attention": {
+      "BF16": 5.036
+    },
+    "embed_tokens": {
+      "BF16": 1.184
+    },
+    "experts": {
+      "F32": 0.001,
+      "F8_E4M3": 7.031,
+      "U8": 56.25
+    },
+    "hyper_connection": {
+      "BF16": 1.191
+    },
+    "lm_head": {
+      "BF16": 1.184
+    },
+    "mtp": {
+      "BF16": 4.856
+    },
+    "norm": {
+      "BF16": 0.002
+    },
+    "ple": {
+      "I64": 0.0,
+      "BF16": 0.061,
+      "F8_E4M3": 47.684
+    },
+    "router": {
+      "BF16": 0.117
+    },
+    "shared_expert": {
+      "BF16": 0.44
+    },
+    "visual": {
+      "BF16": 0.836
+    }
+  },
+  "mtp_stacked_experts_bytes": 5033164800,
+  "mtp_dense_bytes": 181136896,
+  "mtp_tensor_names": [
+    "mtp.hyper_connection_mixer.hc_norm.weight",
+    "mtp.hyper_connection_mixer.input_mix_weight_down.weight",
+    "mtp.hyper_connection_mixer.input_mix_weight_up.weight",
+    "mtp.layers.0.attn_hyper_connection.block_inject_weight.weight",
+    "mtp.layers.0.attn_hyper_connection.hc_norm.weight",
+    "mtp.layers.0.attn_hyper_connection.input_mix_weight_down.weight",
+    "mtp.layers.0.attn_hyper_connection.input_mix_weight_up.weight",
+    "mtp.layers.0.mlp.experts.down_proj",
+    "mtp.layers.0.mlp.experts.gate_up_proj",
+    "mtp.layers.0.mlp.gate.weight",
+    "mtp.layers.0.mlp.shared_expert.down_proj.weight",
+    "mtp.layers.0.mlp.shared_expert.gate_proj.weight",
+    "mtp.layers.0.mlp.shared_expert.up_proj.weight",
+    "mtp.layers.0.mlp.shared_expert_gate.weight",
+    "mtp.layers.0.mlp_hyper_connection.block_inject_weight.weight",
+    "mtp.layers.0.mlp_hyper_connection.hc_norm.weight",
+    "mtp.layers.0.mlp_hyper_connection.input_mix_weight_down.weight",
+    "mtp.layers.0.mlp_hyper_connection.input_mix_weight_up.weight",
+    "mtp.layers.0.self_attn.indexer.index_qk_proj.weight",
+    "mtp.layers.0.self_attn.indexer.k_layernorm.weight",
+    "mtp.layers.0.self_attn.indexer.q_layernorm.weight",
+    "mtp.layers.0.self_attn.k_norm.weight",
+    "mtp.layers.0.self_attn.k_proj.weight",
+    "mtp.layers.0.self_attn.o_proj.weight",
+    "mtp.layers.0.self_attn.q_norm.weight",
+    "mtp.layers.0.self_attn.q_proj.weight",
+    "mtp.layers.0.self_attn.v_proj.weight",
+    "mtp.fc_embedding.weight",
+    "mtp.fc_hidden.weight",
+    "mtp.pre_fc_norm_embedding.weight",
+    "mtp.pre_fc_norm_hidden.weight"
+  ],
+  "ple_files": [
+    "model-plefp8-00000.safetensors",
+    "model-plefp8-00001.safetensors",
+    "model-plefp8-00002.safetensors",
+    "model-plefp8-00003.safetensors",
+    "model-plefp8-00004.safetensors"
+  ]
+}

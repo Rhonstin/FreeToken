@@ -1,0 +1,239 @@
+### lscpu -J
+{
+   "lscpu": [
+      {
+         "field": "Architecture:",
+         "data": "x86_64"
+      },{
+         "field": "CPU op-mode(s):",
+         "data": "32-bit, 64-bit"
+      },{
+         "field": "Address sizes:",
+         "data": "46 bits physical, 48 bits virtual"
+      },{
+         "field": "Byte Order:",
+         "data": "Little Endian"
+      },{
+         "field": "CPU(s):",
+         "data": "12"
+      },{
+         "field": "On-line CPU(s) list:",
+         "data": "0-11"
+      },{
+         "field": "Vendor ID:",
+         "data": "GenuineIntel"
+      },{
+         "field": "Model name:",
+         "data": "Intel(R) Core(TM) i7-7800X CPU @ 3.50GHz"
+      },{
+         "field": "CPU family:",
+         "data": "6"
+      },{
+         "field": "Model:",
+         "data": "85"
+      },{
+         "field": "Thread(s) per core:",
+         "data": "2"
+      },{
+         "field": "Core(s) per socket:",
+         "data": "6"
+      },{
+         "field": "Socket(s):",
+         "data": "1"
+      },{
+         "field": "Stepping:",
+         "data": "4"
+      },{
+         "field": "CPU(s) scaling MHz:",
+         "data": "79%"
+      },{
+         "field": "CPU max MHz:",
+         "data": "4000.0000"
+      },{
+         "field": "CPU min MHz:",
+         "data": "1200.0000"
+      },{
+         "field": "BogoMIPS:",
+         "data": "6999.82"
+      },{
+         "field": "Flags:",
+         "data": "fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault cat_l3 cdp_l3 pti ssbd mba ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm cqm mpx rdt_a avx512f avx512dq rdseed adx smap clflushopt clwb intel_pt avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local dtherm ida arat pln pts hwp hwp_act_window hwp_pkg_req vnmi md_clear flush_l1d arch_capabilities"
+      },{
+         "field": "Virtualization:",
+         "data": "VT-x"
+      },{
+         "field": "L1d cache:",
+         "data": "192 KiB (6 instances)"
+      },{
+         "field": "L1i cache:",
+         "data": "192 KiB (6 instances)"
+      },{
+         "field": "L2 cache:",
+         "data": "6 MiB (6 instances)"
+      },{
+         "field": "L3 cache:",
+         "data": "8.3 MiB (1 instance)"
+      },{
+         "field": "NUMA node(s):",
+         "data": "1"
+      },{
+         "field": "NUMA node0 CPU(s):",
+         "data": "0-11"
+      },{
+         "field": "Vulnerability Gather data sampling:",
+         "data": "Vulnerable"
+      },{
+         "field": "Vulnerability Ghostwrite:",
+         "data": "Not affected"
+      },{
+         "field": "Vulnerability Indirect target selection:",
+         "data": "Not affected"
+      },{
+         "field": "Vulnerability Itlb multihit:",
+         "data": "KVM: Mitigation: Split huge pages"
+      },{
+         "field": "Vulnerability L1tf:",
+         "data": "Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable"
+      },{
+         "field": "Vulnerability Mds:",
+         "data": "Mitigation; Clear CPU buffers; SMT vulnerable"
+      },{
+         "field": "Vulnerability Meltdown:",
+         "data": "Mitigation; PTI"
+      },{
+         "field": "Vulnerability Mmio stale data:",
+         "data": "Mitigation; Clear CPU buffers; SMT vulnerable"
+      },{
+         "field": "Vulnerability Old microcode:",
+         "data": "Not affected"
+      },{
+         "field": "Vulnerability Reg file data sampling:",
+         "data": "Not affected"
+      },{
+         "field": "Vulnerability Retbleed:",
+         "data": "Mitigation; IBRS"
+      },{
+         "field": "Vulnerability Spec rstack overflow:",
+         "data": "Not affected"
+      },{
+         "field": "Vulnerability Spec store bypass:",
+         "data": "Mitigation; Speculative Store Bypass disabled via prctl"
+      },{
+         "field": "Vulnerability Spectre v1:",
+         "data": "Mitigation; usercopy/swapgs barriers and __user pointer sanitization"
+      },{
+         "field": "Vulnerability Spectre v2:",
+         "data": "Mitigation; IBRS; IBPB conditional; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected"
+      },{
+         "field": "Vulnerability Srbds:",
+         "data": "Not affected"
+      },{
+         "field": "Vulnerability Tsa:",
+         "data": "Not affected"
+      },{
+         "field": "Vulnerability Tsx async abort:",
+         "data": "Mitigation; Clear CPU buffers; SMT vulnerable"
+      },{
+         "field": "Vulnerability Vmscape:",
+         "data": "Mitigation; IBPB before exit to userspace"
+      }
+   ]
+}
+### lscpu -e
+CPU CORE SOCKET NODE ONLINE
+  0    0      0    0    yes
+  1    1      0    0    yes
+  2    2      0    0    yes
+  3    3      0    0    yes
+  4    4      0    0    yes
+  5    5      0    0    yes
+  6    0      0    0    yes
+  7    1      0    0    yes
+  8    2      0    0    yes
+  9    3      0    0    yes
+ 10    4      0    0    yes
+ 11    5      0    0    yes
+### topology
+/sys/devices/system/cpu/cpu0/topology/thread_siblings_list: 0,6
+/sys/devices/system/cpu/cpu10/topology/thread_siblings_list: 4,10
+/sys/devices/system/cpu/cpu11/topology/thread_siblings_list: 5,11
+/sys/devices/system/cpu/cpu1/topology/thread_siblings_list: 1,7
+/sys/devices/system/cpu/cpu2/topology/thread_siblings_list: 2,8
+/sys/devices/system/cpu/cpu3/topology/thread_siblings_list: 3,9
+/sys/devices/system/cpu/cpu4/topology/thread_siblings_list: 4,10
+/sys/devices/system/cpu/cpu5/topology/thread_siblings_list: 5,11
+/sys/devices/system/cpu/cpu6/topology/thread_siblings_list: 0,6
+/sys/devices/system/cpu/cpu7/topology/thread_siblings_list: 1,7
+/sys/devices/system/cpu/cpu8/topology/thread_siblings_list: 2,8
+/sys/devices/system/cpu/cpu9/topology/thread_siblings_list: 3,9
+### numa
+has_cpu
+has_generic_initiator
+has_memory
+has_normal_memory
+node0
+online
+possible
+power
+uevent
+### meminfo
+MemTotal:       104411424 kB
+MemFree:         7730388 kB
+MemAvailable:   31396348 kB
+Buffers:           12620 kB
+Cached:         90902192 kB
+SwapCached:        20848 kB
+Active:         52165476 kB
+Inactive:       41638660 kB
+Active(anon):   28497600 kB
+Inactive(anon): 40974776 kB
+Active(file):   23667876 kB
+Inactive(file):   663884 kB
+Unevictable:        7848 kB
+Mlocked:            7848 kB
+SwapTotal:       4194300 kB
+SwapFree:        4009624 kB
+Zswap:                 0 kB
+Zswapped:              0 kB
+Dirty:              5992 kB
+Writeback:             0 kB
+AnonPages:       2896820 kB
+Mapped:         67005284 kB
+Shmem:          66577380 kB
+KReclaimable:     373892 kB
+Slab:             820476 kB
+SReclaimable:     373892 kB
+SUnreclaim:       446584 kB
+KernelStack:        7076 kB
+PageTables:       150540 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:    56400012 kB
+Committed_AS:   73975504 kB
+VmallocTotal:   34359738367 kB
+VmallocUsed:      693220 kB
+VmallocChunk:          0 kB
+Percpu:             9120 kB
+HardwareCorrupted:     0 kB
+AnonHugePages:         0 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+FileHugePages:         0 kB
+FilePmdMapped:         0 kB
+CmaTotal:              0 kB
+CmaFree:               0 kB
+Unaccepted:            0 kB
+Balloon:               0 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+DirectMap4k:    96492096 kB
+DirectMap2M:    10102784 kB
+DirectMap1G:     2097152 kB
+### cmdline
+BOOT_IMAGE=/boot/vmlinuz-7.0.0-31-generic root=UUID=8ff2311d-c5b6-4672-9d0c-edf2aa98d873 ro intel_iommu=on iommu=pt pcie_acs_override=downstream,multifunction crashkernel=2G-4G:320M,4G-32G:512M,32G-64G:1024M,64G-128G:2048M,128G-:4096M

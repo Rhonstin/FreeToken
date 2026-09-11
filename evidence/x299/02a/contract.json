@@ -1,0 +1,607 @@
+{
+  "schema_version": 2,
+  "task_key": "02a",
+  "bead_id": "FreeToken-mtp-1ll.3",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "worktree_status_sha256": "24d9950f2f5d9aff72e7361cc5b8e5ffa3304c5b69784869d9e2bf838c1b3464",
+  "checkpoint_revision": {
+    "id": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "source": "Qwen/Qwen3.8-Flash-Next + Qwen/Qwen3.8-Flash-Next-FP8 (PLE)",
+    "modelopt_commit": "87c9f8cf83021957d1a1a575c90c9a4eaaf7ef0c",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "shards": 206,
+    "tensors": 296475,
+    "measured_payload_bytes": 135156121594,
+    "published_output_bytes": 135253624416,
+    "note": "no HF git revision available locally; pinned by content digests + provenance"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [],
+  "symbols": {
+    "existing": {
+      "python/freetoken/models/qwen4_exp/config.py": [
+        "Qwen4ExpArgs",
+        "parse_config",
+        "ple_slot_states",
+        "_quant_get",
+        "_ignored",
+        "_layer_types"
+      ],
+      "python/freetoken/models/qwen4_exp/weight.py": [
+        "iter_weights",
+        "load_ple_table",
+        "PleTable",
+        "ftw_side_files",
+        "nvfp4_expert_spec",
+        "iter_mtp_expert_pieces",
+        "mtp_expert_method"
+      ],
+      "python/freetoken/models/qwen4_exp/mtp.py": [
+        "Qwen4ExpMTPHead"
+      ],
+      "python/freetoken/moe/host_banks.py": [
+        "HostBank",
+        "HostResidency",
+        "alloc_banks",
+        "alloc_layer_banks",
+        "pin_banks",
+        "read_range_into",
+        "read_file_into"
+      ],
+      "python/freetoken/engine/config.py": [
+        "EngineConfig",
+        "apply_mtp_override",
+        "checkpoint_quant_config"
+      ]
+    },
+    "proposed": []
+  },
+  "inputs": {
+    "checkpoint_id": {
+      "value": "RadixArk/Qwen3.8-Flash-Next-NVFP4 @ local 2026-09-08",
+      "source": "qualification-notes.md + dir",
+      "unit": "string"
+    },
+    "source_checkpoint": {
+      "value": "Qwen/Qwen3.8-Flash-Next (target) + Qwen3.8-Flash-Next-FP8 (PLE)",
+      "source": "qualification-notes.md",
+      "unit": "string"
+    },
+    "modelopt_commit": {
+      "value": "87c9f8cf83021957d1a1a575c90c9a4eaaf7ef0c",
+      "source": "qualification-notes.md",
+      "unit": "sha"
+    },
+    "config_sha256": {
+      "value": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+      "source": "sha256sum config.json",
+      "unit": "sha256"
+    },
+    "index_sha256": {
+      "value": "da5ca9c3b65e48e151329e64e141c2fa700bf2f99aec53cc014e4b52a6ff7a84",
+      "source": "sha256sum model.safetensors.index.json",
+      "unit": "sha256"
+    },
+    "hf_quant_sha256": {
+      "value": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+      "source": "sha256sum hf_quant_config.json",
+      "unit": "sha256"
+    },
+    "shards": {
+      "value": 206,
+      "source": "index weight_map",
+      "unit": "count"
+    },
+    "tensors": {
+      "value": 296475,
+      "source": "safetensors headers",
+      "unit": "count"
+    },
+    "physical_payload_bytes": {
+      "value": 135156121594,
+      "source": "sum of safetensors data_offsets",
+      "unit": "bytes"
+    },
+    "published_output_bytes": {
+      "value": 135253624416,
+      "source": "qualification-notes.md",
+      "unit": "bytes"
+    },
+    "index_metadata_total_size": {
+      "value": 135195303851,
+      "source": "index metadata.total_size",
+      "unit": "bytes"
+    },
+    "architecture": {
+      "value": {
+        "model_type": "qwen4_exp",
+        "layers": 48,
+        "hidden": 2560,
+        "moe_inter": 640,
+        "experts": 512,
+        "top_k": 10,
+        "shared_inter": 640,
+        "max_pos": 262144,
+        "vocab": 248320,
+        "full_attn_every": 4,
+        "mtp_layers": 1,
+        "ple_layer_ids": [
+          2
+        ],
+        "ple_embed_dtype": "float8_e4m3fn",
+        "quant": "NVFP4 w4a4 group16"
+      },
+      "source": "config.json",
+      "unit": "fields"
+    },
+    "tokenizer": {
+      "value": {
+        "files": [
+          "tokenizer.json",
+          "vocab.json",
+          "merges.txt",
+          "tokenizer_config.json",
+          "chat_template.jinja"
+        ],
+        "chat_template_present": true
+      },
+      "source": "checkpoint dir",
+      "unit": "files"
+    },
+    "mtp_weights_present": {
+      "value": true,
+      "source": "index + validate_checkpoint_report mtp_entries=31",
+      "unit": "bool"
+    },
+    "ple_shards": {
+      "value": 128,
+      "source": "config split_ngram_parts + 10 plefp8 files",
+      "unit": "count"
+    },
+    "ram_reserve_bytes": {
+      "value": 10691729817,
+      "source": "max(8 GiB, 10% MemTotal) policy",
+      "unit": "bytes"
+    },
+    "prod_flags": {
+      "value": "--num-tokens 220032 --kv-reserve-tokens 220032 --kv-cache-dtype nvfp4 --memory-ratio 0.90 --moe-strategy offload --moe-cache-size 2600",
+      "source": "systemd drop-in",
+      "unit": "argv"
+    },
+    "prod_worker_rss_steady_kb": {
+      "value": 30615532,
+      "source": "/proc/1206849/status VmRSS",
+      "unit": "KiB"
+    },
+    "prod_worker_peak_kb": {
+      "value": 47514064,
+      "source": "/proc/1206849/status VmHWM",
+      "unit": "KiB"
+    },
+    "prod_worker_rss_shmem_kb": {
+      "value": 29326820,
+      "source": "/proc/1206849/status RssShmem",
+      "unit": "KiB"
+    },
+    "prod_gpu_used_mib": {
+      "value": 21434,
+      "source": "nvidia-smi compute-apps",
+      "unit": "MiB"
+    },
+    "prod_kv_bytes": {
+      "value": 1729814784,
+      "source": "/v1/stats before restart (total_pages 3438, nvfp4)",
+      "unit": "bytes",
+      "note": "post-restart /v1/stats reported vram_bytes 0/kv null; re-measure in 02b"
+    }
+  },
+  "invariants": [
+    "Ledger counts unique tensor storages from safetensors data_offsets; the 12 rows sum exactly to the measured payload (no shared tensor double counted).",
+    "Published output bytes (135,253,624,416) and measured payload (135,156,121,594) differ by 97,502,822 B (<0.1%): index metadata/alignment vs raw payload. The ledger uses measured payload, not archive size.",
+    "routed experts are NVFP4 (U8 packed + E4M3/F32 scales); every non-expert tensor is BF16/I64 per the modelopt ignore list, so no dense tensor is quantized.",
+    "MTP head is present: 31 mtp.* entries incl. the 2 stacked bf16 expert tensors; iter_weights drops mtp.* unless include_mtp=True.",
+    "PLE table is 128 F8_E4M3 shards + one scalar scale; only load_ple_table builds it, and it must dequantize with weight_scale (silent-wrong otherwise).",
+    "RAM reserve policy = max(8 GiB, 10% MemTotal) = 9.96 GiB; a candidate whose peak leaves less reserve is rejected.",
+    "Host steady RSS (29.2 GiB) exceeds the declared device-expert estimate; the observed-vs-ledger gap must be reconciled in 02b before any cache resize.",
+    "No production file under /opt/FreeToken is modified by 02a."
+  ],
+  "byte_ledger": [
+    {
+      "name": "routed_experts.nvfp4",
+      "owner": "moe/offload cache source",
+      "device": "disk+host banks",
+      "dtype_codec": "U8 packed4bit + F8_E4M3/F32 scales",
+      "payload_bytes": 67948314624,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "cache (LRU)",
+      "lifetime": "run",
+      "peak_phase": "load+decode",
+      "note": "63.28 GiB on disk; host/device residency set by --moe-cache-size"
+    },
+    {
+      "name": "ple.ngram_table.fp8",
+      "owner": "PLE loader (load_ple_table)",
+      "device": "disk",
+      "dtype_codec": "F8_E4M3 + scalar scale",
+      "payload_bytes": 51265925402,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "disk; per-fill row reads (--ple-backend disk)",
+      "lifetime": "run",
+      "peak_phase": "decode (row gather)",
+      "note": "47.74 GiB; 'pinned' backend would make it 47.74 GiB page-locked host RAM"
+    },
+    {
+      "name": "mtp.stacked_experts",
+      "owner": "MTP head expert banks",
+      "device": "disk+host banks",
+      "dtype_codec": "BF16",
+      "payload_bytes": 5033164800,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "cache",
+      "lifetime": "only when mtp_depth>0",
+      "peak_phase": "decode",
+      "note": "4.69 GiB; dense-bf16 per weight.py, served via expert banks"
+    },
+    {
+      "name": "mtp.dense_head",
+      "owner": "draft module state dict",
+      "device": "device",
+      "dtype_codec": "BF16",
+      "payload_bytes": 181136896,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "resident",
+      "lifetime": "only when mtp_depth>0",
+      "peak_phase": "load",
+      "note": "0.17 GiB"
+    },
+    {
+      "name": "attention.qsa_gdn",
+      "owner": "model state dict",
+      "device": "device",
+      "dtype_codec": "BF16",
+      "payload_bytes": 5407737600,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "resident",
+      "lifetime": "run",
+      "peak_phase": "load",
+      "note": "5.04 GiB dense bf16 (self_attn + linear_attn)"
+    },
+    {
+      "name": "hyper_connection",
+      "owner": "model state dict",
+      "device": "device",
+      "dtype_codec": "BF16",
+      "payload_bytes": 1279262720,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "resident",
+      "lifetime": "run",
+      "peak_phase": "load",
+      "note": "1.19 GiB"
+    },
+    {
+      "name": "embed_tokens",
+      "owner": "model state dict",
+      "device": "device",
+      "dtype_codec": "BF16",
+      "payload_bytes": 1271398400,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "resident",
+      "lifetime": "run",
+      "peak_phase": "load",
+      "note": "1.18 GiB"
+    },
+    {
+      "name": "lm_head",
+      "owner": "model state dict",
+      "device": "device",
+      "dtype_codec": "BF16",
+      "payload_bytes": 1271398400,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "resident",
+      "lifetime": "run",
+      "peak_phase": "load",
+      "note": "1.18 GiB"
+    },
+    {
+      "name": "shared_expert",
+      "owner": "model state dict",
+      "device": "device",
+      "dtype_codec": "BF16",
+      "payload_bytes": 472104960,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "resident",
+      "lifetime": "run",
+      "peak_phase": "load",
+      "note": "0.44 GiB"
+    },
+    {
+      "name": "router_gate",
+      "owner": "model state dict",
+      "device": "device",
+      "dtype_codec": "BF16",
+      "payload_bytes": 125829120,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "resident",
+      "lifetime": "run",
+      "peak_phase": "load",
+      "note": "0.12 GiB"
+    },
+    {
+      "name": "norms",
+      "owner": "model state dict",
+      "device": "device",
+      "dtype_codec": "BF16",
+      "payload_bytes": 2240000,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "resident",
+      "lifetime": "run",
+      "peak_phase": "load",
+      "note": "<0.01 GiB"
+    },
+    {
+      "name": "visual_tower",
+      "owner": "checkpoint only",
+      "device": "none (dropped)",
+      "dtype_codec": "BF16",
+      "payload_bytes": 897608672,
+      "scale_bytes": 0,
+      "fixed_bytes": 0,
+      "residency": "not loaded",
+      "lifetime": "never",
+      "peak_phase": "never",
+      "note": "0.84 GiB; text-only serving drops model.visual.*"
+    }
+  ],
+  "byte_ledger_summary_gib": {
+    "total": 125.874,
+    "routed_experts": 63.282,
+    "ple_disk": 47.745,
+    "mtp_total": 4.856,
+    "dense_on_device": 9.324,
+    "visual_dropped": 0.836
+  },
+  "budget_model": {
+    "host_ram": {
+      "expert_bank_bytes_at_cache_2600": 7188542400.0,
+      "expert_per_expert_bytes": 2764824.0,
+      "ple_pinned_if_used_bytes": 51265925402,
+      "reserve_bytes": 10691729817,
+      "observed_worker_steady_rss_bytes": 31350304768,
+      "observed_worker_peak_bytes": 48654401536
+    },
+    "device_vram": {
+      "dense_resident_bytes": 10011108096,
+      "prod_kv_bytes": 1729814784,
+      "observed_total_used_bytes": 22475177984,
+      "total_vram_bytes": 25293225984
+    }
+  },
+  "candidate_set": [
+    {
+      "id": "moe_cache_2600",
+      "desc": "prod baseline expert slots",
+      "status": "baseline"
+    },
+    {
+      "id": "moe_cache_grid",
+      "desc": "bounded moe-cache-size grid below 2600/above, only within reserve",
+      "status": "for 02b"
+    },
+    {
+      "id": "ple_backend_disk",
+      "desc": "PLE rows read from disk (prod)",
+      "status": "baseline"
+    },
+    {
+      "id": "ple_backend_pinned",
+      "desc": "47.74 GiB page-locked PLE",
+      "status": "pre-rejected by reserve unless new budget"
+    },
+    {
+      "id": "expert_load_auto_vs_serial",
+      "desc": "load-time RAM reclaim behavior",
+      "status": "for 02b"
+    }
+  ],
+  "cases": [
+    {
+      "id": "02a-C1-ledger-sums",
+      "given": "safetensors headers + index",
+      "action": "sum unique tensor data_offsets by component",
+      "expected": "rows sum to 135,156,121,594 B",
+      "assertion": "sum(ledger.payload_bytes)==measured",
+      "required_hardware": false
+    },
+    {
+      "id": "02a-C2-checkpoint-pin",
+      "given": "checkpoint dir",
+      "action": "digest config/index/quant",
+      "expected": "stable sha256",
+      "assertion": "3 digests recorded",
+      "required_hardware": false
+    },
+    {
+      "id": "02a-C3-mtp-present",
+      "given": "index weight_map",
+      "action": "search mtp.*",
+      "expected": "31 entries",
+      "assertion": "mtp_weights_present==True",
+      "required_hardware": false
+    },
+    {
+      "id": "02a-C4-ple-shards",
+      "given": "index + config",
+      "action": "count ngram shards",
+      "expected": "128 of F8_E4M3 + scalar scale",
+      "assertion": "ple_shards==split_ngram_parts==128",
+      "required_hardware": false
+    },
+    {
+      "id": "02a-C5-tests",
+      "given": "dev venv",
+      "action": "run qwen4_exp + engine checkpoint/MTP tests (not slow)",
+      "expected": "0 failures",
+      "assertion": "pytest exit 0",
+      "required_hardware": false
+    },
+    {
+      "id": "02a-N1-missing-mtp",
+      "given": "config requests mtp_depth>0, checkpoint without mtp.*",
+      "action": "strict load",
+      "expected": "loud failure, never silent",
+      "assertion": "apply_mtp_override/iter_weights raise or strict load errors",
+      "required_hardware": false
+    },
+    {
+      "id": "02a-N2-mixed-formats",
+      "given": "experts carry U8+E4M3+F32; dense BF16",
+      "action": "classify by dtype",
+      "expected": "no dense tensor packed as nvfp4",
+      "assertion": "component_by_dtype shows experts only in quant dtypes",
+      "required_hardware": false
+    },
+    {
+      "id": "02a-N3-ftw-missing-ple",
+      "given": "PLE shards absent/renamed",
+      "action": "load_ple_table",
+      "expected": "ValueError (needs shards 0..127 / weight_scale)",
+      "assertion": "loader raises rather than serving wrong embeddings",
+      "required_hardware": false
+    },
+    {
+      "id": "02a-N4-peak-over-available",
+      "given": "pinned PLE candidate (47.74 GiB)",
+      "action": "budget check vs available+reserve",
+      "expected": "reject pinned PLE (would breach reserve)",
+      "assertion": "candidate rejected or needs new agreed budget",
+      "required_hardware": false
+    },
+    {
+      "id": "02a-N5-unknown-template",
+      "given": "chat_template.jinja",
+      "action": "resolve tokenizer/template",
+      "expected": "template present and used; unknown template is an error, not a fallback",
+      "assertion": "chat_template_present==True",
+      "required_hardware": false
+    }
+  ],
+  "commands": [
+    {
+      "id": "02a-CMD1",
+      "argv": [
+        "python3",
+        "/tmp/inv.py",
+        "<checkpoint>"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 120,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/checkpoint-inventory.json"
+    },
+    {
+      "id": "02a-CMD2",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "--collect-only",
+        "-q",
+        "tests/models/qwen4_exp/",
+        "tests/engine/test_mtp_driver.py",
+        "tests/engine/test_kv_quant_config.py"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "a"
+    },
+    {
+      "id": "02a-CMD3",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/models/qwen4_exp/test_config.py",
+        "tests/models/qwen4_exp/test_weight.py",
+        "tests/models/qwen4_exp/test_weight_ckpt.py",
+        "tests/models/qwen4_exp/test_mtp.py",
+        "tests/models/qwen4_exp/test_ple.py",
+        "tests/models/qwen4_exp/test_ple_disk.py",
+        "tests/engine/test_mtp_driver.py",
+        "tests/engine/test_kv_quant_config.py",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 600,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/pytest-qwen4exp.txt"
+    },
+    {
+      "id": "02a-CMD4",
+      "argv": [
+        "curl",
+        "-s",
+        "localhost:1919/v1/stats"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 10,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/prod-memory-baseline.txt"
+    },
+    {
+      "id": "02a-CMD5",
+      "argv": [
+        "grep",
+        "-E",
+        "VmRSS|VmHWM|RssShmem|VmSwap",
+        "/proc/<worker>/status"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 10,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/prod-memory-baseline.txt"
+    }
+  ],
+  "performance_gate": {
+    "applies": false,
+    "reason": "checkpoint/budget pin task; token/s gate applies from 03 onward"
+  },
+  "quality_gate": {
+    "applies": false,
+    "reason": "no precision/checkpoint change; PLE FP8 is the published checkpoint, not a runtime conversion"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified in 02a"
+  },
+  "limitations": [
+    "Post-restart /v1/stats reported vram_bytes=0 / kv=null; the KV byte figure is from the pre-restart snapshot (total_pages 3438). Re-measure in 02b.",
+    "Host steady RSS (~29.2 GiB) exceeds the sum of declared host banks; the gap (likely shmem-backed bank allocation) is not attributed yet.",
+    "index metadata total_size / published output bytes differ from measured payload by <0.1%; ledger uses payload.",
+    "No routing trace, so expert cache hit/miss bytes are unknown; task 10/11."
+  ],
+  "generated_utc": "2026-09-11T10:30:00Z"
+}

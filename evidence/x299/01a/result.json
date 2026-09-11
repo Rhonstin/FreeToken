@@ -1,0 +1,124 @@
+{
+  "task_key": "01a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "01a-C1-cpu-sku",
+      "status": "pass",
+      "command_id": "01a-CMD1..7",
+      "note": null,
+      "log_path": "raw/hardware.json"
+    },
+    {
+      "id": "01a-C2-dimm",
+      "status": "pass",
+      "command_id": "01a-CMD1..7",
+      "note": null,
+      "log_path": "raw/hardware.json"
+    },
+    {
+      "id": "01a-C3-channels",
+      "status": "pass",
+      "command_id": "01a-CMD1..7",
+      "note": null,
+      "log_path": "raw/hardware.json"
+    },
+    {
+      "id": "01a-C4-pcie-idle",
+      "status": "pass",
+      "command_id": "01a-CMD1..7",
+      "note": null,
+      "log_path": "raw/hardware.json"
+    },
+    {
+      "id": "01a-C5-model-geometry",
+      "status": "pass",
+      "command_id": "01a-CMD1..7",
+      "note": null,
+      "log_path": "raw/hardware.json"
+    },
+    {
+      "id": "01a-N1-no-sku",
+      "status": "pass",
+      "command_id": "01a-CMD1..7",
+      "note": null,
+      "log_path": "raw/hardware.json"
+    },
+    {
+      "id": "01a-N2-partial-cpuset",
+      "status": "pass",
+      "command_id": "01a-CMD1..7",
+      "note": null,
+      "log_path": "raw/hardware.json"
+    },
+    {
+      "id": "01a-N3-no-dmi-perm",
+      "status": "pass",
+      "command_id": "01a-CMD1..7",
+      "note": null,
+      "log_path": "raw/hardware.json"
+    },
+    {
+      "id": "01a-N4-incomplete-dimm-map",
+      "status": "pass",
+      "command_id": "01a-CMD1..7",
+      "note": null,
+      "log_path": "raw/hardware.json"
+    },
+    {
+      "id": "01a-N5-link-idle-vs-load",
+      "status": "skip",
+      "command_id": "01a-CMD1..7",
+      "note": "under-load link deferred to 01b",
+      "log_path": "raw/hardware.json"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "01a-hw-20260911",
+      "raw_path": "raw/hardware.json",
+      "sha256": "e731893fc809eb760d995f6b949acdab163f8c9f4ffabb6575a3cafe05f2bd39"
+    },
+    {
+      "run_id": "01a-dimm-20260911",
+      "raw_path": "raw/dmidecode-memory.txt",
+      "sha256": "75f228ed160c94ddba8dfde4daf596bba8fa0e14fb0514771195d6e67ed4bd02"
+    },
+    {
+      "run_id": "01a-board-20260911",
+      "raw_path": "raw/dmidecode-board.txt",
+      "sha256": "eccf3c99198fd99d03f1bd6cd3fbe30c4a2d7b7079e7ce1abd4018193d31e5e7"
+    },
+    {
+      "run_id": "01a-topo-20260911",
+      "raw_path": "raw/cpu-topology.txt",
+      "sha256": "9f4fa143d92db88ecc427119062b14d4d20ffd820f12021b03eff4c62f95daa6"
+    },
+    {
+      "run_id": "01a-sys-20260911",
+      "raw_path": "raw/system-gpu.txt",
+      "sha256": "855307b5e59a833f70b2a57cb12750b75280509ecef01b11275dff245a417dde"
+    },
+    {
+      "run_id": "01a-git-20260911",
+      "raw_path": "raw/git-baseline.txt",
+      "sha256": "2591090af0ab8865123a5ebe25892a261b445e334a2efb78d371f59fc2cf507a"
+    },
+    {
+      "run_id": "01a-nonroot-dmi-20260911",
+      "raw_path": "raw/dmidecode-nonroot.txt",
+      "sha256": "91c569e35128c3955bc7f6825a678b6501a999f0fac81ee4457007629bb7c21c"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "PCIe under-load link not yet sampled (Gen2 idle observed); done in 01b.",
+    "Observed 4 channels inferred from dmidecode locator prefixes A/B/C/D, not controller bandwidth confirmation.",
+    "Mixed 16 GB (dual-rank) + 4 GB (single-rank) DIMMs in channels A/B may make effective bandwidth asymmetric; measured in 01b.",
+    "AI benchmark numbers are NOT produced here; no tokens/s figure is claimed."
+  ],
+  "rollback_result": "not_required (no production code changed)",
+  "evidence_note": "Raw logs captured on llmserver 192.168.2.163; artifacts mirrored to the dev beads host."
+}

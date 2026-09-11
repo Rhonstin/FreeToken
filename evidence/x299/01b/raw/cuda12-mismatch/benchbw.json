@@ -1,0 +1,54 @@
+{
+  "version": 4,
+  "timestamp": "2026-09-11T10:12:13+00:00",
+  "epoch": 1789121533,
+  "host": "llmserver",
+  "gpu": {
+    "index": 0,
+    "name": "NVIDIA GeForce RTX 3090",
+    "uuid": "GPU-fd98efd2-8559-aa03-d51e-99d494ae8061"
+  },
+  "cpu": {
+    "physical_cores": 6,
+    "threads_used": 6
+  },
+  "threshold": 2.0,
+  "ceilings": {
+    "cpu_stream_read_gbs": 47.1,
+    "pcie_linear_h2d_gbs": 12.39,
+    "pcie_linear_d2h_gbs": 13.2
+  },
+  "dtypes": {
+    "nvfp4": "offload",
+    "bf16": "offload"
+  },
+  "dtype_kernels": {
+    "nvfp4": {
+      "expert_bytes": 7974912,
+      "synth_experts": 128,
+      "cpu_moe_gbs": 26.08,
+      "cpu_moe_isa": "avx512f",
+      "isa_sweep": null,
+      "pcie_gather_gbs": null,
+      "cpu_moe_overlap_gbs": null,
+      "pcie_gather_overlap_gbs": null,
+      "ratio": null,
+      "recommended": "offload",
+      "note": "pcie gather unavailable (nvcc 12.4 would build kernels linking libcudart.so.12, but torch 2.11.0+cu130 ships CUDA 13.0 (libcudart.so.13). Install a CUDA 13.x toolkit, or set FREETOKEN_ALLOW_CUDA_MISMATCH=1 to override.)"
+    },
+    "bf16": {
+      "expert_bytes": 9437184,
+      "synth_experts": 128,
+      "cpu_moe_gbs": 47.75,
+      "cpu_moe_isa": "avx512f",
+      "isa_sweep": null,
+      "pcie_gather_gbs": null,
+      "cpu_moe_overlap_gbs": null,
+      "pcie_gather_overlap_gbs": null,
+      "ratio": null,
+      "recommended": "offload",
+      "note": "pcie gather unavailable (nvcc 12.4 would build kernels linking libcudart.so.12, but torch 2.11.0+cu130 ships CUDA 13.0 (libcudart.so.13). Install a CUDA 13.x toolkit, or set FREETOKEN_ALLOW_CUDA_MISMATCH=1 to override.)"
+    }
+  },
+  "workloads": {}
+}

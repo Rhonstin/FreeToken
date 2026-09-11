@@ -1,0 +1,76 @@
+[
+  {
+    "id": "01b-CMD1",
+    "argv": [
+      "sudo",
+      "-n",
+      "systemctl",
+      "stop",
+      "freetoken.service"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 150,
+    "expected_exit": 0,
+    "phase": "b"
+  },
+  {
+    "id": "01b-CMD2",
+    "argv": [
+      "env",
+      "CUDA_HOME=/opt/freetoken-venv/lib/python3.13/site-packages/nvidia/cu13",
+      "PATH=/opt/freetoken-venv/lib/python3.13/site-packages/nvidia/cu13/bin:$PATH",
+      "/opt/freetoken-venv/bin/ft",
+      "bench",
+      "bw",
+      "--dtype",
+      "nvfp4,bf16",
+      "-o",
+      "evidence/x299/01b/raw/benchbw.json"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1800,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/benchbw.json"
+  },
+  {
+    "id": "01b-CMD3",
+    "argv": [
+      "sudo",
+      "-n",
+      "systemctl",
+      "start",
+      "freetoken.service"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 150,
+    "expected_exit": 0,
+    "phase": "b"
+  },
+  {
+    "id": "01b-CMD4",
+    "argv": [
+      "curl",
+      "-s",
+      "-m",
+      "5",
+      "localhost:1919/health"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 10,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/prod-health.txt"
+  },
+  {
+    "id": "01b-CMD5-pytest",
+    "applicable": false,
+    "argv": [],
+    "phase": "b",
+    "reason": "benchmark/inventory task: no production code changed; acceptance is the measured artifacts, not pytest."
+  }
+]

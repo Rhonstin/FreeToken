@@ -1,0 +1,73 @@
+{
+  "schema_version": 2,
+  "collected_utc": "2026-09-11T10:08:33.427026+00:00",
+  "observations": [
+    {
+      "argv": [
+        "lscpu",
+        "-J"
+      ],
+      "exit_code": 0,
+      "stdout": "{\n   \"lscpu\": [\n      {\n         \"field\": \"Architecture:\",\n         \"data\": \"x86_64\"\n      },{\n         \"field\": \"CPU op-mode(s):\",\n         \"data\": \"32-bit, 64-bit\"\n      },{\n         \"field\": \"Address sizes:\",\n         \"data\": \"46 bits physical, 48 bits virtual\"\n      },{\n         \"field\": \"Byte Order:\",\n         \"data\": \"Little Endian\"\n      },{\n         \"field\": \"CPU(s):\",\n         \"data\": \"12\"\n      },{\n         \"field\": \"On-line CPU(s) list:\",\n         \"data\": \"0-11\"\n      },{\n         \"field\": \"Vendor ID:\",\n         \"data\": \"GenuineIntel\"\n      },{\n         \"field\": \"Model name:\",\n         \"data\": \"Intel(R) Core(TM) i7-7800X CPU @ 3.50GHz\"\n      },{\n         \"field\": \"CPU family:\",\n         \"data\": \"6\"\n      },{\n         \"field\": \"Model:\",\n         \"data\": \"85\"\n      },{\n         \"field\": \"Thread(s) per core:\",\n         \"data\": \"2\"\n      },{\n         \"field\": \"Core(s) per socket:\",\n         \"data\": \"6\"\n      },{\n         \"field\": \"Socket(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Stepping:\",\n         \"data\": \"4\"\n      },{\n         \"field\": \"CPU(s) scaling MHz:\",\n         \"data\": \"49%\"\n      },{\n         \"field\": \"CPU max MHz:\",\n         \"data\": \"4000.0000\"\n      },{\n         \"field\": \"CPU min MHz:\",\n         \"data\": \"1200.0000\"\n      },{\n         \"field\": \"BogoMIPS:\",\n         \"data\": \"6999.82\"\n      },{\n         \"field\": \"Flags:\",\n         \"data\": \"fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault cat_l3 cdp_l3 pti ssbd mba ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm cqm mpx rdt_a avx512f avx512dq rdseed adx smap clflushopt clwb intel_pt avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local dtherm ida arat pln pts hwp hwp_act_window hwp_pkg_req vnmi md_clear flush_l1d arch_capabilities\"\n      },{\n         \"field\": \"Virtualization:\",\n         \"data\": \"VT-x\"\n      },{\n         \"field\": \"L1d cache:\",\n         \"data\": \"192 KiB (6 instances)\"\n      },{\n         \"field\": \"L1i cache:\",\n         \"data\": \"192 KiB (6 instances)\"\n      },{\n         \"field\": \"L2 cache:\",\n         \"data\": \"6 MiB (6 instances)\"\n      },{\n         \"field\": \"L3 cache:\",\n         \"data\": \"8.3 MiB (1 instance)\"\n      },{\n         \"field\": \"NUMA node(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"NUMA node0 CPU(s):\",\n         \"data\": \"0-11\"\n      },{\n         \"field\": \"Vulnerability Gather data sampling:\",\n         \"data\": \"Vulnerable\"\n      },{\n         \"field\": \"Vulnerability Ghostwrite:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Indirect target selection:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Itlb multihit:\",\n         \"data\": \"KVM: Mitigation: Split huge pages\"\n      },{\n         \"field\": \"Vulnerability L1tf:\",\n         \"data\": \"Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Mds:\",\n         \"data\": \"Mitigation; Clear CPU buffers; SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Meltdown:\",\n         \"data\": \"Mitigation; PTI\"\n      },{\n         \"field\": \"Vulnerability Mmio stale data:\",\n         \"data\": \"Mitigation; Clear CPU buffers; SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Old microcode:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Reg file data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Retbleed:\",\n         \"data\": \"Mitigation; IBRS\"\n      },{\n         \"field\": \"Vulnerability Spec rstack overflow:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec store bypass:\",\n         \"data\": \"Mitigation; Speculative Store Bypass disabled via prctl\"\n      },{\n         \"field\": \"Vulnerability Spectre v1:\",\n         \"data\": \"Mitigation; usercopy/swapgs barriers and __user pointer sanitization\"\n      },{\n         \"field\": \"Vulnerability Spectre v2:\",\n         \"data\": \"Mitigation; IBRS; IBPB conditional; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\"\n      },{\n         \"field\": \"Vulnerability Srbds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsa:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsx async abort:\",\n         \"data\": \"Mitigation; Clear CPU buffers; SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Vmscape:\",\n         \"data\": \"Mitigation; IBPB before exit to userspace\"\n      }\n   ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "lscpu",
+        "-e=CPU,CORE,SOCKET,NODE,ONLINE"
+      ],
+      "exit_code": 0,
+      "stdout": "CPU CORE SOCKET NODE ONLINE\n  0    0      0    0    yes\n  1    1      0    0    yes\n  2    2      0    0    yes\n  3    3      0    0    yes\n  4    4      0    0    yes\n  5    5      0    0    yes\n  6    0      0    0    yes\n  7    1      0    0    yes\n  8    2      0    0    yes\n  9    3      0    0    yes\n 10    4      0    0    yes\n 11    5      0    0    yes\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "lsblk",
+        "-J",
+        "-o",
+        "NAME,TYPE,SIZE,ROTA,TRAN,MODEL"
+      ],
+      "exit_code": 0,
+      "stdout": "{\n   \"blockdevices\": [\n      {\n         \"name\": \"nvme0n1\",\n         \"type\": \"disk\",\n         \"size\": \"931.5G\",\n         \"rota\": false,\n         \"tran\": \"nvme\",\n         \"model\": \"Lexar SSD NQ790 1TB\",\n         \"children\": [\n            {\n               \"name\": \"nvme0n1p1\",\n               \"type\": \"part\",\n               \"size\": \"1G\",\n               \"rota\": false,\n               \"tran\": \"nvme\",\n               \"model\": null\n            },{\n               \"name\": \"nvme0n1p2\",\n               \"type\": \"part\",\n               \"size\": \"930.5G\",\n               \"rota\": false,\n               \"tran\": \"nvme\",\n               \"model\": null\n            }\n         ]\n      }\n   ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "nvidia-smi",
+        "--query-gpu=name,memory.total,driver_version,pci.bus_id,pcie.link.gen.current,pcie.link.width.current",
+        "--format=csv"
+      ],
+      "exit_code": 0,
+      "stdout": "name, memory.total [MiB], driver_version, pci.bus_id, pcie.link.gen.current, pcie.link.width.current\nNVIDIA GeForce RTX 3090, 24576 MiB, 610.57.04, 00000000:65:00.0, 2, 16\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "uname",
+        "-sr"
+      ],
+      "exit_code": 0,
+      "stdout": "Linux 7.0.0-31-generic\n",
+      "stderr": ""
+    }
+  ],
+  "ram_channels": null,
+  "ram_channels_reason": "Requires DIMM/controller evidence; not inferred from platform",
+  "configured_ram_speed": null,
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "meminfo": "MemTotal:       104411424 kB\nMemFree:         7725404 kB\nMemAvailable:   31390884 kB\nBuffers:           12488 kB\nCached:         90902000 kB\nSwapCached:        20792 kB\nActive:         52172272 kB\nInactive:       41638500 kB\nActive(anon):   28504584 kB\nInactive(anon): 40974796 kB\nActive(file):   23667688 kB\nInactive(file):   663704 kB\nUnevictable:        7848 kB\nMlocked:            7848 kB\nSwapTotal:       4194300 kB\nSwapFree:        4009624 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:              5524 kB\nWriteback:             0 kB\nAnonPages:       2904552 kB\nMapped:         67004608 kB\nShmem:          66577364 kB\nKReclaimable:     373780 kB\nSlab:             820356 kB\nSReclaimable:     373780 kB\nSUnreclaim:       446576 kB\nKernelStack:        6988 kB\nPageTables:       150480 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    56400012 kB\nCommitted_AS:   73984888 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:      693188 kB\nVmallocChunk:          0 kB\nPercpu:             9120 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:         0 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:    96492096 kB\nDirectMap2M:    10102784 kB\nDirectMap1G:     2097152 kB\n",
+  "link_note": "Current link may be idle. Repeat during controlled benchmark into a different evidence file."
+}

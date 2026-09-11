@@ -1,0 +1,123 @@
+[
+  {
+    "id": "03a-CMD1",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "benchmarks/bench_decode_moe.py",
+      "--help"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 30,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/bench-help.txt"
+  },
+  {
+    "id": "03a-CMD2",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "benchmarks/bench_kv_quant.py",
+      "--help"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 30,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/bench-help.txt"
+  },
+  {
+    "id": "03a-CMD3",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "/tmp/03a_probe.py",
+      "--decode",
+      "256",
+      "--greedy",
+      "--jsonl",
+      "/tmp/03a_rows.jsonl"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 600,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/latency-probe.jsonl"
+  },
+  {
+    "id": "03a-CMD4",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "/tmp/03a_probe.py",
+      "--decode",
+      "256",
+      "--greedy",
+      "--jsonl",
+      "/tmp/03a_rows.jsonl"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 600,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/latency-probe-2.jsonl",
+    "note": "second repeat for reproducibility"
+  },
+  {
+    "id": "03a-CMD5",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "benchmarks/bench_decode_moe.py",
+      "--model",
+      "<ckpt>",
+      "--backend",
+      "offload",
+      "--decode",
+      "256",
+      "--cache",
+      "2600",
+      "--greedy",
+      "--json",
+      "evidence/x299/03b/raw/decode-rows.json"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1800,
+    "expected_exit": 0,
+    "phase": "b",
+    "note": "spawns its own server; prod must be stopped first (RUNBOOK policy)"
+  },
+  {
+    "id": "03a-CMD6",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "benchmarks/bench_kv_quant.py",
+      "--model",
+      "<ckpt>",
+      "--prompt-dir",
+      "<fixtures>",
+      "--contexts",
+      "4k,16k,32k",
+      "--decode",
+      "256",
+      "--repeats-short",
+      "3",
+      "--json",
+      "evidence/x299/03b/raw/kv-quant-rows.json"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 3600,
+    "expected_exit": 0,
+    "phase": "b",
+    "note": "requires a local prompt_<label>.jsonl fixture dir"
+  },
+  {
+    "id": "03a-CMD7-pytest",
+    "applicable": false,
+    "argv": [],
+    "phase": "a",
+    "reason": "no existing tests reference benchmarks/bench_* or benchmark.client; acceptance is the report schema + raw rows. A new test mirroring python/freetoken/benchmark is a 03b candidate if code is added."
+  }
+]

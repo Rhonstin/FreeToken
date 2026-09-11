@@ -1,0 +1,80 @@
+[
+  {
+    "id": "04b-CMD1",
+    "argv": [
+      "nsys",
+      "profile",
+      "-o",
+      "evidence/x299/04b/raw/decode_eager",
+      "--force-overwrite=true",
+      "--trace=cuda,nvtx",
+      "--sample=none",
+      "--cpuctxsw=none",
+      "--cuda-graph-trace=node",
+      "--",
+      "/opt/freetoken-venv/bin/python",
+      "benchmarks/bench_decode_moe.py",
+      "--model",
+      "$FT_MODEL",
+      "--backend",
+      "offload",
+      "--decode",
+      "256",
+      "--cache",
+      "2600",
+      "--greedy",
+      "--no-graph",
+      "--json",
+      "evidence/x299/04b/raw/decode-eager-rows.jsonl"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1800,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/decode_eager.nsys-rep"
+  },
+  {
+    "id": "04b-CMD2",
+    "argv": [
+      "nsys",
+      "stats",
+      "--report",
+      "cuda_gpu_kern_sum,cuda_gpu_mem_time_sum,cuda_gpu_mem_size_sum,nvtx_sum",
+      "--format",
+      "table",
+      "evidence/x299/04b/raw/decode_eager.nsys-rep"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 300,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/nsys-stats.txt"
+  },
+  {
+    "id": "04b-CMD3",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "benchmarks/bench_decode_moe.py",
+      "--model",
+      "$FT_MODEL",
+      "--backend",
+      "offload",
+      "--decode",
+      "256",
+      "--cache",
+      "2600",
+      "--greedy",
+      "--no-graph",
+      "--json",
+      "evidence/x299/04b/raw/decode-eager-plain-rows.jsonl"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1800,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/decode-eager-plain-rows.jsonl"
+  }
+]

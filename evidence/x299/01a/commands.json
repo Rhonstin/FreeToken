@@ -1,0 +1,129 @@
+[
+  {
+    "id": "01a-CMD0-pytest",
+    "applicable": false,
+    "argv": [],
+    "phase": "a",
+    "reason": "inventory/benchmark-only task: 01a changes no production code, so there is no unit-test target. Acceptance is verified from hardware data (contract cases), not pytest."
+  },
+  {
+    "id": "01a-CMD1",
+    "argv": [
+      "python3",
+      "/tmp/collect_hardware.py",
+      "--out",
+      "/tmp/x299-hw.json"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver:192.168.2.163",
+    "timeout_s": 60,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/hardware.json"
+  },
+  {
+    "id": "01a-CMD2",
+    "argv": [
+      "lscpu",
+      "-J"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 20,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/cpu-topology.txt"
+  },
+  {
+    "id": "01a-CMD3",
+    "argv": [
+      "sudo",
+      "dmidecode",
+      "-t",
+      "memory"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 20,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/dmidecode-memory.txt"
+  },
+  {
+    "id": "01a-CMD4",
+    "argv": [
+      "sudo",
+      "dmidecode",
+      "-t",
+      "processor"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 20,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/dmidecode-board.txt"
+  },
+  {
+    "id": "01a-CMD5",
+    "argv": [
+      "nvidia-smi",
+      "--query-gpu=name,serial,uuid,memory.total,driver_version,vbios_version,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current",
+      "--format=csv"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 20,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/system-gpu.txt"
+  },
+  {
+    "id": "01a-CMD6",
+    "argv": [
+      "bash",
+      "-lc",
+      "git rev-parse HEAD; git diff --binary | sha256sum; git status --porcelain=v1 | sort | sha256sum"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 30,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/git-baseline.txt"
+  },
+  {
+    "id": "01a-CMD7",
+    "argv": [
+      "/opt/freetoken-venv/bin/ft",
+      "bench",
+      "bw",
+      "--help"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 30,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/capability-help.txt"
+  },
+  {
+    "id": "01a-CMD8",
+    "argv": [
+      "/opt/freetoken-venv/bin/ft",
+      "bench",
+      "bw",
+      "--dtype",
+      "nvfp4",
+      "-o",
+      "evidence/x299/01b/raw/benchbw-nvfp4.json"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 900,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/benchbw-nvfp4.json",
+    "note": "measurement only; requires exclusivity decision because prod holds the GPU/RAM"
+  }
+]

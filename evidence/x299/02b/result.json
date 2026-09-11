@@ -1,0 +1,111 @@
+{
+  "task_key": "02b",
+  "outcome": "no_change",
+  "outcome_reason": "Checkpoint pinned and fit verified; no runtime change proposed. Pinned-PLE candidate rejected on unproven peak.",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "02b-C1-fit-steady",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-C2-no-sustained-swap",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-C3-no-major-fault-storm",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-C4-rss-stable",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-C5-mtp-available",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-C6-tests",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/pytest-negative.txt"
+    },
+    {
+      "id": "02b-N1-missing-mtp",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-N2-mixed-formats",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-N3-ftw-missing-ple",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-N4-peak-over-available",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-N5-unknown-template",
+      "status": "pass",
+      "command_id": "02b-CMD1..3",
+      "log_path": "raw/sustained-decode.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "02b-attribution",
+      "raw_path": "raw/worker-memory-attribution.txt",
+      "sha256": "a9657a13cfd10ac3403d3f4f3ab6eddbe20b5228381906fd622fadd077987d23"
+    },
+    {
+      "run_id": "02b-sustained-decode",
+      "raw_path": "raw/sustained-decode.txt",
+      "sha256": "7bed10e742c9c3746950c89498940b1827f4e0a4b2722ef2915cf897a45aaaea"
+    },
+    {
+      "run_id": "02b-pytest",
+      "raw_path": "raw/pytest-negative.txt",
+      "sha256": "0535f968882176b3d5a5d440a33148b105ddafece8cbc5c400178ab756a964be"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Single decode sample (767 tokens); not a long throttling run (that is task 20).",
+    "cgroup shmem (68 GB) exceeds resident RssShmem (29.3 GiB); unresident share is not attributed here.",
+    "Pinned-PLE feasibility is rejected conservatively, not proven impossible: a dedicated load-peak measurement could revisit it in task 12."
+  ],
+  "rollback_result": "not_required (no production code changed)",
+  "key_findings": {
+    "decode_tok_s": 17.53,
+    "completion_tokens": 767,
+    "wall_s": 43.753941,
+    "steady_rss_gib": 29.26,
+    "peak_rss_gib": 45.31,
+    "swap_delta_bytes": -409600,
+    "major_faults_delta": 43,
+    "minor_faults_delta": 479,
+    "pinned_ple_projected_gib": 87.0,
+    "mem_total_gib": 99.6
+  }
+}

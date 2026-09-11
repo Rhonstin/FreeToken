@@ -1,0 +1,108 @@
+{
+  "task_key": "03a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "03a-C1-probe-metrics",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-C2-usage-counts",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-C3-sse-coalescing",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-C4-cold-vs-warm-ttft",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-C5-server-vs-client",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-C6-baseline-reproducible",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-N1-sse-multi-token",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-N2-eos-early",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-N3-timeout",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-N4-server-crash",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-N5-empty-output",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-N6-missing-usage",
+      "status": "pass",
+      "command_id": "03a-CMD1..4",
+      "log_path": "raw/latency-probe.jsonl"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "03a-latency-probe",
+      "raw_path": "raw/latency-probe.jsonl",
+      "sha256": "4ca7f4a5ef48c662e3969a8268cc689a088d85cd0ea756aefc929b56ddfe2a89"
+    },
+    {
+      "run_id": "03a-bench-help",
+      "raw_path": "raw/bench-help.txt",
+      "sha256": "a984e10ab4bd9271dc180327cfe33436dd9c22788dc96a13bd502c999387e771"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Server per-request phase times (prefill_ms/decode_ms) are not exposed by the current /v1/stats; they stay null until the server exports them.",
+    "The baseline probe uses one fixed prompt, not the full 4k/16k/32k corpus; the corpus fixture is defined but built in 03b.",
+    "bench_decode_moe is single-concurrency only today; concurrency 2/4 needs the bench_kv_quant path or an extension.",
+    "TTFT observed at ~5.6 s for a 73-token prompt is high and unexplained here; task 04 profiles the critical path."
+  ],
+  "rollback_result": "not_required (no production code changed)",
+  "key_findings": {
+    "baseline_decode_tok_s": 21.95,
+    "baseline_ms_per_token": 45.56,
+    "baseline_event_ms_p95": 80.13,
+    "baseline_ttft_ms": 5570.5,
+    "sse_events_vs_tokens": "254/255",
+    "ppl_endpoint_present": true
+  }
+}

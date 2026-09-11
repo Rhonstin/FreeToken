@@ -1,0 +1,270 @@
+{
+  "schema_version": 2,
+  "task_key": "02b",
+  "bead_id": "FreeToken-mtp-1ll.4",
+  "derived_from_contract": "../02a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "id": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "source": "Qwen/Qwen3.8-Flash-Next + Qwen/Qwen3.8-Flash-Next-FP8 (PLE)",
+    "modelopt_commit": "87c9f8cf83021957d1a1a575c90c9a4eaaf7ef0c",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "shards": 206,
+    "tensors": 296475,
+    "measured_payload_bytes": 135156121594,
+    "published_output_bytes": 135253624416,
+    "note": "no HF git revision available locally; pinned by content digests + provenance"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [],
+  "symbols": {
+    "existing": {
+      "python/freetoken/models/qwen4_exp/config.py": [
+        "Qwen4ExpArgs",
+        "parse_config",
+        "ple_slot_states",
+        "_quant_get",
+        "_ignored",
+        "_layer_types"
+      ],
+      "python/freetoken/models/qwen4_exp/weight.py": [
+        "iter_weights",
+        "load_ple_table",
+        "PleTable",
+        "ftw_side_files",
+        "nvfp4_expert_spec",
+        "iter_mtp_expert_pieces",
+        "mtp_expert_method"
+      ],
+      "python/freetoken/models/qwen4_exp/mtp.py": [
+        "Qwen4ExpMTPHead"
+      ],
+      "python/freetoken/moe/host_banks.py": [
+        "HostBank",
+        "HostResidency",
+        "alloc_banks",
+        "alloc_layer_banks",
+        "pin_banks",
+        "read_range_into",
+        "read_file_into"
+      ],
+      "python/freetoken/engine/config.py": [
+        "EngineConfig",
+        "apply_mtp_override",
+        "checkpoint_quant_config"
+      ]
+    },
+    "proposed": []
+  },
+  "inputs": {
+    "decode_workload": {
+      "value": {
+        "prompt_tokens": 73,
+        "completion_tokens": 767,
+        "finish_reason": "length",
+        "wall_s": 43.753941
+      },
+      "source": "live prod /v1/chat/completions",
+      "unit": "tokens"
+    },
+    "steady_worker_rss_bytes": {
+      "value": 31417495552,
+      "source": "/proc worker VmRSS after decode",
+      "unit": "bytes"
+    },
+    "peak_worker_bytes": {
+      "value": 48654401536,
+      "source": "VmHWM (02a snapshot)",
+      "unit": "bytes"
+    },
+    "reserve_bytes": {
+      "value": 10691729817,
+      "source": "max(8 GiB,10% MemTotal)",
+      "unit": "bytes"
+    },
+    "host_rss_attribution": {
+      "value": {
+        "RssAnon": 1036600,
+        "RssFile": 252112,
+        "RssShmem": 29326820
+      },
+      "source": "/proc worker status",
+      "unit": "KiB"
+    },
+    "pinned_ple_projection_bytes": {
+      "value": 93375028755.88,
+      "source": "steady + PLE 47.74 GiB + reserve",
+      "unit": "bytes"
+    }
+  },
+  "invariants": [
+    "Steady-state resident set plus reserve must stay below MemTotal; 30.7 + 9.96 = 40.7 GiB << 99.6 GiB.",
+    "A 767-token sustained decode must not grow VmSwap or SwapFree; observed swap delta is 0 (-400 KiB actually decreased).",
+    "Major faults during sustained decode are load-time only; +24 across 767 tokens.",
+    "Host steady RSS is dominated by shmem-resident host banks (~29.3 GiB), not PLE and not anonymous.",
+    "Pinned PLE is not chosen: its peak is not proven and it is non-reclaimable; disk backend stays.",
+    "No production file under /opt/FreeToken is modified by 02b."
+  ],
+  "cases": [
+    {
+      "id": "02b-C1-fit-steady",
+      "given": "prod running, disk PLE",
+      "action": "compare steady RSS to MemTotal - reserve",
+      "expected": "steady + reserve < MemTotal",
+      "assertion": "31417495552+10691729817 < 106917298176",
+      "status": "pass"
+    },
+    {
+      "id": "02b-C2-no-sustained-swap",
+      "given": "767-token decode",
+      "action": "sample VmSwap/SwapFree during",
+      "expected": "swap does not grow",
+      "assertion": "swap delta -409600 B",
+      "status": "pass"
+    },
+    {
+      "id": "02b-C3-no-major-fault-storm",
+      "given": "767-token decode",
+      "action": "delta major faults",
+      "expected": "small, load-time only",
+      "assertion": "majflt delta +43",
+      "status": "pass"
+    },
+    {
+      "id": "02b-C4-rss-stable",
+      "given": "decode",
+      "action": "sample VmRSS",
+      "expected": "no creep",
+      "assertion": "RSS flat at ~30.7 GiB",
+      "status": "pass"
+    },
+    {
+      "id": "02b-C5-mtp-available",
+      "given": "index",
+      "action": "count mtp entries",
+      "expected": "31",
+      "assertion": "present",
+      "status": "pass"
+    },
+    {
+      "id": "02b-C6-tests",
+      "given": "dev venv",
+      "action": "run checkpoint/MTP/KV tests",
+      "expected": "0 failures",
+      "assertion": "150 passed / 0 failed",
+      "status": "pass"
+    },
+    {
+      "id": "02b-N1-missing-mtp",
+      "given": "checkpoint without mtp.*",
+      "action": "unit test loud failure",
+      "expected": "error not silent",
+      "assertion": "test_default_model_builds_no_mtp_submodule passes",
+      "status": "pass"
+    },
+    {
+      "id": "02b-N2-mixed-formats",
+      "given": "U8+E4M3+F32 experts, BF16 dense",
+      "action": "dtype classification",
+      "expected": "dense stays BF16",
+      "assertion": "components_by_dtype ok",
+      "status": "pass"
+    },
+    {
+      "id": "02b-N3-ftw-missing-ple",
+      "given": "PLE shard absent",
+      "action": "load_ple_table error path",
+      "expected": "ValueError",
+      "assertion": "test_layouts_readers_and_errors passes",
+      "status": "pass"
+    },
+    {
+      "id": "02b-N4-peak-over-available",
+      "given": "pinned PLE candidate",
+      "action": "budget arithmetic",
+      "expected": "reject if reserve breached",
+      "assertion": "projected 87.0 GiB vs MemTotal 99.6 GiB -> reject (unproven peak; conservative)",
+      "status": "pass"
+    },
+    {
+      "id": "02b-N5-unknown-template",
+      "given": "chat request",
+      "action": "apply chat template",
+      "expected": "known template used",
+      "assertion": "completion ok, prompt_tokens=73",
+      "status": "pass"
+    }
+  ],
+  "commands": [
+    {
+      "id": "02b-CMD1",
+      "argv": [
+        "bash",
+        "-lc",
+        "grep -E 'VmRSS|Vmlck|RssShmem' /proc/<worker>/status"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 20,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/worker-memory-attribution.txt"
+    },
+    {
+      "id": "02b-CMD2",
+      "argv": [
+        "curl",
+        "-s",
+        "-m",
+        "900",
+        "localhost:1919/v1/chat/completions",
+        "-d",
+        "{... max_tokens:768 ...}"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/sustained-decode.txt"
+    },
+    {
+      "id": "02b-CMD3",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "<8 checkpoint/MTP/KV test files>",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 600,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/pytest-negative.txt"
+    }
+  ],
+  "performance_gate": {
+    "applies": false,
+    "reason": "fit/acceptance task; no optimization candidate"
+  },
+  "quality_gate": {
+    "applies": false,
+    "reason": "no precision/checkpoint change"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no file changed; baseline config already in effect"
+  },
+  "limitations": [
+    "Single decode sample (767 tokens); not a long throttling run (that is task 20).",
+    "cgroup shmem (68 GB) exceeds resident RssShmem (29.3 GiB); unresident share is not attributed here.",
+    "Pinned-PLE feasibility is rejected conservatively, not proven impossible: a dedicated load-peak measurement could revisit it in task 12."
+  ],
+  "generated_utc": "2026-09-11T10:36:00Z"
+}

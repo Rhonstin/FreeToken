@@ -1,0 +1,51 @@
+[
+  {
+    "id": "02b-CMD1",
+    "argv": [
+      "bash",
+      "-lc",
+      "grep -E 'VmRSS|Vmlck|RssShmem' /proc/<worker>/status"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 20,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/worker-memory-attribution.txt"
+  },
+  {
+    "id": "02b-CMD2",
+    "argv": [
+      "curl",
+      "-s",
+      "-m",
+      "900",
+      "localhost:1919/v1/chat/completions",
+      "-d",
+      "{... max_tokens:768 ...}"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 900,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/sustained-decode.txt"
+  },
+  {
+    "id": "02b-CMD3",
+    "argv": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "<8 checkpoint/MTP/KV test files>",
+      "-m",
+      "not slow"
+    ],
+    "cwd": "dev worktree",
+    "timeout_s": 600,
+    "expected_exit": 0,
+    "phase": "b",
+    "artifact": "raw/pytest-negative.txt"
+  }
+]

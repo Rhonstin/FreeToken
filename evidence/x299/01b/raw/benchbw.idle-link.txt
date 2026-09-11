@@ -1,0 +1,2 @@
+name, memory.total [MiB], memory.used [MiB], pcie.link.gen.current, pcie.link.width.current, clocks.current.sm [MHz], power.draw [W], temperature.gpu
+NVIDIA GeForce RTX 3090, 24576 MiB, 1 MiB, 2, 16, 900 MHz, 61.56 W, 35

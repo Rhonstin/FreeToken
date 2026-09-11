@@ -1,0 +1,22 @@
+MainPID=1206779
+### stats
+{"instance_id":"314051ed-b5dd-496c-b3c8-ac1b987d8b47","model":{"id":"Qwen3.8-Flash-Next-NVFP4","ctx":262144,"attn":"hybrid_linear","moe":true,"sampling":{"temperature":1.0,"top_k":20,"top_p":0.95}},"uptime_s":685,"kv":null,"mamba":null,"swa":null,"vram_bytes":0,"gpus":[{"index":0,"name":"NVIDIA GeForce RTX 3090","uuid":"GPU-fd98efd2-8559-aa03-d51e-99d494ae8061","total_bytes":25293225984}],"throughput":{"decode_tps":0.0,"prefill_tps":0.0},"requests":{"active":0,"completed":0,"p95_ms":0,"ttft_mean_ms":0,"prompt_tokens_total":0,"completion_tokens_total":0}}
+### status
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	  689032 kB
+VmRSS:	   27744 kB
+RssAnon:	   18128 kB
+RssFile:	    9608 kB
+VmSwap:	  399504 kB
+### smaps_rollup
+### cgroup
+0::/system.slice/freetoken.service
+### meminfo
+MemTotal:       104411424 kB
+MemAvailable:   33045188 kB
+Buffers:            6592 kB
+Cached:         90155136 kB
+SwapCached:       163244 kB
+SwapTotal:       4194300 kB
+SwapFree:        2383192 kB

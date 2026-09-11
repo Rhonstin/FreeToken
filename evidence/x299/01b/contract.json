@@ -1,0 +1,284 @@
+{
+  "schema_version": 2,
+  "task_key": "01b",
+  "bead_id": "FreeToken-mtp-1ll.2",
+  "derived_from_contract": "../01a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [],
+  "symbols": {
+    "existing": {
+      "python/freetoken/moe/benchbw.py": [
+        "measure_cpu_mem_bw",
+        "measure_pcie_bw",
+        "measure_pcie_gather_bw",
+        "measure_cpu_moe_bw",
+        "measure_overlap_bw",
+        "recommend",
+        "run_benchbw",
+        "_ISA_TIERS",
+        "_forced_isa"
+      ],
+      "python/freetoken/moe/cpu_executor.py": [
+        "physical_core_cpus",
+        "resolve_threads_and_affinity",
+        "CpuMoeExecutor",
+        "compiled_extension_supports"
+      ]
+    },
+    "proposed": []
+  },
+  "inputs": {
+    "bench_argv": {
+      "value": [
+        "env",
+        "CUDA_HOME=/opt/freetoken-venv/lib/python3.13/site-packages/nvidia/cu13",
+        "PATH=/opt/freetoken-venv/lib/python3.13/site-packages/nvidia/cu13/bin:$PATH",
+        "/opt/freetoken-venv/bin/ft",
+        "bench",
+        "bw",
+        "--dtype",
+        "nvfp4,bf16",
+        "-o",
+        "evidence/x299/01b/raw/benchbw.json"
+      ],
+      "source": "commands.json",
+      "unit": "argv"
+    },
+    "bench_toolkit": {
+      "value": "venv nvidia/cu13 nvcc 13.3 (CUDA_HOME override); system nvcc 12.4 fails",
+      "source": "benchbw.log + nvcc --version",
+      "unit": "string"
+    },
+    "cpu_threads_used": {
+      "value": 6,
+      "source": "benchbw.json",
+      "unit": "count"
+    },
+    "expert_formats_tested": {
+      "value": [
+        "nvfp4",
+        "bf16"
+      ],
+      "source": "benchbw.json",
+      "unit": "list"
+    }
+  },
+  "invariants": [
+    "The GPU stays under 24 GiB: the bench allocates synthetic banks within the documented cap and prod is stopped first.",
+    "Bench peak host RAM stays below the 01a reserve policy max(8 GiB, 10% MemTotal); no OOM, no sustained swap.",
+    "No BIOS, overclock, ASPM, IOMMU or CPU-governor change is made; IOMMU remains intel_iommu=on iommu=pt.",
+    "PCIe link is Gen3 x16 under load (Ampere link-trained); idle Gen2 x16 must not be used for a bandwidth conclusion.",
+    "The PCIe-gather kernel only builds when CUDA_HOME points at the venv CUDA 13 toolkit; the system nvcc 12.4 path fails and is a recorded negative fixture.",
+    "No production file under /opt/FreeToken is modified; prod is restarted and returns to serving after the bench."
+  ],
+  "cases": [
+    {
+      "id": "01b-C1-ceilings",
+      "given": "prod stopped, GPU free",
+      "action": "measure CPU STREAM read + linear H2D/D2H",
+      "expected": "finite positive GB/s",
+      "assertion": "cpu_stream_read_gbs>0 and h2d>0 and d2h>0",
+      "required_hardware": true
+    },
+    {
+      "id": "01b-C2-real-kernels",
+      "given": "CUDA_HOME=venv cu13",
+      "action": "bench CPU MoE + PCIe gather per dtype",
+      "expected": "cpu_moe_gbs and pcie_gather_gbs finite for nvfp4 and bf16",
+      "assertion": "pcie_gather_gbs is not null",
+      "required_hardware": true
+    },
+    {
+      "id": "01b-C3-link-under-load",
+      "given": "bench running",
+      "action": "sample pcie.link 1 Hz",
+      "expected": "Gen3 x16 observed",
+      "assertion": "'3' in under-load gen counts",
+      "required_hardware": true
+    },
+    {
+      "id": "01b-C4-prod-restart",
+      "given": "bench finished",
+      "action": "systemctl start + /health poll",
+      "expected": "maintenance==serving",
+      "assertion": "restart happened and health is serving",
+      "required_hardware": true
+    },
+    {
+      "id": "01b-C5-memory-reserve",
+      "given": "bench with synthetic banks",
+      "action": "observe RAM",
+      "expected": "no OOM, RAM reserve respected",
+      "assertion": "run exit 0 and no OOM in log",
+      "required_hardware": true
+    },
+    {
+      "id": "01b-N1-cuda-toolkit-mismatch",
+      "given": "system nvcc 12.4 vs torch cu130",
+      "action": "run bench without CUDA_HOME override",
+      "expected": "pcie gather unavailable, recorded not fabricated",
+      "assertion": "cuda12-mismatch run has null pcie_gather_gbs",
+      "required_hardware": true
+    },
+    {
+      "id": "01b-N2-no-platform-mutation",
+      "given": "before/after /proc/cmdline",
+      "action": "confirm no BIOS/ASPM/IOMMU/governor change",
+      "expected": "unchanged",
+      "assertion": "iommu string still on/ pt",
+      "required_hardware": true
+    },
+    {
+      "id": "01b-N3-no-full-ram",
+      "given": "bench budget",
+      "action": "run bench",
+      "expected": "does not consume all RAM",
+      "assertion": "no OOM/swap-in in run.log",
+      "required_hardware": true
+    }
+  ],
+  "measurements": {
+    "ceilings": {
+      "cpu_stream_read_gbs": 43.86,
+      "pcie_linear_h2d_gbs": 12.21,
+      "pcie_linear_d2h_gbs": 13.2
+    },
+    "nvfp4": {
+      "expert_bytes": 7974912,
+      "synth_experts": 128,
+      "cpu_moe_gbs": 30.88,
+      "cpu_moe_isa": "avx512f",
+      "pcie_gather_gbs": 12.36,
+      "cpu_moe_overlap_gbs": 26.23,
+      "pcie_gather_overlap_gbs": 12.3,
+      "ratio": 2.498,
+      "recommended": "hybrid"
+    },
+    "bf16": {
+      "expert_bytes": 9437184,
+      "synth_experts": 128,
+      "cpu_moe_gbs": 47.05,
+      "cpu_moe_isa": "avx512f",
+      "pcie_gather_gbs": 12.36,
+      "cpu_moe_overlap_gbs": 36.22,
+      "pcie_gather_overlap_gbs": 12.35,
+      "ratio": 3.807,
+      "recommended": "hybrid"
+    },
+    "bench_cpu_physical_cores": 6,
+    "bench_threads_used": 6,
+    "pcie_link_idle": {
+      "raw": "name, memory.total [MiB], memory.used [MiB], pcie.link.gen.current, pcie.link.width.current, clocks.current.sm [MHz], power.draw [W], temperature.gpu\nNVIDIA GeForce RTX 3090, 24576 MiB, 1 MiB, 2, 16, 900 MHz, 61.56 W, 35"
+    },
+    "pcie_link_under_load_gen_counts": {
+      "2": 3,
+      "3": 20
+    },
+    "pcie_link_post": "name, pcie.link.gen.current, pcie.link.width.current\nNVIDIA GeForce RTX 3090, 3, 16"
+  },
+  "commands": [
+    {
+      "id": "01b-CMD1",
+      "argv": [
+        "sudo",
+        "-n",
+        "systemctl",
+        "stop",
+        "freetoken.service"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 150,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "01b-CMD2",
+      "argv": [
+        "env",
+        "CUDA_HOME=/opt/freetoken-venv/lib/python3.13/site-packages/nvidia/cu13",
+        "PATH=/opt/freetoken-venv/lib/python3.13/site-packages/nvidia/cu13/bin:$PATH",
+        "/opt/freetoken-venv/bin/ft",
+        "bench",
+        "bw",
+        "--dtype",
+        "nvfp4,bf16",
+        "-o",
+        "evidence/x299/01b/raw/benchbw.json"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1800,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/benchbw.json"
+    },
+    {
+      "id": "01b-CMD3",
+      "argv": [
+        "sudo",
+        "-n",
+        "systemctl",
+        "start",
+        "freetoken.service"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 150,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "01b-CMD4",
+      "argv": [
+        "curl",
+        "-s",
+        "-m",
+        "5",
+        "localhost:1919/health"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 10,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/prod-health.txt"
+    },
+    {
+      "id": "01b-CMD5-pytest",
+      "applicable": false,
+      "argv": [],
+      "phase": "b",
+      "reason": "benchmark/inventory task: no production code changed; acceptance is the measured artifacts, not pytest."
+    }
+  ],
+  "performance_gate": {
+    "applies": false,
+    "reason": "baseline measurement task; no optimization candidate, no A/B speedup claimed"
+  },
+  "quality_gate": {
+    "applies": false,
+    "reason": "no checkpoint/precision/code change"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified; prod restarted to prior state"
+  },
+  "limitations": [
+    "CPU STREAM read varied 43.9-47.1 GB/s across the two runs (first with system nvcc, second cu13); treat ~44-47 GB/s as the range.",
+    "PCIe-gather and CPU-MoE kernels use the bench's canonical dtype geometry, not the Qwen3.8 H=2560/I=640/E=512/top-10 geometry; the runtime decision is dtype-keyed.",
+    "benchbw recommends hybrid for nvfp4 (ratio 2.50 > 2.0) while prod runs --moe-strategy offload; this is a candidate for tasks 05/09, not a decision taken here.",
+    "No routing trace yet, so the per-token PCIe transfer floor (miss bytes / gather GB/s) is not computed; task 11.",
+    "Mixed DDR4 DIMMs (channels A/B 16+4 GB, C/D 16+16 GB) may make effective bandwidth asymmetric; a channel-pair sweep is not done here."
+  ],
+  "generated_utc": "2026-09-11T10:16:00Z"
+}

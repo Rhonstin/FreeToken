@@ -1,0 +1,266 @@
+Generating SQLite file /opt/FreeToken/evidence/x299/04b/raw/decode_eager.sqlite from /opt/FreeToken/evidence/x299/04b/raw/decode_eager.nsys-rep
+Processing [/opt/FreeToken/evidence/x299/04b/raw/decode_eager.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_gpu_kern_sum.py]... 
+
+ ** CUDA GPU Kernel Summary (cuda_gpu_kern_sum):
+
++----------+-----------------+-----------+-------------+-------------+-----------+-----------+-------------+------------------------------------------------------------------------------------------------------+
+| Time (%) | Total Time (ns) | Instances |  Avg (ns)   |  Med (ns)   | Min (ns)  | Max (ns)  | StdDev (ns) |                                                 Name                                                 |
++----------+-----------------+-----------+-------------+-------------+-----------+-----------+-------------+------------------------------------------------------------------------------------------------------+
+|     63.6 |  16,235,519,091 |    23,377 |   694,508.2 |   676,339.0 |     1,375 | 2,437,743 |   523,280.6 | void fast_index_copy_multi<int, (unsigned long)1024, (unsigned long)8>(MultiIndexCopyParams)         |
+|      9.7 |   2,489,839,955 |    23,973 |   103,860.2 |   108,734.0 |     8,960 |   117,885 |    10,493.9 | ampere_bf16_s16816gemm_bf16_64x64_ldg8_f2f_stages_64x5_tn                                            |
+|      6.9 |   1,770,114,080 |    71,106 |    24,894.0 |    12,896.0 |    11,968 |   226,587 |    17,311.4 | void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_16x16_128x2_tn_align8>(T1::Par… |
+|      5.1 |   1,290,224,860 |    46,754 |    27,596.0 |    28,960.0 |    17,440 |   318,682 |     9,740.3 | _decode_nvfp4_marlin_kernel                                                                          |
+|      2.7 |     701,024,357 |       489 | 1,433,587.6 | 1,432,291.0 | 1,431,203 | 1,728,061 |    18,816.8 | void gemv2T_kernel_val<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, (int)128, (int… |
+|      2.0 |     509,779,131 |    47,241 |    10,791.0 |    10,752.0 |    10,336 |   235,547 |     1,045.3 | void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_16x16_128x1_tn_align8>(T1::Par… |
+|      1.6 |     397,176,967 |    52,598 |     7,551.2 |     6,208.0 |     5,312 |    10,879 |     2,039.1 | std::enable_if<!T7, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __n… |
+|      1.2 |     316,322,564 |       192 | 1,647,513.4 | 1,437,347.5 |   391,224 | 4,256,585 |   869,544.8 | _prefill_nvfp4_moe_kernel                                                                            |
+|      0.9 |     217,312,177 |    23,474 |     9,257.6 |     9,184.0 |     8,735 |    17,631 |       517.0 | void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_tn_align8>(T1::Param… |
+|      0.7 |     170,164,397 |    17,533 |     9,705.4 |     9,728.0 |     9,151 |    11,168 |       192.6 | fused_sigmoid_gating_delta_rule_update_kernel                                                        |
+|      0.6 |     157,150,949 |    23,377 |     6,722.5 |     6,783.0 |     1,759 |    16,448 |     2,651.2 | _lru_ensure_kernel                                                                                   |
+|      0.5 |     137,159,598 |    71,493 |     1,918.5 |     1,984.0 |     1,535 |     5,376 |       220.2 | void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv… |
+|      0.4 |     113,693,249 |    23,473 |     4,843.6 |     4,832.0 |     4,511 |     5,824 |        94.1 | _router_triton_kernel                                                                                |
+|      0.3 |      81,687,683 |    47,435 |     1,722.1 |     1,696.0 |     1,472 |     4,800 |       184.4 | _hc_gate_mix_kernel                                                                                  |
+|      0.3 |      81,116,909 |    48,905 |     1,658.7 |     1,632.0 |     1,536 |     5,407 |       110.9 | _grouped_gemma_rmsnorm_kernel                                                                        |
+|      0.3 |      77,144,256 |    46,946 |     1,643.3 |     1,728.0 |     1,279 |     5,375 |       347.1 | void flashinfer::activation::act_and_mul_kernel<__nv_bfloat16, &silu>(T1 *, const T1 *, int)         |
+|      0.3 |      76,077,876 |    46,946 |     1,620.5 |     1,696.0 |     1,407 |     6,400 |       220.2 | _hc_combine_kernel                                                                                   |
+|      0.3 |      64,789,881 |    47,435 |     1,365.9 |     1,344.0 |     1,119 |     2,239 |       123.5 | _hc_silu_kernel                                                                                      |
+|      0.2 |      63,585,795 |    23,473 |     2,708.9 |     2,720.0 |     1,920 |     8,352 |       328.3 | moe_sum_reduce_kernel                                                                                |
+|      0.2 |      56,069,148 |    17,533 |     3,197.9 |     3,200.0 |     2,751 |     4,128 |       119.5 | void causal_conv1d_update_kernel<Causal_conv1d_update_kernel_traits<(int)64, (int)4, c10::BFloat16,… |
+|      0.2 |      55,809,950 |     5,868 |     9,510.9 |     8,384.0 |     7,872 |   415,735 |    19,447.0 | _qsa_sparse_paged_gqa_splitk_kernel                                                                  |
+|      0.2 |      41,136,282 |     5,868 |     7,010.3 |     7,007.0 |     5,984 |     8,032 |       124.0 | _qsa_block_topk_kernel                                                                               |
+|      0.2 |      40,451,472 |    12,722 |     3,179.6 |     2,944.0 |     1,888 |    12,736 |       669.5 | void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.2 |      39,257,409 |    23,473 |     1,672.4 |     1,664.0 |     1,376 |     2,560 |        50.2 | _gate_mul_add_kernel                                                                                 |
+|      0.2 |      38,791,145 |    23,473 |     1,652.6 |     1,632.0 |     1,599 |     3,296 |        61.5 | _gate_sigmoid_kernel                                                                                 |
+|      0.1 |      28,787,124 |    17,605 |     1,635.2 |     1,632.0 |     1,535 |     4,544 |       124.9 | _layer_norm_fwd_1pass_kernel                                                                         |
+|      0.1 |      25,504,809 |    11,736 |     2,173.2 |     2,112.0 |     1,888 |     3,200 |       159.0 | _index_norm_rope_kernel                                                                              |
+|      0.1 |      19,374,963 |     5,868 |     3,301.8 |     3,200.0 |     3,136 |    28,031 |     1,140.4 | _qsa_merge_splitk_kernel                                                                             |
+|      0.1 |      17,424,044 |     5,868 |     2,969.3 |     2,976.0 |     2,624 |     3,840 |       101.7 | _qsa_mqa_paged_kernel                                                                                |
+|      0.1 |      15,623,548 |    11,736 |     1,331.2 |     1,344.0 |     1,247 |     3,136 |        54.5 | kernel_cutlass_kernel_flashinfernormkernelsrmsnormRMSNormKernel_object_at__tensorptrbf16gmemalign12… |
+|      0.0 |      11,756,365 |       192 |    61,231.1 |    18,048.0 |    16,064 |   202,684 |    76,209.0 | void at::native::<unnamed>::CatArrayBatchedCopy_vectorized<at::native::<unnamed>::OpaqueType<(unsig… |
+|      0.0 |      11,113,752 |     5,868 |     1,894.0 |     1,920.0 |     1,568 |     2,272 |        95.6 | _compress_qsa_groups_kernel                                                                          |
+|      0.0 |      10,365,368 |     6,358 |     1,630.3 |     1,632.0 |     1,503 |     4,032 |       118.5 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::sigmoid_kernel_cuda(at::TensorIt… |
+|      0.0 |       9,784,994 |     5,868 |     1,667.5 |     1,664.0 |     1,567 |     2,784 |        76.2 | void flashinfer::BatchQKApplyRotaryPosIdsCosSinCacheHeadParallelismKernel<(bool)0, (unsigned int)25… |
+|      0.0 |       9,131,582 |     5,868 |     1,556.2 |     1,536.0 |     1,280 |     2,144 |        46.9 | void <unnamed>::store_kv_cache<(unsigned long)128, (unsigned long)1, (bool)0, (unsigned long)1024, … |
+|      0.0 |       8,245,011 |        48 |   171,771.1 |   182,476.5 |   134,430 |   216,731 |    21,606.5 | void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(T1::Par… |
+|      0.0 |       8,230,696 |     6,848 |     1,201.9 |     1,184.0 |     1,151 |     6,240 |       102.3 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<c10::BFloat16, c10… |
+|      0.0 |       8,164,721 |     5,387 |     1,515.6 |     1,376.0 |     1,279 |     2,560 |       226.0 | void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIterator… |
+|      0.0 |       8,066,878 |     5,868 |     1,374.7 |     1,376.0 |     1,184 |     1,824 |        53.4 | _store_qsa_rows_kernel                                                                               |
+|      0.0 |       8,014,056 |     5,868 |     1,365.7 |     1,376.0 |     1,311 |     1,952 |        39.0 | _expand_qsa_indices_kernel                                                                           |
+|      0.0 |       4,691,076 |        36 |   130,307.7 |   131,581.5 |   116,125 |   144,766 |     8,069.4 | ampere_bf16_s16816gemm_bf16_256x64_ldg8_f2f_tn                                                       |
+|      0.0 |       4,560,834 |        72 |    63,344.9 |    63,518.0 |    62,303 |    75,806 |     1,551.3 | void causal_conv1d_fwd_kernel<Causal_conv1d_fwd_kernel_traits<(int)128, (int)4, (bool)0, c10::BFloa… |
+|      0.0 |       4,257,544 |         2 | 2,128,772.0 | 2,128,772.0 | 2,127,188 | 2,130,356 |     2,240.1 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<unsigned char>, std:… |
+|      0.0 |       3,976,302 |       489 |     8,131.5 |     8,128.0 |     7,712 |     9,504 |       147.6 | void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::Ar… |
+|      0.0 |       3,712,017 |     2,954 |     1,256.6 |     1,216.0 |     1,151 |     1,632 |        85.6 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::CUDAFunctorOnSelf_add<long>, std… |
+|      0.0 |       3,340,665 |     1,154 |     2,894.9 |     2,880.0 |     1,632 |     6,367 |       477.9 | void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIterator… |
+|      0.0 |       3,235,137 |     2,029 |     1,594.4 |     1,632.0 |     1,184 |     2,560 |       218.1 | void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIterator… |
+|      0.0 |       2,884,159 |        49 |    58,860.4 |    59,134.0 |    33,951 |    69,886 |     3,960.1 | ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_32x3_tn                                          |
+|      0.0 |       2,821,280 |       975 |     2,893.6 |     2,911.0 |     2,783 |     3,456 |        71.3 | void at::native::<unnamed>::CatArrayBatchedCopy<at::native::<unnamed>::OpaqueType<(unsigned int)2>,… |
+|      0.0 |       2,691,632 |     1,957 |     1,375.4 |     1,344.0 |     1,280 |     1,664 |        56.7 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::CUDAFunctor_add<long>, std::arra… |
+|      0.0 |       2,657,644 |       982 |     2,706.4 |     2,768.0 |     2,176 |     4,096 |       464.6 | void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void … |
+|      0.0 |       2,647,736 |     2,566 |     1,031.9 |     1,024.0 |       960 |     1,312 |        46.6 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::FillFunctor<long>, std::array<ch… |
+|      0.0 |       2,537,997 |     1,960 |     1,294.9 |     1,216.0 |     1,152 |     1,856 |       163.8 | void at::native::vectorized_elementwise_kernel<(int)4, void at::native::compare_scalar_kernel<long>… |
+|      0.0 |       2,362,621 |       979 |     2,413.3 |     2,432.0 |     2,271 |     2,848 |        80.9 | void at::native::<unnamed>::indexSelectSmallIndex<int, long, unsigned int, (int)2, (int)2, (int)-2>… |
+|      0.0 |       2,264,658 |        48 |    47,180.4 |    47,247.0 |    45,375 |    49,087 |       845.5 | ampere_s16816gemm_bf16_128x64_ldg8_stages_64x3_tn                                                    |
+|      0.0 |       2,257,100 |     1,472 |     1,533.4 |     1,568.0 |     1,375 |     1,888 |        96.4 | void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |       2,170,614 |        97 |    22,377.5 |    22,272.0 |    21,824 |    28,415 |       752.4 | ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn                                           |
+|      0.0 |       2,156,009 |     1,467 |     1,469.7 |     1,472.0 |     1,312 |     1,888 |        47.8 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::<unnamed>::where_kernel_impl(at:… |
+|      0.0 |       2,050,685 |       974 |     2,105.4 |     2,143.5 |     1,888 |     2,624 |       142.1 | void at::native::<unnamed>::indexSelectSmallIndex<long, long, unsigned int, (int)1, (int)1, (int)-2… |
+|      0.0 |       2,002,834 |        98 |    20,437.1 |    19,647.5 |    18,623 |    90,367 |     7,154.3 | void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x5_tn_align8>(T1::Par… |
+|      0.0 |       1,975,798 |     1,958 |     1,009.1 |     1,024.0 |       959 |     1,280 |        27.2 | void <unnamed>::elementwise_kernel_with_index<int, at::native::arange_cuda_out(const c10::Scalar &,… |
+|      0.0 |       1,956,119 |     1,961 |       997.5 |       992.0 |       959 |     1,504 |        36.8 | void <unnamed>::elementwise_kernel_with_index<int, at::native::arange_cuda_out(const c10::Scalar &,… |
+|      0.0 |       1,849,599 |       490 |     3,774.7 |     3,872.0 |     3,200 |     4,736 |       285.7 | void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIterator… |
+|      0.0 |       1,841,762 |     1,464 |     1,258.0 |     1,184.0 |     1,151 |     1,632 |       105.1 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::BinaryFunctor<long, long, long, … |
+|      0.0 |       1,798,685 |       986 |     1,824.2 |     1,919.5 |     1,535 |     2,527 |       255.6 | void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatte… |
+|      0.0 |       1,791,515 |       490 |     3,656.2 |     3,648.0 |     3,520 |     4,672 |        91.8 | void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::fu… |
+|      0.0 |       1,785,791 |       978 |     1,826.0 |     1,856.0 |     1,536 |     2,368 |       222.5 | void at::native::<unnamed>::CatArrayBatchedCopy_alignedK_contig<at::native::<unnamed>::OpaqueType<(… |
+|      0.0 |       1,753,973 |     1,470 |     1,193.2 |     1,184.0 |     1,120 |     1,472 |        43.3 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::BinaryFunctor<long, long, long, … |
+|      0.0 |       1,725,634 |       980 |     1,760.9 |     1,760.0 |     1,663 |     2,656 |        86.6 | void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |       1,637,469 |       978 |     1,674.3 |     1,664.0 |     1,471 |     2,048 |        81.4 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::BUnaryFunctor<long, long, long, … |
+|      0.0 |       1,629,943 |       492 |     3,312.9 |     3,296.0 |     2,944 |     5,184 |       134.4 | void at::native::<unnamed>::indexSelectSmallIndex<c10::BFloat16, long, unsigned int, (int)2, (int)2… |
+|      0.0 |       1,486,239 |       501 |     2,966.5 |     2,976.0 |     2,016 |     4,000 |       140.1 | void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void … |
+|      0.0 |       1,428,608 |       487 |     2,933.5 |     2,944.0 |     2,432 |     3,488 |        58.5 | void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<float, at::native::func_wrapp… |
+|      0.0 |       1,421,508 |        13 |   109,346.8 |   112,446.0 |    70,303 |   114,174 |    11,751.7 | ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x3_tn                                           |
+|      0.0 |       1,407,388 |       530 |     2,655.4 |     2,624.0 |     2,304 |     6,048 |       163.8 | void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::index_copy_kernel_impl… |
+|      0.0 |       1,393,671 |       487 |     2,861.7 |     2,880.0 |     2,496 |     3,392 |        91.5 | void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<long, at::native::func_wrappe… |
+|      0.0 |       1,375,260 |       500 |     2,750.5 |     2,752.0 |     1,888 |     3,232 |       114.6 | void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void … |
+|      0.0 |       1,339,174 |       980 |     1,366.5 |     1,344.0 |     1,247 |     1,792 |        95.1 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<bool, bool, bool, … |
+|      0.0 |       1,299,980 |       979 |     1,327.9 |     1,280.0 |     1,216 |     1,664 |        78.0 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<long, long, bool, … |
+|      0.0 |       1,240,679 |        72 |    17,231.7 |    17,071.5 |    13,600 |    22,368 |     3,276.5 | chunk_gated_delta_rule_fwd_kernel_h_blockdim64                                                       |
+|      0.0 |       1,236,387 |       986 |     1,253.9 |     1,248.0 |     1,183 |     1,568 |        47.1 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::<unnamed>::launch_clamp_scalar(a… |
+|      0.0 |       1,185,538 |       490 |     2,419.5 |     2,432.0 |     2,240 |     3,424 |        89.5 | void at::native::tensor_kernel_scan_innermost_dim_with_indices<long, std::greater_equal<long>>(cons… |
+|      0.0 |       1,160,548 |        97 |    11,964.4 |    11,936.0 |    11,648 |    12,575 |       168.8 | void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_64x1_tn_align8>(T1::Para… |
+|      0.0 |       1,145,232 |       976 |     1,173.4 |     1,152.0 |     1,119 |     5,792 |       154.3 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::CUDAFunctor_add<c10::BFloat16>, … |
+|      0.0 |       1,143,433 |         1 | 1,143,433.0 | 1,143,433.0 | 1,143,433 | 1,143,433 |         0.0 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<float>, std::array<c… |
+|      0.0 |       1,140,168 |       526 |     2,167.6 |     1,920.0 |     1,664 |     6,496 |     1,021.0 | void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::index_copy_kernel_impl… |
+|      0.0 |       1,115,048 |       490 |     2,275.6 |     2,272.0 |     2,208 |     6,048 |       179.3 | void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |       1,077,552 |       976 |     1,104.0 |     1,088.0 |     1,056 |     1,344 |        29.2 | void at::native::unrolled_elementwise_kernel<at::native::BinaryFunctor<long, long, long, at::native… |
+|      0.0 |       1,068,111 |        72 |    14,834.9 |    14,768.0 |    11,583 |    20,992 |     3,219.0 | chunk_gated_delta_rule_fwd_kkt_solve_kernel                                                          |
+|      0.0 |         991,275 |       487 |     2,035.5 |     2,016.0 |     1,952 |     2,336 |        42.7 | void at::native::<unnamed>::CatArrayBatchedCopy_contig<at::native::<unnamed>::OpaqueType<(unsigned … |
+|      0.0 |         956,172 |        96 |     9,960.1 |     9,888.0 |     9,536 |    11,680 |       292.0 | ampere_bf16_s16816gemm_bf16_64x128_ldg8_f2f_stages_64x4_tn                                           |
+|      0.0 |         916,878 |       494 |     1,856.0 |     1,856.0 |     1,568 |     2,208 |        40.4 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::BUnaryFunctor<long, long, long, … |
+|      0.0 |         864,077 |       490 |     1,763.4 |     1,760.0 |     1,727 |     2,112 |        39.1 | void at::native::<unnamed>::CatArrayBatchedCopy_vectorized<at::native::<unnamed>::OpaqueType<(unsig… |
+|      0.0 |         847,855 |       489 |     1,733.9 |     1,728.0 |     1,664 |     2,048 |        40.5 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::BUnaryFunctor<int, int, int, at:… |
+|      0.0 |         814,035 |        72 |    11,306.0 |    11,232.0 |     5,440 |    18,623 |     5,478.3 | chunk_fwd_kernel_o                                                                                   |
+|      0.0 |         801,648 |       489 |     1,639.4 |     1,632.0 |     1,599 |     1,920 |        31.2 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::CompareFunctor<long>,… |
+|      0.0 |         776,909 |       489 |     1,588.8 |     1,568.0 |     1,536 |     3,232 |        84.3 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::silu_kernel(at::Tenso… |
+|      0.0 |         759,830 |       490 |     1,550.7 |     1,536.0 |     1,408 |     1,824 |        35.4 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::sqrt_kernel_cuda(at::TensorItera… |
+|      0.0 |         752,272 |       490 |     1,535.2 |     1,472.0 |     1,440 |     2,848 |       145.4 | void <unnamed>::index_kernel<(unsigned long)128, (unsigned long)1, (bool)0, (unsigned long)5120, (u… |
+|      0.0 |         749,714 |       490 |     1,530.0 |     1,536.0 |     1,408 |     1,792 |        37.1 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::sign_kernel_cuda(at::TensorItera… |
+|      0.0 |         723,632 |       487 |     1,485.9 |     1,472.0 |     1,439 |     1,760 |        36.6 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<long, long, bool, … |
+|      0.0 |         718,769 |       490 |     1,466.9 |     1,472.0 |     1,312 |     1,760 |        59.4 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::launch_clamp_scalar(a… |
+|      0.0 |         652,948 |       490 |     1,332.5 |     1,344.0 |     1,216 |     1,568 |        34.8 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::BUnaryFunctor<c10::BFloat16, c10… |
+|      0.0 |         638,774 |       487 |     1,311.7 |     1,312.0 |     1,280 |     1,568 |        28.5 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<float, float, floa… |
+|      0.0 |         618,650 |       489 |     1,265.1 |     1,248.0 |     1,216 |     1,472 |        25.0 | void at::native::vectorized_elementwise_kernel<(int)2, at::native::AUnaryFunctor<long, long, long, … |
+|      0.0 |         607,061 |       490 |     1,238.9 |     1,248.0 |     1,215 |     1,472 |        26.4 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<c10::BFloat16, c10… |
+|      0.0 |         592,920 |       490 |     1,210.0 |     1,216.0 |     1,183 |     1,440 |        25.2 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::AbsFunctor<c10::BFloat16>, std::… |
+|      0.0 |         580,941 |        48 |    12,102.9 |    12,096.0 |    11,711 |    12,511 |       147.1 | void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_128x1_tn_align8>(T1::Par… |
+|      0.0 |         570,229 |       487 |     1,170.9 |     1,184.0 |     1,151 |     1,376 |        24.5 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::bfloat16_copy_kernel_cuda(at::Te… |
+|      0.0 |         526,740 |        72 |     7,315.8 |     7,248.0 |     5,855 |    10,176 |     1,447.7 | recompute_w_u_fwd_kernel                                                                             |
+|      0.0 |         511,511 |       246 |     2,079.3 |     1,344.0 |     1,056 |   135,069 |     8,644.1 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<c10::BFloat16>, std:… |
+|      0.0 |         450,234 |        48 |     9,379.9 |     9,343.5 |     9,248 |    10,112 |       151.5 | ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn                                  |
+|      0.0 |         328,313 |         6 |    54,718.8 |    80,926.5 |     1,184 |    82,078 |    41,397.3 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<float, float, floa… |
+|      0.0 |         325,626 |         2 |   162,813.0 |   162,813.0 |   162,781 |   162,845 |        45.3 | void at::native::<unnamed>::CatArrayBatchedCopy_vectorized<at::native::<unnamed>::OpaqueType<(unsig… |
+|      0.0 |         295,832 |        96 |     3,081.6 |     3,072.0 |     3,007 |     3,584 |       101.7 | void moe_align_block_size_kernel<int>(const T1 *, int *, int *, int *, int, int, unsigned long, int… |
+|      0.0 |         281,401 |        38 |     7,405.3 |     7,472.0 |     3,936 |     8,511 |       882.1 | void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void … |
+|      0.0 |         279,991 |        72 |     3,888.8 |     3,887.5 |     3,648 |     4,256 |       130.9 | void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl<at::native::… |
+|      0.0 |         267,259 |         1 |   267,259.0 |   267,259.0 |   267,259 |   267,259 |         0.0 | void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |         226,714 |        72 |     3,148.8 |     3,136.0 |     3,008 |     3,488 |        68.1 | void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |         208,478 |        74 |     2,817.3 |     1,696.0 |     1,632 |    43,775 |     6,750.7 | void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |         203,388 |       144 |     1,412.4 |     1,407.5 |     1,280 |     1,920 |       107.9 | l2norm_fwd_kernel                                                                                    |
+|      0.0 |         189,759 |        96 |     1,976.7 |     1,984.0 |     1,504 |     2,400 |        97.7 | void at::native::vectorized_elementwise_kernel<(int)4, void at::native::compare_scalar_kernel<int>(… |
+|      0.0 |         183,262 |        96 |     1,909.0 |     1,920.0 |     1,568 |     2,208 |        51.9 | void at_cuda_detail::cub::detail::reduce::DeviceReduceSingleTileKernel<at_cuda_detail::cub::detail:… |
+|      0.0 |         178,463 |        96 |     1,859.0 |     1,856.0 |     1,760 |     1,984 |        24.2 | void at_cuda_detail::cub::detail::select::DeviceSelectSweepKernel<at_cuda_detail::cub::detail::sele… |
+|      0.0 |         166,205 |        36 |     4,616.8 |     4,576.0 |     4,544 |     5,376 |       137.2 | void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::index_fill_kernel_impl… |
+|      0.0 |         164,030 |         2 |    82,015.0 |    82,015.0 |    81,567 |    82,463 |       633.6 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::cos_kernel_cuda(at::TensorIterat… |
+|      0.0 |         163,612 |         2 |    81,806.0 |    81,806.0 |    81,534 |    82,078 |       384.7 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::sin_kernel_cuda(at::TensorIterat… |
+|      0.0 |         161,563 |        72 |     2,243.9 |     2,240.0 |     2,176 |     2,496 |        38.7 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::<unnamed>::softplus_kernel(at::T… |
+|      0.0 |         147,259 |        96 |     1,533.9 |     1,504.0 |     1,471 |     1,856 |        78.5 | void count_and_sort_expert_tokens_kernel<int>(const T1 *, int *, int *, unsigned long, bool)         |
+|      0.0 |         146,107 |        72 |     2,029.3 |     2,016.0 |     1,568 |     2,432 |       293.9 | chunk_local_cumsum_scalar_kernel                                                                     |
+|      0.0 |         136,159 |        60 |     2,269.3 |     2,304.0 |     1,984 |     2,368 |       109.5 | void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, __nv_bfloat16, float, __nv_bfloat1… |
+|      0.0 |         129,533 |        72 |     1,799.1 |     1,792.0 |     1,728 |     2,016 |        44.7 | void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |         121,503 |        12 |    10,125.3 |    10,080.0 |     9,952 |    10,400 |       122.4 | void cutlass::Kernel2<cutlass_80_tensorop_s16816gemm_bf16_64x64_64x6_tn_align8>(T1::Params)          |
+|      0.0 |         114,016 |       103 |     1,107.0 |     1,088.0 |     1,056 |     1,856 |       122.3 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<int>, std::array<cha… |
+|      0.0 |         112,288 |        72 |     1,559.6 |     1,536.0 |     1,504 |     2,112 |        75.0 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::exp_kernel_cuda(at::TensorIterat… |
+|      0.0 |          95,486 |        96 |       994.6 |       992.0 |       960 |     1,152 |        25.7 | void at_cuda_detail::cub::detail::scan::DeviceCompactInitKernel<at_cuda_detail::cub::ScanTileState<… |
+|      0.0 |          83,007 |        72 |     1,152.9 |     1,152.0 |     1,119 |     1,376 |        28.9 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::neg_kernel_cuda(at::TensorIterat… |
+|      0.0 |          69,119 |        37 |     1,868.1 |     1,792.0 |     1,440 |     2,272 |       217.2 | void at::native::vectorized_gather_kernel<(int)16, long>(char *, char *, T2 *, int, long, long, lon… |
+|      0.0 |          32,672 |         2 |    16,336.0 |    16,336.0 |     9,344 |    23,328 |     9,888.2 | void at::native::<unnamed>::conv_depthwise2d_forward_kernel_generic<c10::BFloat16, int>(torch::head… |
+|      0.0 |          25,695 |         1 |    25,695.0 |    25,695.0 |    25,695 |    25,695 |         0.0 | ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn                                  |
+|      0.0 |          20,800 |         2 |    10,400.0 |    10,400.0 |     5,888 |    14,912 |     6,380.9 | void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |          17,504 |        10 |     1,750.4 |     1,744.0 |     1,344 |     2,304 |       318.9 | void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |          15,647 |        10 |     1,564.7 |     1,552.0 |     1,408 |     1,760 |        93.6 | void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |          15,296 |        10 |     1,529.6 |     1,568.0 |     1,344 |     1,888 |       178.4 | void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |          11,744 |         2 |     5,872.0 |     5,872.0 |     4,512 |     7,232 |     1,923.3 | void at::native::_scatter_gather_elementwise_kernel<(int)128, (int)8, void at::native::_cuda_scatte… |
+|      0.0 |          10,048 |         4 |     2,512.0 |     2,480.0 |       928 |     4,160 |     1,515.5 | void <unnamed>::elementwise_kernel_with_index<int, at::native::arange_cuda_out(const c10::Scalar &,… |
+|      0.0 |           6,367 |         2 |     3,183.5 |     3,183.5 |     3,072 |     3,295 |       157.7 | void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<bool, at::native::func_wrappe… |
+|      0.0 |           5,632 |         2 |     2,816.0 |     2,816.0 |     2,560 |     3,072 |       362.0 | void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl<at::native::… |
+|      0.0 |           5,600 |         2 |     2,800.0 |     2,800.0 |     2,752 |     2,848 |        67.9 | void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void … |
+|      0.0 |           5,408 |         2 |     2,704.0 |     2,704.0 |     2,432 |     2,976 |       384.7 | void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |           4,960 |         4 |     1,240.0 |     1,152.0 |     1,152 |     1,504 |       176.0 | void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctor_add<long>, std::array<char *, … |
+|      0.0 |           3,808 |         2 |     1,904.0 |     1,904.0 |     1,760 |     2,048 |       203.6 | void at::native::<unnamed>::CatArrayBatchedCopy_alignedK_contig<at::native::<unnamed>::OpaqueType<(… |
+|      0.0 |           3,808 |         2 |     1,904.0 |     1,904.0 |     1,760 |     2,048 |       203.6 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::BUnaryFunctor<int, int, int, at:… |
+|      0.0 |           3,680 |         2 |     1,840.0 |     1,840.0 |     1,760 |     1,920 |       113.1 | void at::native::elementwise_kernel<(int)128, (int)4, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |           3,616 |         2 |     1,808.0 |     1,808.0 |     1,728 |     1,888 |       113.1 | void at_cuda_detail::cub::detail::scan::DeviceScanKernel<at_cuda_detail::cub::detail::scan::policy_… |
+|      0.0 |           3,136 |         2 |     1,568.0 |     1,568.0 |     1,184 |     1,952 |       543.1 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::BUnaryFunctor<float, float, floa… |
+|      0.0 |           3,040 |         2 |     1,520.0 |     1,520.0 |     1,504 |     1,536 |        22.6 | void at::native::<unnamed>::searchsorted_cuda_kernel<long, long>(T2 *, const T1 *, const T1 *, cons… |
+|      0.0 |           3,008 |         2 |     1,504.0 |     1,504.0 |     1,472 |     1,536 |        45.3 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::bitwise_not_kernel_cuda(at::Tens… |
+|      0.0 |           2,944 |         2 |     1,472.0 |     1,472.0 |     1,344 |     1,600 |       181.0 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::reciprocal_kernel_cuda(at::Tenso… |
+|      0.0 |           2,848 |         2 |     1,424.0 |     1,424.0 |     1,408 |     1,440 |        22.6 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<int, int, bool, at… |
+|      0.0 |           2,592 |         2 |     1,296.0 |     1,296.0 |     1,280 |     1,312 |        22.6 | void at::native::unrolled_elementwise_kernel<at::native::CUDAFunctorOnSelf_add<long>, std::array<ch… |
+|      0.0 |           2,144 |         1 |     2,144.0 |     2,144.0 |     2,144 |     2,144 |         0.0 | void at::native::<unnamed>::CatArrayBatchedCopy<at::native::<unnamed>::OpaqueType<(unsigned int)4>,… |
+|      0.0 |           2,112 |         1 |     2,112.0 |     2,112.0 |     2,112 |     2,112 |         0.0 | void at::native::<unnamed>::CatArrayBatchedCopy_alignedK_contig<at::native::<unnamed>::OpaqueType<(… |
+|      0.0 |           2,112 |         2 |     1,056.0 |     1,056.0 |       960 |     1,152 |       135.8 | void at_cuda_detail::cub::detail::scan::DeviceScanInitKernel<at_cuda_detail::cub::ScanTileState<lon… |
+|      0.0 |           1,984 |         1 |     1,984.0 |     1,984.0 |     1,984 |     1,984 |         0.0 | void at::native::elementwise_kernel<(int)128, (int)2, void at::native::gpu_kernel_impl_nocast<at::n… |
+|      0.0 |           1,536 |         1 |     1,536.0 |     1,536.0 |     1,536 |     1,536 |         0.0 | void at::native::vectorized_elementwise_kernel<(int)4, at::native::AUnaryFunctor<int, int, int, at:… |
++----------+-----------------+-----------+-------------+-------------+-----------+-----------+-------------+------------------------------------------------------------------------------------------------------+
+
+Processing [/opt/FreeToken/evidence/x299/04b/raw/decode_eager.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_gpu_mem_time_sum.py]... 
+
+ ** CUDA GPU MemOps Summary (by Time) (cuda_gpu_mem_time_sum):
+
++----------+-----------------+--------+-------------+----------+----------+-------------+-------------+--------------------------------+
+| Time (%) | Total Time (ns) | Count  |  Avg (ns)   | Med (ns) | Min (ns) |  Max (ns)   | StdDev (ns) |           Operation            |
++----------+-----------------+--------+-------------+----------+----------+-------------+-------------+--------------------------------+
+|     99.8 |  11,818,716,254 |  6,246 | 1,892,205.6 |    416.0 |      383 | 102,494,117 | 9,481,190.2 | [CUDA memcpy Host-to-Device]   |
+|      0.1 |      16,024,874 | 24,462 |       655.1 |    575.0 |      383 |       6,368 |       265.3 | [CUDA memset]                  |
+|      0.0 |       1,122,343 |  1,081 |     1,038.2 |    992.0 |      863 |       2,304 |       245.2 | [CUDA memcpy Device-to-Host]   |
+|      0.0 |         877,066 |    494 |     1,775.4 |  1,792.0 |    1,056 |       2,496 |       142.1 | [CUDA memcpy Device-to-Device] |
++----------+-----------------+--------+-------------+----------+----------+-------------+-------------+--------------------------------+
+
+Processing [/opt/FreeToken/evidence/x299/04b/raw/decode_eager.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/cuda_gpu_mem_size_sum.py]... 
+
+ ** CUDA GPU MemOps Summary (by Size) (cuda_gpu_mem_size_sum):
+
++-------------+--------+----------+----------+----------+-----------+-------------+--------------------------------+
+| Total (MB)  | Count  | Avg (MB) | Med (MB) | Min (MB) | Max (MB)  | StdDev (MB) |           Operation            |
++-------------+--------+----------+----------+----------+-----------+-------------+--------------------------------+
+| 146,169.951 |  6,246 |   23.402 |    0.000 |    0.000 | 1,271.398 |     117.226 | [CUDA memcpy Host-to-Device]   |
+|      23.291 | 24,462 |    0.001 |    0.001 |    0.000 |     0.001 |       0.000 | [CUDA memset]                  |
+|       4.865 |    494 |    0.010 |    0.010 |    0.000 |     0.184 |       0.008 | [CUDA memcpy Device-to-Device] |
+|       0.005 |  1,081 |    0.000 |    0.000 |    0.000 |     0.000 |       0.000 | [CUDA memcpy Device-to-Host]   |
++-------------+--------+----------+----------+----------+-----------+-------------+--------------------------------+
+
+Processing [/opt/FreeToken/evidence/x299/04b/raw/decode_eager.sqlite] with [/opt/nvidia/nsight-systems/2026.1.3/target-linux-x64/reports/nvtx_sum.py]... 
+
+ ** NVTX Range Summary (nvtx_sum):
+
++----------+-----------------+-----------+-------------+-------------+-----------+---------------+---------------+---------+-------------------------------------+
+| Time (%) | Total Time (ns) | Instances |  Avg (ns)   |  Med (ns)   | Min (ns)  |   Max (ns)    |  StdDev (ns)  |  Style  |                Range                |
++----------+-----------------+-----------+-------------+-------------+-----------+---------------+---------------+---------+-------------------------------------+
+|     12.1 |   8,752,614,953 |     6,143 | 1,424,811.2 |   950,667.0 |   919,143 | 1,348,401,998 |  17,275,468.1 | PushPop | :QSA                                |
+|      6.1 |   4,422,980,426 |       512 | 8,638,633.6 | 1,624,411.0 | 1,592,377 | 2,720,870,169 | 122,288,140.6 | PushPop | :Layer_0                            |
+|      4.3 |   3,152,151,258 |       512 | 6,156,545.4 | 2,756,242.0 | 2,693,472 | 1,352,077,408 |  59,888,916.5 | PushPop | :Layer_3                            |
+|      2.0 |   1,479,122,589 |       512 | 2,888,911.3 | 2,106,889.0 | 2,073,155 |   115,058,427 |   7,048,234.6 | PushPop | :Layer_7                            |
+|      2.0 |   1,473,572,612 |       512 | 2,878,071.5 | 2,345,436.0 | 2,292,510 |    76,012,533 |   3,309,393.1 | PushPop | :Layer_1                            |
+|      2.0 |   1,468,546,626 |       512 | 2,868,255.1 | 2,085,936.5 | 2,057,525 |   115,629,450 |   7,077,780.3 | PushPop | :Layer_31                           |
+|      2.0 |   1,468,391,618 |       512 | 2,867,952.4 | 2,086,461.0 | 2,059,352 |   114,984,380 |   7,046,175.5 | PushPop | :Layer_19                           |
+|      2.0 |   1,468,032,946 |       512 | 2,867,251.8 | 2,085,822.0 | 2,056,847 |   115,185,077 |   7,051,821.8 | PushPop | :Layer_27                           |
+|      2.0 |   1,467,677,106 |       512 | 2,866,556.8 | 2,094,314.0 | 2,059,367 |   115,313,648 |   7,048,254.5 | PushPop | :Layer_43                           |
+|      2.0 |   1,467,609,325 |       512 | 2,866,424.5 | 2,085,550.0 | 2,057,128 |   114,922,553 |   7,043,828.3 | PushPop | :Layer_39                           |
+|      2.0 |   1,467,581,203 |       512 | 2,866,369.5 | 2,090,723.5 | 2,065,538 |   115,130,419 |   7,047,579.7 | PushPop | :Layer_11                           |
+|      2.0 |   1,465,159,770 |       512 | 2,861,640.2 | 2,088,995.0 | 2,062,919 |   115,143,899 |   7,047,777.1 | PushPop | :Layer_23                           |
+|      2.0 |   1,463,587,147 |       512 | 2,858,568.6 | 2,086,377.5 | 2,056,240 |   114,999,431 |   7,044,829.1 | PushPop | :Layer_35                           |
+|      2.0 |   1,461,582,258 |       512 | 2,854,652.8 | 2,086,087.0 | 2,060,245 |   114,993,469 |   7,041,548.4 | PushPop | :Layer_15                           |
+|      1.7 |   1,243,699,166 |       512 | 2,429,099.9 | 2,085,071.0 |         0 |     6,034,286 |     619,354.5 | PushPop | :Layer_47                           |
+|      1.5 |   1,120,498,523 |       512 | 2,188,473.7 | 1,508,626.0 | 1,480,687 |   115,387,564 |   7,089,611.8 | PushPop | :Layer_4                            |
+|      1.5 |   1,119,417,768 |       512 | 2,186,362.8 | 1,509,121.0 | 1,485,834 |   115,002,360 |   7,076,723.9 | PushPop | :Layer_2                            |
+|      1.5 |   1,116,097,450 |       512 | 2,179,877.8 | 1,499,950.0 | 1,472,910 |   121,223,018 |   7,272,462.6 | PushPop | :Layer_34                           |
+|      1.5 |   1,114,610,519 |       512 | 2,176,973.7 | 1,500,912.5 | 1,475,043 |   115,555,746 |   7,098,979.9 | PushPop | :Layer_40                           |
+|      1.5 |   1,114,297,536 |       512 | 2,176,362.4 | 1,502,840.5 | 1,475,730 |   114,850,613 |   7,070,244.6 | PushPop | :Layer_44                           |
+|      1.5 |   1,113,917,941 |       512 | 2,175,621.0 | 1,503,516.5 | 1,478,898 |   114,828,174 |   7,071,716.7 | PushPop | :Layer_8                            |
+|      1.5 |   1,113,707,160 |       512 | 2,175,209.3 | 1,500,884.0 | 1,478,809 |   114,998,196 |   7,075,872.4 | PushPop | :Layer_16                           |
+|      1.5 |   1,113,403,887 |       512 | 2,174,617.0 | 1,503,118.0 | 1,476,284 |   115,312,493 |   7,079,951.5 | PushPop | :Layer_32                           |
+|      1.5 |   1,113,301,947 |       512 | 2,174,417.9 | 1,502,496.5 | 1,477,553 |   114,895,663 |   7,072,235.1 | PushPop | :Layer_28                           |
+|      1.5 |   1,113,253,846 |       512 | 2,174,323.9 | 1,500,086.0 | 1,476,476 |   115,027,495 |   7,077,164.3 | PushPop | :Layer_9                            |
+|      1.5 |   1,113,169,505 |       512 | 2,174,159.2 | 1,498,491.5 | 1,473,023 |   120,602,615 |   7,254,836.5 | PushPop | :Layer_42                           |
+|      1.5 |   1,112,914,406 |       512 | 2,173,660.9 | 1,502,569.5 | 1,479,711 |   114,765,926 |   7,069,713.1 | PushPop | :Layer_36                           |
+|      1.5 |   1,112,884,637 |       512 | 2,173,602.8 | 1,499,920.5 | 1,471,910 |   115,128,054 |   7,086,675.7 | PushPop | :Layer_22                           |
+|      1.5 |   1,112,415,694 |       512 | 2,172,686.9 | 1,504,280.0 | 1,479,697 |   114,938,299 |   7,072,732.1 | PushPop | :Layer_18                           |
+|      1.5 |   1,111,199,481 |       512 | 2,170,311.5 | 1,503,109.0 | 1,480,384 |   114,832,416 |   7,068,791.0 | PushPop | :Layer_5                            |
+|      1.5 |   1,110,939,462 |       512 | 2,169,803.6 | 1,498,803.0 | 1,472,015 |   115,598,446 |   7,095,209.4 | PushPop | :Layer_46                           |
+|      1.5 |   1,110,818,116 |       512 | 2,169,566.6 | 1,502,377.5 | 1,474,628 |   115,097,722 |   7,078,656.7 | PushPop | :Layer_20                           |
+|      1.5 |   1,110,728,345 |       512 | 2,169,391.3 | 1,501,625.0 | 1,477,912 |   114,838,599 |   7,070,436.1 | PushPop | :Layer_10                           |
+|      1.5 |   1,110,718,317 |       512 | 2,169,371.7 | 1,500,044.0 | 1,478,870 |   116,940,397 |   7,142,688.2 | PushPop | :Layer_41                           |
+|      1.5 |   1,110,611,979 |       512 | 2,169,164.0 | 1,500,121.5 | 1,475,358 |   115,355,698 |   7,099,045.8 | PushPop | :Layer_37                           |
+|      1.5 |   1,110,564,992 |       512 | 2,169,072.3 | 1,501,660.5 | 1,476,969 |   115,122,204 |   7,078,654.7 | PushPop | :Layer_12                           |
+|      1.5 |   1,110,563,147 |       512 | 2,169,068.6 | 1,498,702.0 | 1,471,131 |   115,291,624 |   7,092,046.7 | PushPop | :Layer_38                           |
+|      1.5 |   1,110,258,869 |       512 | 2,168,474.4 | 1,498,530.0 | 1,476,103 |   115,106,718 |   7,086,074.4 | PushPop | :Layer_13                           |
+|      1.5 |   1,110,140,270 |       512 | 2,168,242.7 | 1,502,282.5 | 1,478,665 |   114,846,936 |   7,070,689.6 | PushPop | :Layer_25                           |
+|      1.5 |   1,110,124,260 |       512 | 2,168,211.4 | 1,503,191.0 | 1,480,258 |   115,102,429 |   7,076,890.4 | PushPop | :Layer_24                           |
+|      1.5 |   1,109,868,548 |       512 | 2,167,712.0 | 1,500,339.5 | 1,471,408 |   115,076,749 |   7,076,652.6 | PushPop | :Layer_6                            |
+|      1.5 |   1,109,220,848 |       512 | 2,166,447.0 | 1,499,953.5 | 1,477,534 |   117,004,829 |   7,138,180.4 | PushPop | :Layer_33                           |
+|      1.5 |   1,108,782,182 |       512 | 2,165,590.2 | 1,499,726.0 | 1,476,328 |   115,081,144 |   7,078,282.7 | PushPop | :Layer_30                           |
+|      1.5 |   1,108,718,514 |       512 | 2,165,465.8 | 1,500,154.0 | 1,478,617 |   115,122,944 |   7,079,399.4 | PushPop | :Layer_21                           |
+|      1.5 |   1,108,563,755 |       512 | 2,165,163.6 | 1,497,567.0 | 1,474,123 |   114,960,865 |   7,070,486.5 | PushPop | :Layer_14                           |
+|      1.5 |   1,107,830,865 |       512 | 2,163,732.2 | 1,500,553.5 | 1,475,149 |   115,165,319 |   7,081,179.6 | PushPop | :Layer_29                           |
+|      1.5 |   1,107,758,256 |       512 | 2,163,590.3 | 1,499,813.0 | 1,469,841 |   114,921,318 |   7,072,111.2 | PushPop | :Layer_17                           |
+|      1.5 |   1,107,524,953 |       512 | 2,163,134.7 | 1,499,397.0 | 1,475,484 |   114,890,794 |   7,073,786.5 | PushPop | :Layer_45                           |
+|      1.5 |   1,104,786,621 |       512 | 2,157,786.4 | 1,498,047.0 | 1,476,310 |   114,950,885 |   7,073,018.7 | PushPop | :Layer_26                           |
+|      1.0 |     724,896,677 |       512 | 1,415,813.8 |    54,019.0 |    49,625 |   690,374,318 |  30,507,550.9 | PushPop | :Embedding                          |
+|      0.2 |     138,360,554 |       511 |   270,764.3 |    41,055.0 |    38,738 |   114,458,385 |   5,061,290.2 | PushPop | :LMHead                             |
+|      0.1 |      81,993,348 |     1,022 |    80,228.3 |    47,526.5 |    40,513 |    13,936,010 |     613,381.2 | PushPop | :Sampler                            |
+|      0.0 |       8,438,989 |        96 |    87,906.1 |    11,041.5 |     8,826 |     7,133,540 |     726,686.3 | PushPop | CCCL:cub::DeviceReduce::Sum         |
+|      0.0 |       4,020,034 |        96 |    41,875.4 |    32,660.0 |    18,128 |       336,769 |      36,560.5 | PushPop | CCCL:cub::DeviceSelect::Flagged     |
+|      0.0 |         355,378 |         2 |   177,689.0 |   177,689.0 |    23,173 |       332,205 |     218,518.6 | PushPop | CCCL:cub::DeviceScan::InclusiveScan |
++----------+-----------------+-----------+-------------+-------------+-----------+---------------+---------------+---------+-------------------------------------+
+

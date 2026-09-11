@@ -1,0 +1,449 @@
+{
+  "schema_version": 2,
+  "task_key": "03b",
+  "bead_id": "FreeToken-mtp-1ll.6",
+  "derived_from_contract": "../03a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "9b7893793ef7fe038e2e16afe29759546892fe55cbee9b7250708d766aa18793",
+  "baseline_worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "changed_files": [
+    "benchmarks/bench_decode_moe.py (tracked, modified)",
+    "benchmarks/bench_kv_quant.py (untracked, edited+deployed)"
+  ],
+  "scope_files": [
+    "benchmarks/bench_kv_quant.py",
+    "benchmarks/bench_decode_moe.py",
+    "python/freetoken/benchmark/client.py",
+    "python/freetoken/benchmark/perf.py"
+  ],
+  "symbols": {
+    "existing": {
+      "benchmarks/bench_kv_quant.py": [
+        "main",
+        "run_row",
+        "stream",
+        "quality_rows",
+        "parse_capacity",
+        "serve_cmd",
+        "wait_ready",
+        "MODES"
+      ],
+      "benchmarks/bench_decode_moe.py": [
+        "parse_args",
+        "stream_generate",
+        "run_one",
+        "serve_cmd",
+        "parse_spec_acceptance",
+        "resolve_sampling",
+        "stop_server"
+      ],
+      "python/freetoken/benchmark/client.py": [
+        "BenchmarkTrace",
+        "BenchOneResult",
+        "RawResult",
+        "Counter",
+        "Console",
+        "BenchmarkResult",
+        "make_console",
+        "generate_prompt",
+        "process_benchmark_results"
+      ],
+      "python/freetoken/benchmark/perf.py": [
+        "perf_cuda",
+        "compare_memory_kernel_perf"
+      ]
+    },
+    "added": {
+      "benchmarks/bench_decode_moe.py": [
+        "schema_version",
+        "type",
+        "numerator/denominator",
+        "event_ms_p95"
+      ],
+      "benchmarks/bench_kv_quant.py": [
+        "stream include_usage",
+        "schema_version",
+        "type",
+        "events",
+        "event_ms_p95",
+        "numerator/denominator",
+        "emit()",
+        "--raw-jsonl",
+        "aggregate rows typed"
+      ]
+    }
+  },
+  "inputs": {
+    "decode_row": {
+      "value": {
+        "schema_version": 2,
+        "type": "measured",
+        "model": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+        "backend": "offload",
+        "mtp_depth": 0,
+        "spec_accept": null,
+        "spec_accept_rate": null,
+        "problem": 0,
+        "prompt_tokens": 96,
+        "decode_steps": 254,
+        "decode_tok_s": 19.62904363782389,
+        "ms_per_token": 50.944917055106295,
+        "numerator": "completion_tokens - 1",
+        "denominator": "last_token_event_ts - first_token_event_ts (s)",
+        "event_ms_p50": 48.635482002282515,
+        "event_ms_p95": 76.08280598651618,
+        "event_ms_p99": 96.21343298931606,
+        "ttft_ms": 5876.373353996314,
+        "ttft_cold_ms": 7169.006937998347,
+        "events": 255,
+        "completion_tokens": 255,
+        "vram_gib": 20.900390625,
+        "sampling": {
+          "temperature": 0.0,
+          "top_p": 1.0,
+          "top_k": -1
+        },
+        "output_sha1": "5f1ce83a376a",
+        "server_log": "/tmp/bench-serve-offload-o59d883_.log"
+      },
+      "source": "raw/decode-rows.jsonl",
+      "unit": "fields"
+    },
+    "context_sweep": {
+      "value": {
+        "4k": {
+          "bf16": {
+            "warm_decode_tok_s_median": 18.501,
+            "warm_ms_per_token_median": 54.053,
+            "warm_event_ms_p50_median": 53.889,
+            "warm_event_ms_p95_median": 82.447,
+            "cold_ttft_ms": 7940.324344992405,
+            "warm_ttft_ms_median": 355.232,
+            "prompt_tokens": 4165,
+            "warm_repeats": 3
+          },
+          "nvfp4": {
+            "warm_decode_tok_s_median": 17.788,
+            "warm_ms_per_token_median": 56.218,
+            "warm_event_ms_p50_median": 55.376,
+            "warm_event_ms_p95_median": 82.714,
+            "cold_ttft_ms": 6448.537744989153,
+            "warm_ttft_ms_median": 322.248,
+            "prompt_tokens": 4165,
+            "warm_repeats": 3
+          }
+        },
+        "16k": {
+          "bf16": {
+            "warm_decode_tok_s_median": 17.843,
+            "warm_ms_per_token_median": 56.045,
+            "warm_event_ms_p50_median": 55.359,
+            "warm_event_ms_p95_median": 79.499,
+            "cold_ttft_ms": 20690.388869988965,
+            "warm_ttft_ms_median": 372.268,
+            "prompt_tokens": 16453,
+            "warm_repeats": 3
+          },
+          "nvfp4": {
+            "warm_decode_tok_s_median": 18.686,
+            "warm_ms_per_token_median": 53.517,
+            "warm_event_ms_p50_median": 53.926,
+            "warm_event_ms_p95_median": 77.75,
+            "cold_ttft_ms": 21502.67311601783,
+            "warm_ttft_ms_median": 368.726,
+            "prompt_tokens": 16453,
+            "warm_repeats": 3
+          }
+        },
+        "32k": {
+          "bf16": {
+            "warm_decode_tok_s_median": 17.747,
+            "warm_ms_per_token_median": 56.347,
+            "warm_event_ms_p50_median": 57.361,
+            "warm_event_ms_p95_median": 80.615,
+            "cold_ttft_ms": 32990.47712201718,
+            "warm_ttft_ms_median": 399.522,
+            "prompt_tokens": 32836,
+            "warm_repeats": 3
+          },
+          "nvfp4": {
+            "warm_decode_tok_s_median": 18.342,
+            "warm_ms_per_token_median": 54.521,
+            "warm_event_ms_p50_median": 54.371,
+            "warm_event_ms_p95_median": 78.377,
+            "cold_ttft_ms": 37447.526119009126,
+            "warm_ttft_ms_median": 363.649,
+            "prompt_tokens": 32836,
+            "warm_repeats": 3
+          }
+        },
+        "64k": {
+          "bf16": {
+            "warm_decode_tok_s_median": 17.212,
+            "warm_ms_per_token_median": 58.099,
+            "warm_event_ms_p50_median": 58.643,
+            "warm_event_ms_p95_median": 80.776,
+            "cold_ttft_ms": 60091.346197994426,
+            "warm_ttft_ms_median": 489.367,
+            "prompt_tokens": 65603,
+            "warm_repeats": 1
+          },
+          "nvfp4": {
+            "warm_decode_tok_s_median": 18.444,
+            "warm_ms_per_token_median": 54.219,
+            "warm_event_ms_p50_median": 53.58,
+            "warm_event_ms_p95_median": 77.163,
+            "cold_ttft_ms": 69813.64339200081,
+            "warm_ttft_ms_median": 423.611,
+            "prompt_tokens": 65603,
+            "warm_repeats": 1
+          }
+        }
+      },
+      "source": "raw/kvq-raw.jsonl",
+      "unit": "fields"
+    },
+    "capacity": {
+      "value": {
+        "bf16": {
+          "kv_tokens": 155456,
+          "kv_gib": 3.67,
+          "moe_miss_pct_last": null
+        },
+        "nvfp4": {
+          "kv_tokens": 500288,
+          "kv_gib": 3.67,
+          "moe_miss_pct_last": null
+        }
+      },
+      "source": "server log Allocating ... KV cache",
+      "unit": "tokens/GiB"
+    },
+    "fixtures": {
+      "value": {
+        "dir": "evidence/x299/03b/fixtures",
+        "prompts": {
+          "4k": 23474,
+          "16k": 93674,
+          "32k": 187267,
+          "64k": 374440
+        }
+      },
+      "source": "tokenizer-built",
+      "unit": "chars"
+    },
+    "worktree_after": {
+      "value": "9b7893793ef7fe038e2e16afe29759546892fe55cbee9b7250708d766aa18793",
+      "source": "raw/worktree-after.txt",
+      "unit": "sha256"
+    }
+  },
+  "invariants": [
+    "decode_tok_s numerator is committed completion_tokens-1, denominator is the first-to-last token event; unchanged across modes.",
+    "An SSE event is not a token; events can be fewer than completion_tokens (observed 26<28 and 254<255).",
+    "Cold (empty-prefix) rows and warm rows are typed and only warm rows feed medians.",
+    "prompt/output token counts are actual server usage counts (e.g. 4k fixture = 4165 tokens).",
+    "Speculative proposed tokens are never output; mtp_depth=0 here so no drafts.",
+    "Only benchmarks/ files changed; the serving code path is untouched."
+  ],
+  "cases": [
+    {
+      "id": "03b-C1-schema-v2",
+      "given": "extended benches",
+      "action": "check report rows",
+      "expected": "schema_version==2 in every row",
+      "status": "pass",
+      "assertion": "kvq-raw rows all schema_version 2"
+    },
+    {
+      "id": "03b-C2-p95",
+      "given": "extended benches",
+      "action": "check p95 field",
+      "expected": "event_ms_p95 present",
+      "status": "pass",
+      "assertion": "decode p95=76.08 ms"
+    },
+    {
+      "id": "03b-C3-actual-tokens",
+      "given": "include_usage",
+      "action": "compare events to completion",
+      "expected": "actual usage counts recorded",
+      "status": "pass",
+      "assertion": "4k prompt_tokens=4165"
+    },
+    {
+      "id": "03b-C4-raw-immutable",
+      "given": "--raw-jsonl",
+      "action": "append rows",
+      "expected": "append-only JSONL",
+      "status": "pass",
+      "assertion": "28 rows"
+    },
+    {
+      "id": "03b-C5-contexts",
+      "given": "4k/16k/32k/64k prompts",
+      "action": "run sweep",
+      "expected": "all four contexts produce rows",
+      "status": "pass",
+      "assertion": "contexts=['16k', '32k', '4k', '64k']"
+    },
+    {
+      "id": "03b-C6-paired-repeats",
+      "given": "bf16 vs nvfp4",
+      "action": "ABBA-ish paired warm repeats",
+      "expected": ">=3 warm repeats for <=32k",
+      "status": "pass",
+      "assertion": "4k warm repeats=3"
+    },
+    {
+      "id": "03b-C7-bs1-decode",
+      "given": "bench_decode_moe",
+      "action": "offload bs=1 decode 256",
+      "expected": "row with usage + percentiles",
+      "status": "pass",
+      "assertion": "19.63 tok/s"
+    },
+    {
+      "id": "03b-N1-sse-multi-token",
+      "given": "detokenizer coalescing",
+      "action": "events < completion_tokens",
+      "expected": "numerator uses committed tokens",
+      "status": "pass",
+      "assertion": "EOS probe events 26 < completion 28; 03a 254/255"
+    },
+    {
+      "id": "03b-N2-eos-early",
+      "given": "ignore_eos=false",
+      "action": "observe finish_reason",
+      "expected": "stop before budget, tagged",
+      "status": "pass",
+      "assertion": "finish_reason=stop at 28 tokens of 512"
+    },
+    {
+      "id": "03b-N3-timeout",
+      "given": "server slow > client timeout",
+      "action": "would raise",
+      "expected": "error row, not success",
+      "status": "skip",
+      "assertion": "not exercised in 03b (no controlled timeout run)"
+    },
+    {
+      "id": "03b-N4-server-crash",
+      "given": "server dies mid-stream",
+      "action": "would raise",
+      "expected": "error row",
+      "status": "skip",
+      "assertion": "not exercised (would require fault injection)"
+    },
+    {
+      "id": "03b-N5-empty-output",
+      "given": "<2 token events",
+      "action": "guard",
+      "expected": "RuntimeError/sys.exit",
+      "status": "pass",
+      "assertion": "guards in both benches"
+    },
+    {
+      "id": "03b-N6-missing-usage",
+      "given": "no include_usage",
+      "action": "observe",
+      "expected": "usage absent -> harness fails loudly",
+      "status": "pass",
+      "assertion": "usage=null observed; bench_decode_moe sys.exit on missing usage"
+    }
+  ],
+  "commands": [
+    {
+      "id": "03b-CMD1",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "benchmarks/bench_decode_moe.py",
+        "--model",
+        "$FT_MODEL",
+        "--backend",
+        "offload",
+        "--decode",
+        "256",
+        "--cache",
+        "2600",
+        "--greedy",
+        "--json",
+        "evidence/x299/03b/raw/decode-rows.jsonl"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1800,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/decode-rows.jsonl"
+    },
+    {
+      "id": "03b-CMD2",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "benchmarks/bench_kv_quant.py",
+        "--model",
+        "$FT_MODEL",
+        "--prompt-dir",
+        "evidence/x299/03b/fixtures",
+        "--contexts",
+        "4k,16k,32k,64k",
+        "--decode",
+        "128",
+        "--cache",
+        "2600",
+        "--repeats-short",
+        "3",
+        "--repeats-long",
+        "1",
+        "--skip-modes",
+        "fp8",
+        "--json",
+        "evidence/x299/03b/raw/kvq-rows.json",
+        "--raw-jsonl",
+        "evidence/x299/03b/raw/kvq-raw.jsonl"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 3600,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/kvq-raw.jsonl"
+    },
+    {
+      "id": "03b-CMD3-pytest",
+      "applicable": false,
+      "argv": [],
+      "phase": "b",
+      "reason": "no test module covers benchmarks/; extension verified by running both benches and the schema assertions."
+    }
+  ],
+  "performance_gate": {
+    "applies": false,
+    "reason": "benchmark suite task; PERF gate applies once an optimization candidate is compared"
+  },
+  "quality_gate": {
+    "applies": false,
+    "reason": "no model/precision change; nvfp4 is the prod KV mode, quality in task 18"
+  },
+  "rollback_recipe": {
+    "applies": true,
+    "recipe": "restore benchmarks/bench_decode_moe.py and benchmarks/bench_kv_quant.py from .x299-backup/ on target; benchmarks are not imported by the server, so no relaunch needed",
+    "verified": "backup created at /opt/FreeToken/.x299-backup/ before deploy"
+  },
+  "limitations": [
+    "Concurrency 2/4 (secondary) not run in 03b; bench_kv_quant --parallel exists but was out of the bounded run.",
+    "Server per-request prefill/decode phase times still not exposed; only client times + capacity.",
+    "timeout and server-crash negatives were not injected; guards exist but are not exercised.",
+    "64k ran and passed fit (warm decode 18.2-18.4 tok/s nvfp4); 128k not attempted."
+  ],
+  "generated_utc": "2026-09-11T11:02:00Z"
+}

@@ -1,0 +1,106 @@
+{
+  "task_key": "04a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "cases": [
+    {
+      "id": "04a-C1-existing-counters",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-C2-nsys",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-C3-offload-stat-tensors",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-C4-ple-events",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/pytest-profile-related.txt"
+    },
+    {
+      "id": "04a-C5-transfer-floor",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-C6-baseline-p95-tpot",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-N1-overlap",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-N2-profiler-sync",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-N3-empty-batch",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-N4-counter-overflow",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    },
+    {
+      "id": "04a-N5-sampling-error",
+      "status": "pass",
+      "command_id": "04a-CMD1..4",
+      "log_path": "raw/existing-counters.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "04a-existing-counters",
+      "raw_path": "raw/existing-counters.txt",
+      "sha256": "4b7c94c711733b176f64acf0693f9493800aafe7abdf8e432c681afae6202c5f"
+    },
+    {
+      "run_id": "04a-pytest",
+      "raw_path": "raw/pytest-profile-related.txt",
+      "sha256": "23b12b86b6ae26f8aa36e008a85beb850a0d7d80d22a9817d0b8df65a6e718ea"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "No per-phase GPU timeline exists yet; 04b adds the opt-in sampled trace.",
+    "The existing counters are per decode-log-interval (default 40 steps), not per single step.",
+    "nsys is available; ncu is not, so no per-kernel roofline.",
+    "tests/moe/test_offload.py::test_adjust_config_converts_moe_cache_rate_to_cache_size fails on the dev box only because flashinfer is not installed (test selects backend 'fi'); on the target venv with [accel] it is expected to pass."
+  ],
+  "rollback_result": "not_required (no production code changed)",
+  "key_findings": {
+    "moe_miss_rate": 0.33,
+    "transfer_floor_ms_per_token_estimate": 35.43,
+    "observed_tpot_ms": 55.93,
+    "observed_p95_ms": 82.5,
+    "primary_hypothesis": "expert H2D over PCIe 3.0 is the dominant decode bottleneck",
+    "pytest": {
+      "failed": 1,
+      "failed_reason": "flashinfer absent on dev (backend 'fi' test)",
+      "passed": 48,
+      "skipped": 5
+    }
+  }
+}

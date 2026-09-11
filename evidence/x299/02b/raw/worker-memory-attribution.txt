@@ -1,0 +1,27 @@
+worker=1206849
+### status
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	47514064 kB
+VmRSS:	30615532 kB
+RssAnon:	 1036600 kB
+RssFile:	  252112 kB
+RssShmem:	29326820 kB
+VmSwap:	  548692 kB
+Threads:	31
+### smaps_rollup
+### maps shm/memfd
+### sysv shm
+
+------ Shared Memory Segments --------
+key        shmid      owner      perms      bytes      nattch     status      
+
+### cgroup memory.stat
+anon 1080377344
+file 91960451072
+sock 0
+shmem 68174073856
+file_mapped 30214340608
+swapcached 142569472
+### faults
+minflt=19103035 majflt=433532

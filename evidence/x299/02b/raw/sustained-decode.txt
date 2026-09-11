@@ -1,0 +1,13 @@
+[before] t=1789122854 minflt=19115944 majflt=434346 VmRSS=30678956 VmSwap=545220 SwapFree=2383204 MemAvail=33094096
+curl_time=43.753941
+[after] t=1789122898 minflt=19116423 majflt=434389 VmRSS=30681148 VmSwap=544820 SwapFree=2383204 MemAvail=33162828
+### usage
+{'prompt_tokens': 73, 'completion_tokens': 767, 'total_tokens': 840}
+finish length
+### samples(first/last)
+[t1] t=1789122858 minflt=19116262 majflt=434361 VmRSS=30680368 VmSwap=545072 SwapFree=2383204 MemAvail=33100000
+[t2] t=1789122861 minflt=19116279 majflt=434364 VmRSS=30680472 VmSwap=545060 SwapFree=2383204 MemAvail=33080592
+[t3] t=1789122864 minflt=19116348 majflt=434366 VmRSS=30680756 VmSwap=544984 SwapFree=2383204 MemAvail=33096808
+[t12] t=1789122891 minflt=19116411 majflt=434370 VmRSS=30681024 VmSwap=544900 SwapFree=2383204 MemAvail=33192740
+[t13] t=1789122894 minflt=19116412 majflt=434370 VmRSS=30681028 VmSwap=544900 SwapFree=2383204 MemAvail=33147884
+[t14] t=1789122897 minflt=19116422 majflt=434370 VmRSS=30681068 VmSwap=544900 SwapFree=2383204 MemAvail=33156340

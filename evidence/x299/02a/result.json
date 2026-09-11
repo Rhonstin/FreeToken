@@ -1,0 +1,97 @@
+{
+  "task_key": "02a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "02a-C1-ledger-sums",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/checkpoint-inventory.json"
+    },
+    {
+      "id": "02a-C2-checkpoint-pin",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/checkpoint-inventory.json"
+    },
+    {
+      "id": "02a-C3-mtp-present",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/checkpoint-inventory.json"
+    },
+    {
+      "id": "02a-C4-ple-shards",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/checkpoint-inventory.json"
+    },
+    {
+      "id": "02a-C5-tests",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/pytest-qwen4exp.txt"
+    },
+    {
+      "id": "02a-N1-missing-mtp",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/checkpoint-inventory.json"
+    },
+    {
+      "id": "02a-N2-mixed-formats",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/checkpoint-inventory.json"
+    },
+    {
+      "id": "02a-N3-ftw-missing-ple",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/checkpoint-inventory.json"
+    },
+    {
+      "id": "02a-N4-peak-over-available",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/checkpoint-inventory.json"
+    },
+    {
+      "id": "02a-N5-unknown-template",
+      "status": "pass",
+      "command_id": "02a-CMD1..5",
+      "log_path": "raw/checkpoint-inventory.json"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "02a-inventory",
+      "raw_path": "raw/checkpoint-inventory.json"
+    },
+    {
+      "run_id": "02a-pytest",
+      "raw_path": "raw/pytest-qwen4exp.txt"
+    },
+    {
+      "run_id": "02a-prod-memory",
+      "raw_path": "raw/prod-memory-baseline.txt"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Post-restart /v1/stats reported vram_bytes=0 / kv=null; the KV byte figure is from the pre-restart snapshot (total_pages 3438). Re-measure in 02b.",
+    "Host steady RSS (~29.2 GiB) exceeds the sum of declared host banks; the gap (likely shmem-backed bank allocation) is not attributed yet.",
+    "index metadata total_size / published output bytes differ from measured payload by <0.1%; ledger uses payload.",
+    "No routing trace, so expert cache hit/miss bytes are unknown; task 10/11."
+  ],
+  "rollback_result": "not_required (no production code changed)",
+  "pytest": {
+    "passed": 150,
+    "skipped": 55,
+    "deselected": 2,
+    "exit": 0,
+    "note": "dev host has no CUDA; skips are platform-gated, not failures"
+  }
+}

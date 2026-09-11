@@ -1,0 +1,214 @@
+# dmidecode 3.6
+Getting SMBIOS data from sysfs.
+SMBIOS 2.8 present.
+
+Handle 0x0039, DMI type 16, 23 bytes
+Physical Memory Array
+	Location: System Board Or Motherboard
+	Use: System Memory
+	Error Correction Type: None
+	Maximum Capacity: 1536 GB
+	Error Information Handle: Not Provided
+	Number Of Devices: 4
+
+Handle 0x003B, DMI type 17, 40 bytes
+Memory Device
+	Array Handle: 0x0039
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 16 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: CPU1_DIMM_A0
+	Bank Locator: NODE 1
+	Type: DDR4
+	Type Detail: Synchronous
+	Speed: 2133 MT/s
+	Manufacturer: <BAD INDEX>
+	Serial Number: <BAD INDEX>
+	Asset Tag: <BAD INDEX>
+	Part Number: <BAD INDEX>
+	Rank: 2
+	Configured Memory Speed: 2133 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+
+Handle 0x003D, DMI type 17, 40 bytes
+Memory Device
+	Array Handle: 0x0039
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 4 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: CPU1_DIMM_A1
+	Bank Locator: NODE 1
+	Type: DDR4
+	Type Detail: Synchronous
+	Speed: 2133 MT/s
+	Manufacturer: <BAD INDEX>
+	Serial Number: <BAD INDEX>
+	Asset Tag: <BAD INDEX>
+	Part Number: <BAD INDEX>
+	Rank: 1
+	Configured Memory Speed: 2133 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+
+Handle 0x003F, DMI type 17, 40 bytes
+Memory Device
+	Array Handle: 0x0039
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 16 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: CPU1_DIMM_B0
+	Bank Locator: NODE 1
+	Type: DDR4
+	Type Detail: Synchronous
+	Speed: 2133 MT/s
+	Manufacturer: <BAD INDEX>
+	Serial Number: <BAD INDEX>
+	Asset Tag: <BAD INDEX>
+	Part Number: <BAD INDEX>
+	Rank: 2
+	Configured Memory Speed: 2133 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+
+Handle 0x0041, DMI type 17, 40 bytes
+Memory Device
+	Array Handle: 0x0039
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 4 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: CPU1_DIMM_B1
+	Bank Locator: NODE 1
+	Type: DDR4
+	Type Detail: Synchronous
+	Speed: 2133 MT/s
+	Manufacturer: <BAD INDEX>
+	Serial Number: <BAD INDEX>
+	Asset Tag: <BAD INDEX>
+	Part Number: <BAD INDEX>
+	Rank: 1
+	Configured Memory Speed: 2133 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+
+Handle 0x0043, DMI type 16, 23 bytes
+Physical Memory Array
+	Location: System Board Or Motherboard
+	Use: System Memory
+	Error Correction Type: None
+	Maximum Capacity: 1536 GB
+	Error Information Handle: Not Provided
+	Number Of Devices: 4
+
+Handle 0x0045, DMI type 17, 40 bytes
+Memory Device
+	Array Handle: 0x0043
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 16 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: CPU1_DIMM_C0
+	Bank Locator: NODE 1
+	Type: DDR4
+	Type Detail: Synchronous
+	Speed: 2133 MT/s
+	Manufacturer: <BAD INDEX>
+	Serial Number: <BAD INDEX>
+	Asset Tag: <BAD INDEX>
+	Part Number: <BAD INDEX>
+	Rank: 1
+	Configured Memory Speed: 2133 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+
+Handle 0x0047, DMI type 17, 40 bytes
+Memory Device
+	Array Handle: 0x0043
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 16 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: CPU1_DIMM_C1
+	Bank Locator: NODE 1
+	Type: DDR4
+	Type Detail: Synchronous
+	Speed: 2133 MT/s
+	Manufacturer: Samsung
+	Serial Number: 41C75A73
+	Asset Tag:  
+	Part Number: M471A2K43CB1-CTD    
+	Rank: 2
+	Configured Memory Speed: 2133 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+
+Handle 0x0049, DMI type 17, 40 bytes
+Memory Device
+	Array Handle: 0x0043
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 16 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: CPU1_DIMM_D0
+	Bank Locator: NODE 1
+	Type: DDR4
+	Type Detail: Synchronous
+	Speed: 2133 MT/s
+	Manufacturer: Kinston
+	Serial Number: A2229517
+	Asset Tag:  
+	Part Number: 9905625-066.A00G    
+	Rank: 2
+	Configured Memory Speed: 2133 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+
+Handle 0x004B, DMI type 17, 40 bytes
+Memory Device
+	Array Handle: 0x0043
+	Error Information Handle: Not Provided
+	Total Width: 72 bits
+	Data Width: 64 bits
+	Size: 16 GB
+	Form Factor: DIMM
+	Set: None
+	Locator: CPU1_DIMM_D1
+	Bank Locator: NODE 1
+	Type: DDR4
+	Type Detail: Synchronous
+	Speed: 2133 MT/s
+	Manufacturer: Kinston
+	Serial Number: 2007F27C
+	Asset Tag:  
+	Part Number: 9905625-066.A00G    
+	Rank: 2
+	Configured Memory Speed: 2133 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+

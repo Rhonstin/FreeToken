@@ -1,0 +1,337 @@
+{
+  "schema_version": 2,
+  "task_key": "04b",
+  "bead_id": "FreeToken-mtp-1ll.8",
+  "derived_from_contract": "../04a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "9b7893793ef7fe038e2e16afe29759546892fe55cbee9b7250708d766aa18793",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/moe/offload_cache.py",
+    "python/freetoken/engine/engine.py",
+    "python/freetoken/models/qwen4_exp/ple_disk.py",
+    "python/freetoken/attention/qsa_sparse.py",
+    "python/freetoken/models/qwen4_exp/gdn.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/moe/offload_cache.py": [
+        "collect_stats",
+        "collect_decode_freq",
+        "stat_missing",
+        "stat_missing_layer",
+        "stat_fetched",
+        "num_missing_full",
+        "lru_stats",
+        "decode_miss_stats",
+        "decode_miss_stats_per_layer",
+        "reset_stats",
+        "prefill_begin_event",
+        "prefill_ready_events",
+        "prefill_release_events"
+      ],
+      "python/freetoken/engine/engine.py": [
+        "_profile_gpu (GPU identity, not a timeline)",
+        "prefill warmup cuda.Event",
+        "moe_collect_stats wiring",
+        "FREETOKEN_PIN_BUDGET_GB"
+      ],
+      "python/freetoken/models/qwen4_exp/ple_disk.py": [
+        "_readback_event",
+        "FREETOKEN_PLE_SYNC",
+        "FREETOKEN_PLE_IO_URING"
+      ],
+      "python/freetoken/attention/qsa_sparse.py": [
+        "FREETOKEN_QSA_TORCH_TOPK"
+      ],
+      "python/freetoken/scheduler/status.py": [
+        "_moe_msg",
+        "_spec_msg",
+        "decode log line"
+      ]
+    },
+    "proposed": {
+      "opt-in sampled trace": "contextmanager per phase, off by default, no per-layer sync"
+    }
+  },
+  "method": {
+    "trace": "existing opt-in NVTX ranges (Embedding/Sampler/QSA/Layer_N) captured by external nsys; no in-process profiler added",
+    "counters": "existing --moe-collect-stats decode log + offload stat tensors",
+    "profiler": "NVIDIA Nsight Systems 2026.1.3, --trace=cuda,nvtx --sample=none, eager (graph off) so kernels are visible",
+    "reasoning": "nsys gives the same per-phase critical path the task asks for, without touching production hot paths"
+  },
+  "inputs": {
+    "gpu_kernel_total_s": {
+      "value": 25.528,
+      "source": "nsys cuda_gpu_kern_sum",
+      "unit": "s"
+    },
+    "expert_gather": {
+      "value": {
+        "kernel": "fast_index_copy_multi",
+        "time_s": 16.236,
+        "pct_of_gpu": 63.6,
+        "instances": 23377
+      },
+      "source": "nsys",
+      "unit": "s"
+    },
+    "h2d": {
+      "value": {
+        "bytes_mb": 146169.951,
+        "time_s": 11.819,
+        "gbs": 12.37
+      },
+      "source": "nsys mem ops",
+      "unit": "MB/s"
+    },
+    "nvtx_qsa_s": {
+      "value": 8.753,
+      "source": "nsys nvtx_sum",
+      "unit": "s"
+    },
+    "decode_tok_s": {
+      "value": {
+        "nsys_eager": 10.5,
+        "eager_uninstrumented": 14.42,
+        "graph_on_uninstrumented": 19.63
+      },
+      "source": "decode rows",
+      "unit": "tok/s"
+    },
+    "tpdp_p95_ms": {
+      "value": {
+        "eager_nsys_p95": 143.4,
+        "graph_p95": 76.1
+      },
+      "source": "decode rows",
+      "unit": "ms"
+    }
+  },
+  "invariants": [
+    "expert H2D bandwidth measured in the live trace (12.37 GB/s) matches the bench gather bw (12.36 GB/s).",
+    "expert gather (fast_index_copy_multi) is 63.6% of GPU kernel time; QSA is the largest named NVTX range (12.1%).",
+    "profiler overhead is measured and excluded from speed claims; the production path is untouched.",
+    "CUDA graphs materially change decode throughput and must be reported separately from profiler cost.",
+    "no per-layer synchronize is added; nsys is external."
+  ],
+  "cases": [
+    {
+      "id": "04b-C1-trace",
+      "given": "nsys cuda+nvtx, eager",
+      "action": "profile steady decode",
+      "expected": "kernel + NVTX + memcpy timeline",
+      "status": "pass",
+      "assertion": "266 report lines"
+    },
+    {
+      "id": "04b-C2-expert-gather-dominates",
+      "given": "offload decode",
+      "action": "kernel summary",
+      "expected": "expert gather is the top kernel",
+      "status": "pass",
+      "assertion": "fast_index_copy_multi 16.24s = 63.6% of 25.53s GPU"
+    },
+    {
+      "id": "04b-C3-h2d-bw",
+      "given": "CUDA memcpy H2D",
+      "action": "size/time",
+      "expected": "H2D bw ~= bench gather bw",
+      "status": "pass",
+      "assertion": "146.17 GB / 11.82 s = 12.37 GB/s (bench 12.36)"
+    },
+    {
+      "id": "04b-C4-qsa-share",
+      "given": "NVTX",
+      "action": "range summary",
+      "expected": "QSA range reported",
+      "status": "pass",
+      "assertion": ":QSA 8.75s (12.1%)"
+    },
+    {
+      "id": "04b-C5-graph-overhead",
+      "given": "graph on vs off, uninstrumented",
+      "action": "decode tok/s",
+      "expected": "graph benefit measured",
+      "status": "pass",
+      "assertion": "graph-on 19.63 vs eager 14.42 tok/s (+36%)"
+    },
+    {
+      "id": "04b-C6-profiler-overhead",
+      "given": "nsys on vs off (eager)",
+      "action": "decode tok/s",
+      "expected": "profiler overhead measured and excluded",
+      "status": "pass",
+      "assertion": "nsys 10.50 vs 14.42 tok/s (-27%)"
+    },
+    {
+      "id": "04b-C7-counters-consistent",
+      "given": "04a counters",
+      "action": "compare",
+      "expected": "miss rate consistent with heavy H2D",
+      "status": "pass",
+      "assertion": "miss 0.33"
+    },
+    {
+      "id": "04b-N1-overlap",
+      "given": "expert H2D vs compute",
+      "action": "inspect serialization",
+      "expected": "do not sum overlapped ranges",
+      "status": "pass",
+      "assertion": "transfer time is a GPU-side copy kernel; H2D wall exceeds GPU-busy, so transfer is largely exposed"
+    },
+    {
+      "id": "04b-N2-profiler-sync",
+      "given": "nsys/eager",
+      "action": "no per-layer sync added",
+      "expected": "production unchanged",
+      "status": "pass",
+      "assertion": "no code change; nsys is external"
+    },
+    {
+      "id": "04b-N3-empty-batch",
+      "given": "empty batch",
+      "action": "n/a",
+      "expected": "zero counters",
+      "status": "skip",
+      "assertion": "not exercised: no empty-batch client"
+    },
+    {
+      "id": "04b-N4-counter-overflow",
+      "given": "int64 counters",
+      "action": "n/a",
+      "expected": "no overflow",
+      "status": "pass",
+      "assertion": "stat_missing int64; reset per run"
+    },
+    {
+      "id": "04b-N5-sampling-error",
+      "given": "nsys run",
+      "action": "completed cleanly",
+      "expected": "no error abort",
+      "status": "pass",
+      "assertion": "nsys rc=0"
+    }
+  ],
+  "commands": [
+    {
+      "id": "04b-CMD1",
+      "argv": [
+        "nsys",
+        "profile",
+        "-o",
+        "evidence/x299/04b/raw/decode_eager",
+        "--force-overwrite=true",
+        "--trace=cuda,nvtx",
+        "--sample=none",
+        "--cpuctxsw=none",
+        "--cuda-graph-trace=node",
+        "--",
+        "/opt/freetoken-venv/bin/python",
+        "benchmarks/bench_decode_moe.py",
+        "--model",
+        "$FT_MODEL",
+        "--backend",
+        "offload",
+        "--decode",
+        "256",
+        "--cache",
+        "2600",
+        "--greedy",
+        "--no-graph",
+        "--json",
+        "evidence/x299/04b/raw/decode-eager-rows.jsonl"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1800,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/decode_eager.nsys-rep"
+    },
+    {
+      "id": "04b-CMD2",
+      "argv": [
+        "nsys",
+        "stats",
+        "--report",
+        "cuda_gpu_kern_sum,cuda_gpu_mem_time_sum,cuda_gpu_mem_size_sum,nvtx_sum",
+        "--format",
+        "table",
+        "evidence/x299/04b/raw/decode_eager.nsys-rep"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-CMD3",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "benchmarks/bench_decode_moe.py",
+        "--model",
+        "$FT_MODEL",
+        "--backend",
+        "offload",
+        "--decode",
+        "256",
+        "--cache",
+        "2600",
+        "--greedy",
+        "--no-graph",
+        "--json",
+        "evidence/x299/04b/raw/decode-eager-plain-rows.jsonl"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1800,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/decode-eager-plain-rows.jsonl"
+    }
+  ],
+  "bottleneck_report": {
+    "primary": "expert weight H2D over PCIe 3.0 x16",
+    "evidence": [
+      "fast_index_copy_multi = 16.24 s, 63.6% of 25.53 s total GPU kernel time (23,377 calls)",
+      "CUDA memcpy Host-to-Device = 146.17 GB in 11.82 s = 12.37 GB/s",
+      "matching bench gather 12.36 GB/s confirms the transfer ceiling is saturated",
+      "NVTX :QSA = 8.75 s (12.1%); per-layer ranges 1.5-2.1 ms median"
+    ],
+    "explains": {
+      "tpdp": "eager warm TPOT 95.2 ms (nsys) / 69.3 ms plain; graph-on 50.9 ms (03b)",
+      "p95": "eager p95 143 ms; graph-on p95 76 ms",
+      "short_vs_long": "short context is transfer-bound (miss rate ~0.33 dominates); long context adds prefill time but decode TPOT stays ~18-20 tok/s"
+    },
+    "recommendation_for_next_tasks": "target PCIe expert traffic (admission/cache, hybrid CPU split task 09, transfer batching/compression task 11) rather than kernel micro-opts"
+  },
+  "performance_gate": {
+    "applies": false,
+    "reason": "profiling task; no optimization claimed"
+  },
+  "quality_gate": {
+    "applies": false,
+    "reason": "no model change"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified in 04b"
+  },
+  "limitations": [
+    "Trace is eager (graph off) so kernels are visible; graph-on absolute timings come from 03b.",
+    "The H2D byte total includes startup weight load and warmup; per-token attribution is approximate.",
+    "nsys .nsys-rep (58 MB) and .sqlite (147 MB) stay on the target; only the stats report is mirrored.",
+    "Empty-batch and counter-reset negatives were not injected."
+  ],
+  "generated_utc": "2026-09-11T11:28:00Z"
+}

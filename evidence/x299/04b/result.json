@@ -1,0 +1,126 @@
+{
+  "task_key": "04b",
+  "outcome": "no_change",
+  "outcome_reason": "Existing opt-in NVTX + offload counters + external nsys already expose the decode critical path; adding a parallel in-process profiler would duplicate it and risk the >2% overhead / no-sync policy.",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "9b7893793ef7fe038e2e16afe29759546892fe55cbee9b7250708d766aa18793",
+  "cases": [
+    {
+      "id": "04b-C1-trace",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-C2-expert-gather-dominates",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-C3-h2d-bw",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-C4-qsa-share",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-C5-graph-overhead",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-C6-profiler-overhead",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-C7-counters-consistent",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-N1-overlap",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-N2-profiler-sync",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-N3-empty-batch",
+      "status": "skip",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-N4-counter-overflow",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    },
+    {
+      "id": "04b-N5-sampling-error",
+      "status": "pass",
+      "command_id": "04b-CMD1..3",
+      "log_path": "raw/nsys-stats.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "04b-nsys-stats",
+      "raw_path": "raw/nsys-stats.txt",
+      "sha256": "bbeef181e096a8a089fd953e68523ec963763e5f92afd47245b745f32c50527a"
+    },
+    {
+      "run_id": "04b-nsys-decode",
+      "raw_path": "raw/decode-eager-rows.jsonl",
+      "sha256": "3e939dcda4abb06e9e970e7eec5936ddb44283e109d2eb4505f18e829179a070"
+    },
+    {
+      "run_id": "04b-eager-plain",
+      "raw_path": "raw/decode-eager-plain-rows.jsonl",
+      "sha256": "57be6356b197b409eb69e77c9a9ae6ca40b77c452d8b3759419c3656cd807369"
+    },
+    {
+      "run_id": "04b-eager-log",
+      "raw_path": "raw/decode-eager-plain.log",
+      "sha256": "a1219693213d5d9744aa2e63544fb77557a85e6faa927f4b3b7c4068a061be71"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Trace is eager (graph off) so kernels are visible; graph-on absolute timings come from 03b.",
+    "The H2D byte total includes startup weight load and warmup; per-token attribution is approximate.",
+    "nsys .nsys-rep (58 MB) and .sqlite (147 MB) stay on the target; only the stats report is mirrored.",
+    "Empty-batch and counter-reset negatives were not injected."
+  ],
+  "rollback_result": "not_required (no production code changed)",
+  "key_findings": {
+    "expert_gather_pct_of_gpu": 63.6,
+    "expert_gather_s": 16.236,
+    "h2d_gbs": 12.37,
+    "h2d_gb": 146.2,
+    "qsa_pct_nvtx": 12.1,
+    "graph_gain_pct": 36.1,
+    "nsys_overhead_pct": -27.2,
+    "bottleneck": "expert H2D over PCIe3 x16 (confirmed)",
+    "decode_tok_s": {
+      "graph_on": 19.63,
+      "eager_plain": 14.42,
+      "nsys_eager": 10.5
+    }
+  }
+}

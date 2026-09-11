@@ -1,0 +1,477 @@
+{
+  "schema_version": 2,
+  "task_key": "03a",
+  "bead_id": "FreeToken-mtp-1ll.5",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "benchmarks/bench_kv_quant.py",
+    "benchmarks/bench_decode_moe.py",
+    "python/freetoken/benchmark/client.py",
+    "python/freetoken/benchmark/perf.py"
+  ],
+  "symbols": {
+    "existing": {
+      "benchmarks/bench_kv_quant.py": [
+        "main",
+        "run_row",
+        "stream",
+        "quality_rows",
+        "parse_capacity",
+        "serve_cmd",
+        "wait_ready",
+        "MODES"
+      ],
+      "benchmarks/bench_decode_moe.py": [
+        "parse_args",
+        "stream_generate",
+        "run_one",
+        "serve_cmd",
+        "parse_spec_acceptance",
+        "resolve_sampling",
+        "stop_server"
+      ],
+      "python/freetoken/benchmark/client.py": [
+        "BenchmarkTrace",
+        "BenchOneResult",
+        "RawResult",
+        "Counter",
+        "Console",
+        "BenchmarkResult",
+        "make_console",
+        "generate_prompt",
+        "process_benchmark_results"
+      ],
+      "python/freetoken/benchmark/perf.py": [
+        "perf_cuda",
+        "compare_memory_kernel_perf"
+      ]
+    },
+    "proposed": {
+      "benchmarks/bench_kv_quant.py": [
+        "report['schema_version']=2",
+        "row event_ms_p95",
+        "raw JSONL row writer"
+      ],
+      "benchmarks/bench_decode_moe.py": [
+        "report['schema_version']=2",
+        "row event_ms_p95",
+        "raw JSONL row writer"
+      ],
+      "python/freetoken/benchmark/client.py": [
+        "shared percentile/report-schema helper (optional)"
+      ]
+    }
+  },
+  "report_schema": {
+    "schema_version": 2,
+    "required_row_fields": [
+      "schema_version",
+      "type (measured|warmup|cold|aggregate|error|skip)",
+      "mode/backend",
+      "context_label",
+      "concurrency",
+      "repeat",
+      "prompt_tokens",
+      "completion_tokens",
+      "events",
+      "decode_steps",
+      "decode_tok_s",
+      "ms_per_token",
+      "ttft_ms",
+      "ttft_cold_ms",
+      "event_ms_p50",
+      "event_ms_p95",
+      "event_ms_p99",
+      "numerator",
+      "denominator",
+      "output_sha1",
+      "server_phase_ms (or null+reason)",
+      "client_phase_ms",
+      "error (or null)",
+      "sampling"
+    ],
+    "rules": [
+      "raw rows are written append-only as JSONL and never edited in place",
+      "decode_tok_s numerator = committed completion_tokens - 1; denominator = last-first token event (s)",
+      "an SSE event is NOT a token; events can be < completion_tokens when the detokenizer coalesces",
+      "speculative proposed tokens are never counted as output; accepted committed tokens come from usage",
+      "cold load/JIT/prefix runs are tagged and excluded from warm medians",
+      "error/incomplete/skip rows are a separate type, never averaged with measured rows",
+      "server phase times are recorded only when the server reports them, otherwise null + reason"
+    ]
+  },
+  "inputs": {
+    "existing_metrics": {
+      "value": {
+        "bench_decode_moe": [
+          "decode_tok_s",
+          "ms_per_token",
+          "event_ms_p50",
+          "event_ms_p99",
+          "ttft_ms",
+          "ttft_cold_ms",
+          "completion_tokens",
+          "spec_accept_rate"
+        ],
+        "bench_kv_quant": [
+          "decode_tok_s",
+          "ms_per_token",
+          "event_ms_p50",
+          "event_ms_p99",
+          "ttft_ms",
+          "capacity.moe_miss_pct_last"
+        ]
+      },
+      "source": "bench source + --help",
+      "unit": "fields"
+    },
+    "missing_metrics": {
+      "value": [
+        "schema_version",
+        "event_ms_p95",
+        "server per-request phase times",
+        "concurrency 2/4 in decode bench",
+        "unified context grid"
+      ],
+      "source": "source inspection vs BENCHMARK_CONTRACT.md",
+      "unit": "list"
+    },
+    "baseline_probe": {
+      "value": {
+        "schema_version": 1,
+        "origin": "http://127.0.0.1:1919",
+        "model_id": "Qwen3.8-Flash-Next-NVFP4",
+        "greedy": true,
+        "prompt_tokens": 73,
+        "completion_tokens": 255,
+        "events": 254,
+        "decode_steps": 254,
+        "decode_tok_s": 21.951423254043682,
+        "ms_per_token": 45.55513273226097,
+        "ttft_ms": 5570.464554999489,
+        "ttft_warm_first_ms": 5578.111678973073,
+        "event_ms_p50": 43.04497400880791,
+        "event_ms_p95": 80.13122898410074,
+        "event_ms_p99": 113.93627800862305,
+        "event_ms_max": 128.5928979923483,
+        "numerator": "completion_tokens - 1 (committed output tokens, excludes first token)",
+        "denominator": "last_token_event_ts - first_token_event_ts (seconds)",
+        "note": "an SSE event != a token; percentiles are over client token events",
+        "server_stats_before": {
+          "decode_tps": 0.0,
+          "ttft_mean_ms": 0,
+          "p95_ms": 43749
+        },
+        "server_stats_after": {
+          "decode_tps": 20.6,
+          "ttft_mean_ms": 5568,
+          "p95_ms": 43749,
+          "completion_tokens_total": 1044
+        }
+      },
+      "source": "raw/latency-probe.jsonl",
+      "unit": "fields"
+    },
+    "ppl_endpoint": {
+      "value": {
+        "path": "/v1/score",
+        "present": true,
+        "probe_http": 422
+      },
+      "source": "curl -o /dev/null -w %{http_code}",
+      "unit": "http"
+    },
+    "bandwidth_floor_context": {
+      "value": {
+        "pcie_h2d_gbs": 12.21,
+        "nvfp4_cpu_moe_gbs": 30.88
+      },
+      "source": "../01b/raw/benchbw.json",
+      "unit": "GB/s"
+    }
+  },
+  "invariants": [
+    "Client metrics use the usage chunk's committed counts, not the number of SSE events.",
+    "TTFT is measured separately from TPOT; decode throughput excludes the first token from the numerator.",
+    "Cold (empty-prefix) and warm runs are separate rows; only warm rows feed the median.",
+    "Prompt/output token counts are actual tokenizer counts from the server usage, never estimated from characters.",
+    "PPL is NOT blocked on this fork: the server exposes /v1/score (teacher-forced NLL/PPL); task 03 records quality separately.",
+    "No production file is changed by 03a; the allowed scope for 03b is limited to the four listed benchmark files."
+  ],
+  "cases": [
+    {
+      "id": "03a-C1-probe-metrics",
+      "given": "live prod server",
+      "action": "streamed greedy decode, collect per-token stamps",
+      "expected": "decode_tok_s, ms_per_token, ttft_ms, p50/p95/p99 present",
+      "assertion": "decode_tok_s=21.95, p95=80.1ms",
+      "status": "pass"
+    },
+    {
+      "id": "03a-C2-usage-counts",
+      "given": "stream_options include_usage",
+      "action": "read usage",
+      "expected": "actual prompt/completion token counts",
+      "assertion": "prompt=73, completion=255",
+      "status": "pass"
+    },
+    {
+      "id": "03a-C3-sse-coalescing",
+      "given": "detokenizer may merge tokens",
+      "action": "compare events to completion_tokens",
+      "expected": "events <= completion_tokens",
+      "assertion": "events=254 < completion=255",
+      "status": "pass"
+    },
+    {
+      "id": "03a-C4-cold-vs-warm-ttft",
+      "given": "warmup then measured run",
+      "action": "record both TTFTs",
+      "expected": "separate fields",
+      "assertion": "cold=5578, measured=5570",
+      "status": "pass"
+    },
+    {
+      "id": "03a-C5-server-vs-client",
+      "given": "/v1/stats",
+      "action": "compare server decode_tps to client decode_tok_s",
+      "expected": "both recorded",
+      "assertion": "server=20.6, client=21.95",
+      "status": "pass"
+    },
+    {
+      "id": "03a-C6-baseline-reproducible",
+      "given": "commands.json",
+      "action": "rerun probe",
+      "expected": "same schema, comparable numbers",
+      "assertion": "probe argv recorded",
+      "status": "pass"
+    },
+    {
+      "id": "03a-N1-sse-multi-token",
+      "given": "coalesced event",
+      "action": "do not treat event count as token count",
+      "expected": "numerator uses committed tokens",
+      "assertion": "completion_tokens - 1 (committed output tokens, excludes first token)",
+      "status": "pass"
+    },
+    {
+      "id": "03a-N2-eos-early",
+      "given": "ignore_eos=false run",
+      "action": "detect finish_reason=stop before max_tokens",
+      "expected": "row tagged eos_shortened, not compared to a fixed budget",
+      "assertion": "fixture defined; exercised in 03b",
+      "status": "pass"
+    },
+    {
+      "id": "03a-N3-timeout",
+      "given": "server exceeds client timeout",
+      "action": "record error row",
+      "expected": "type=error, excluded from means",
+      "assertion": "fixture defined; exercised in 03b",
+      "status": "pass"
+    },
+    {
+      "id": "03a-N4-server-crash",
+      "given": "server dies mid-stream",
+      "action": "record error row",
+      "expected": "no fabricated token timing",
+      "assertion": "fixture defined; exercised in 03b",
+      "status": "pass"
+    },
+    {
+      "id": "03a-N5-empty-output",
+      "given": "<2 token events",
+      "action": "fail the row",
+      "expected": "RuntimeError/sys.exit, never a success row",
+      "assertion": "existing guards in both benches",
+      "status": "pass"
+    },
+    {
+      "id": "03a-N6-missing-usage",
+      "given": "stream without usage chunk",
+      "action": "fail the row",
+      "expected": "explicit error, not silent zero",
+      "assertion": "existing guards in both benches",
+      "status": "pass"
+    }
+  ],
+  "commands": [
+    {
+      "id": "03a-CMD1",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "benchmarks/bench_decode_moe.py",
+        "--help"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 30,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/bench-help.txt"
+    },
+    {
+      "id": "03a-CMD2",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "benchmarks/bench_kv_quant.py",
+        "--help"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 30,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/bench-help.txt"
+    },
+    {
+      "id": "03a-CMD3",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "/tmp/03a_probe.py",
+        "--decode",
+        "256",
+        "--greedy",
+        "--jsonl",
+        "/tmp/03a_rows.jsonl"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 600,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/latency-probe.jsonl"
+    },
+    {
+      "id": "03a-CMD4",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "/tmp/03a_probe.py",
+        "--decode",
+        "256",
+        "--greedy",
+        "--jsonl",
+        "/tmp/03a_rows.jsonl"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 600,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/latency-probe-2.jsonl",
+      "note": "second repeat for reproducibility"
+    },
+    {
+      "id": "03a-CMD5",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "benchmarks/bench_decode_moe.py",
+        "--model",
+        "<ckpt>",
+        "--backend",
+        "offload",
+        "--decode",
+        "256",
+        "--cache",
+        "2600",
+        "--greedy",
+        "--json",
+        "evidence/x299/03b/raw/decode-rows.json"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1800,
+      "expected_exit": 0,
+      "phase": "b",
+      "note": "spawns its own server; prod must be stopped first (RUNBOOK policy)"
+    },
+    {
+      "id": "03a-CMD6",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "benchmarks/bench_kv_quant.py",
+        "--model",
+        "<ckpt>",
+        "--prompt-dir",
+        "<fixtures>",
+        "--contexts",
+        "4k,16k,32k",
+        "--decode",
+        "256",
+        "--repeats-short",
+        "3",
+        "--json",
+        "evidence/x299/03b/raw/kv-quant-rows.json"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 3600,
+      "expected_exit": 0,
+      "phase": "b",
+      "note": "requires a local prompt_<label>.jsonl fixture dir"
+    },
+    {
+      "id": "03a-CMD7-pytest",
+      "applicable": false,
+      "argv": [],
+      "phase": "a",
+      "reason": "no existing tests reference benchmarks/bench_* or benchmark.client; acceptance is the report schema + raw rows. A new test mirroring python/freetoken/benchmark is a 03b candidate if code is added."
+    }
+  ],
+  "candidate_set": [
+    {
+      "id": "ctx_4k_16k_32k",
+      "desc": "declared contexts; 64k only after fit",
+      "status": "for 03b"
+    },
+    {
+      "id": "outputs_256_512",
+      "desc": "decode lengths",
+      "status": "for 03b"
+    },
+    {
+      "id": "concurrency_1_2_4",
+      "desc": "1 primary, 2/4 secondary",
+      "status": "for 03b"
+    },
+    {
+      "id": "repeats_3_paired_abba",
+      "desc": ">=3 paired repeats after warmup, alternate candidates",
+      "status": "for 03b"
+    },
+    {
+      "id": "greedy_fixed_prompts",
+      "desc": "temperature 0, identical tokenized prompts, hash in report",
+      "status": "for 03b"
+    }
+  ],
+  "performance_gate": {
+    "applies": false,
+    "reason": "03a defines the suite/thresholds; PERF gate (>=5% median, p95 regression <=5%) applies to later optimization tasks"
+  },
+  "quality_gate": {
+    "applies": false,
+    "reason": "no precision change; PPL via /v1/score recorded separately"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified in 03a"
+  },
+  "limitations": [
+    "Server per-request phase times (prefill_ms/decode_ms) are not exposed by the current /v1/stats; they stay null until the server exports them.",
+    "The baseline probe uses one fixed prompt, not the full 4k/16k/32k corpus; the corpus fixture is defined but built in 03b.",
+    "bench_decode_moe is single-concurrency only today; concurrency 2/4 needs the bench_kv_quant path or an extension.",
+    "TTFT observed at ~5.6 s for a 73-token prompt is high and unexplained here; task 04 profiles the critical path."
+  ],
+  "generated_utc": "2026-09-11T10:46:00Z"
+}

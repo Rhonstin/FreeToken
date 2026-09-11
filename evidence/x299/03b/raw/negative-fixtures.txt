@@ -1,0 +1,3 @@
+SERVING
+{"case": "EOS-early", "events": 26, "completion_tokens": 28, "finish_reason": "stop"}
+{"case": "missing-usage", "events": 7, "usage": null, "finish_reason": "length"}
