@@ -1,0 +1,38 @@
+### MOE_STRATEGIES
+python/freetoken/moe/__init__.py:9:MOE_STRATEGIES = ("fused", "offload", "cpu", "hybrid")
+python/freetoken/moe/__init__.py:10:OFFLOAD_MOE_STRATEGIES = frozenset({"offload", "cpu", "hybrid"})
+### moe-strategy / hybrid / cpu-layers / graph args
+287:        "--max-running-requests",
+288-        type=int,
+289-        dest="max_running_req",
+290-        default=ServerArgs.max_running_req,
+--
+351:        "--cuda-graph-max-bs",
+352-        "--graph",
+353-        type=int,
+354-        default=ServerArgs.cuda_graph_max_bs,
+--
+694:        "--moe-cpu-threads",
+695-        type=int,
+696-        default=ServerArgs.moe_cpu_threads,
+697-        help=(
+--
+704:        "--moe-cpu-layers",
+705-        type=str,
+706-        default=ServerArgs.moe_cpu_layers,
+707-        help=(
+--
+721:        "--moe-hybrid-max-fetch",
+722-        type=int,
+723-        default=ServerArgs.moe_hybrid_max_fetch,
+724-        help=(
+### cpu formats
+
+# Weight-format ids must match WFmt in csrc/cpu_moe/cpu_moe_ext.cpp.
+_WFMT_IDS = {"bf16": 0, "nvfp4": 1, "mxfp4_triton": 2, "ds_fp4": 3, "q4_0": 4}
+
+
+def compiled_extension_supports(activation: str) -> bool:
+    """Whether the compiled ``_cpu_moe`` extension can serve ``activation``
+### hybrid fetch fraction from 01b profile
+cpu_ov 26.23 pcie_ov 12.3 fraction 0.3192 recommended hybrid

@@ -1,0 +1,79 @@
+[
+  {
+    "id": "05b-CMD1",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "benchmarks/bench_decode_moe.py",
+      "--model",
+      "$FT_MODEL",
+      "--backend",
+      "<offload|hybrid|cpu>",
+      "--hybrid-fetch",
+      "<-1|0|1|2>",
+      "--decode",
+      "256",
+      "--cache",
+      "2600",
+      "--greedy",
+      "--json",
+      "evidence/x299/05b/raw/cand-<id>.jsonl"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1500,
+    "expected_exit": 0,
+    "phase": "b"
+  },
+  {
+    "id": "05b-CMD2",
+    "argv": [
+      "/opt/freetoken-venv/bin/ft",
+      "serve",
+      "--model",
+      "$FT_MODEL",
+      "--moe-strategy",
+      "<s>",
+      "--moe-hybrid-max-fetch",
+      "<f>",
+      "--moe-cache-size",
+      "2600",
+      "--kv-cache-dtype",
+      "nvfp4",
+      "--num-tokens",
+      "220032",
+      "--kv-reserve-tokens",
+      "220032",
+      "--memory-ratio",
+      "0.90",
+      "--ple-backend",
+      "disk",
+      "--cuda-graph-max-bs",
+      "1"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1500,
+    "expected_exit": 0,
+    "phase": "b"
+  },
+  {
+    "id": "05b-CMD3",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "evidence/x299/05b/context_probe.py",
+      "--prompt-dir",
+      "evidence/x299/03b/fixtures",
+      "--contexts",
+      "4k,16k,32k",
+      "--decode",
+      "128",
+      "--jsonl",
+      "evidence/x299/05b/raw/ctx-<mode>.jsonl"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1800,
+    "expected_exit": 0,
+    "phase": "b"
+  }
+]

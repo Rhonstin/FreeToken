@@ -1,0 +1,373 @@
+{
+  "schema_version": 2,
+  "task_key": "05b",
+  "bead_id": "FreeToken-mtp-1ll.10",
+  "derived_from_contract": "../05a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/server/args.py",
+    "python/freetoken/moe/bench_profile.py",
+    "python/freetoken/engine/config.py",
+    "python/freetoken/moe/cpu_executor.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/server/args.py": [
+        "--moe-strategy {auto,fused,offload,cpu,hybrid}",
+        "--moe-hybrid-max-fetch",
+        "--moe-cpu-layers",
+        "--moe-cpu-threads",
+        "--cuda-graph-max-bs/--graph",
+        "--moe-cache-size/rate/auto",
+        "--expert-load",
+        "--ple-backend",
+        "--kv-cache-dtype"
+      ],
+      "python/freetoken/moe/bench_profile.py": [
+        "load_backend_recommendation",
+        "load_hybrid_fetch_fraction"
+      ],
+      "python/freetoken/engine/config.py": [
+        "EngineConfig.moe_strategy",
+        "moe_hybrid_max_fetch",
+        "moe_cpu_layers",
+        "moe_cpu_threads",
+        "cuda_graph_max_bs"
+      ],
+      "python/freetoken/moe/cpu_executor.py": [
+        "_WFMT_IDS (nvfp4 supported)",
+        "compiled_extension_supports"
+      ],
+      "python/freetoken/moe/__init__.py": [
+        "MOE_STRATEGIES",
+        "OFFLOAD_MOE_STRATEGIES"
+      ]
+    },
+    "proposed": []
+  },
+  "fixed_knobs": [
+    "--moe-cache-size 2600",
+    "--kv-cache-dtype nvfp4",
+    "--num-tokens 220032",
+    "--kv-reserve-tokens 220032",
+    "--memory-ratio 0.90",
+    "--ple-backend disk",
+    "--max-running-requests 1",
+    "greedy (temperature 0)"
+  ],
+  "sweep": {
+    "offload_graph1(03b)": {
+      "tok_s": 19.63,
+      "p95": 76.08,
+      "sha": "5f1ce83a376a"
+    },
+    "offload_graph0(04b)": {
+      "tok_s": 14.42,
+      "p95": 78.67,
+      "sha": "5f1ce83a376a"
+    },
+    "hybrid_auto": {
+      "tok_s": 21.72,
+      "p95": 53.25,
+      "sha": "4396fe41d18b"
+    },
+    "hybrid_f0": {
+      "tok_s": 14.04,
+      "p95": 88.92,
+      "sha": "5f1ce83a376a"
+    },
+    "hybrid_f1": {
+      "tok_s": 27.99,
+      "p95": 45.79,
+      "sha": "8fcecbe459e7"
+    },
+    "hybrid_f2": {
+      "tok_s": 26.12,
+      "p95": 45.99,
+      "sha": "4396fe41d18b"
+    },
+    "cpu": {
+      "tok_s": 15.19,
+      "p95": 72.99,
+      "sha": "5f1ce83a376a"
+    }
+  },
+  "sweep_gain_pct_vs_offload_graph1": {
+    "offload_graph0(04b)": -26.5,
+    "hybrid_auto": 10.7,
+    "hybrid_f0": -28.5,
+    "hybrid_f1": 42.6,
+    "hybrid_f2": 33.1,
+    "cpu": -22.6
+  },
+  "context_verification_nvfp4": {
+    "hybrid-f1": {
+      "4k": {
+        "tok_s": 24.32,
+        "p95": 53.71,
+        "prompt_tokens": 4165
+      },
+      "16k": {
+        "tok_s": 26.96,
+        "p95": 50.21,
+        "prompt_tokens": 16453
+      },
+      "32k": {
+        "tok_s": 23.67,
+        "p95": 58.24,
+        "prompt_tokens": 32836
+      }
+    },
+    "offload-f-1": {
+      "4k": {
+        "tok_s": 18.98,
+        "p95": 75.29,
+        "prompt_tokens": 4165
+      },
+      "16k": {
+        "tok_s": 18.85,
+        "p95": 77.64,
+        "prompt_tokens": 16453
+      },
+      "32k": {
+        "tok_s": 17.84,
+        "p95": 79.04,
+        "prompt_tokens": 32836
+      }
+    }
+  },
+  "context_gain_pct": {
+    "4k": 28.1,
+    "16k": 43.0,
+    "32k": 32.7
+  },
+  "effective_configs": {
+    "cand-hybrid_f1.effective.txt": "hybrid fetch=1",
+    "cand-hybrid_f2.effective.txt": "hybrid fetch=2",
+    "cand-hybrid_f0.effective.txt": "hybrid fetch=0",
+    "cand-hybrid_auto.effective.txt": "hybrid fetch=-1",
+    "cand-cpu.effective.txt": "cpu fetch=-1"
+  },
+  "quality": {
+    "offload_sha1": "5f1ce83a376a",
+    "hybrid_f1_sha1": "8fcecbe459e7",
+    "common_prefix_chars": 374,
+    "compared_chars": 540,
+    "verdict": "hybrid split changes the greedy token path; NOT bit-identical to offload"
+  },
+  "cases": [
+    {
+      "id": "05b-C0-baseline",
+      "given": "offload graph1",
+      "action": "reference",
+      "expected": "reproducible",
+      "status": "pass",
+      "assertion": "19.63 tok/s"
+    },
+    {
+      "id": "05b-C1-backend-sweep",
+      "given": "one-factor backend",
+      "action": "measure hybrid auto/0/1/2 + cpu",
+      "expected": "ranked table",
+      "status": "pass",
+      "assertion": "best hybrid f1 27.99 tok/s"
+    },
+    {
+      "id": "05b-C2-graph-factor",
+      "given": "graph 0/1",
+      "action": "compare uninstrumented",
+      "expected": "graph effect measured",
+      "status": "pass",
+      "assertion": "offload graph1 19.63 vs graph0 14.42"
+    },
+    {
+      "id": "05b-C3-winner-contexts",
+      "given": "nvfp4 prod-like",
+      "action": "4k/16k/32k",
+      "expected": "winner faster than offload at each",
+      "status": "pass",
+      "assertion": "gains {'4k': 28.1, '16k': 43.0, '32k': 32.7}"
+    },
+    {
+      "id": "05b-C4-no-fallback",
+      "given": "requested vs effective",
+      "action": "grep ServerArgs",
+      "expected": "effective == requested",
+      "status": "pass",
+      "assertion": "['hybrid fetch=1', 'hybrid fetch=2', 'hybrid fetch=0', 'hybrid fetch=-1', 'cpu fetch=-1']"
+    },
+    {
+      "id": "05b-C5-perf-gate",
+      "given": "PERF gate >=5%",
+      "action": "compare",
+      "expected": "winner passes",
+      "status": "pass",
+      "assertion": "hybrid f1 +42.6% (short)"
+    },
+    {
+      "id": "05b-N1-invalid-backend",
+      "given": "--moe-strategy bogus",
+      "action": "argparse choices",
+      "expected": "exit 2",
+      "status": "pass",
+      "assertion": "choices reject"
+    },
+    {
+      "id": "05b-N2-unsupported-format",
+      "given": "format not in _WFMT_IDS",
+      "action": "cpu/hybrid load",
+      "expected": "NotImplementedError",
+      "status": "skip",
+      "assertion": "not injected; nvfp4 is supported"
+    },
+    {
+      "id": "05b-N3-maxfetch-gt-misses",
+      "given": "cap > misses",
+      "action": "resolve",
+      "expected": "effective cap recorded",
+      "status": "skip",
+      "assertion": "grid used 0/1/2; not exercised"
+    },
+    {
+      "id": "05b-N4-oom",
+      "given": "oversized",
+      "action": "launch",
+      "expected": "reject",
+      "status": "skip",
+      "assertion": "not exercised"
+    },
+    {
+      "id": "05b-N5-hidden-fallback",
+      "given": "requested vs effective",
+      "action": "verify",
+      "expected": "no fallback",
+      "status": "pass",
+      "assertion": "all candidates resolved as requested"
+    },
+    {
+      "id": "05b-N6-graph-failure",
+      "given": "graph capture fail",
+      "action": "n/a",
+      "expected": "recorded",
+      "status": "skip",
+      "assertion": "not exercised"
+    },
+    {
+      "id": "05b-QUALITY-greedy-parity",
+      "given": "offload vs hybrid f1",
+      "action": "greedy text compare",
+      "expected": "identical tokens",
+      "status": "fail",
+      "assertion": "common prefix 374 chars of 540; sha differs -> hybrid split changes greedy output"
+    }
+  ],
+  "commands": [
+    {
+      "id": "05b-CMD1",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "benchmarks/bench_decode_moe.py",
+        "--model",
+        "$FT_MODEL",
+        "--backend",
+        "<offload|hybrid|cpu>",
+        "--hybrid-fetch",
+        "<-1|0|1|2>",
+        "--decode",
+        "256",
+        "--cache",
+        "2600",
+        "--greedy",
+        "--json",
+        "evidence/x299/05b/raw/cand-<id>.jsonl"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1500,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "05b-CMD2",
+      "argv": [
+        "/opt/freetoken-venv/bin/ft",
+        "serve",
+        "--model",
+        "$FT_MODEL",
+        "--moe-strategy",
+        "<s>",
+        "--moe-hybrid-max-fetch",
+        "<f>",
+        "--moe-cache-size",
+        "2600",
+        "--kv-cache-dtype",
+        "nvfp4",
+        "--num-tokens",
+        "220032",
+        "--kv-reserve-tokens",
+        "220032",
+        "--memory-ratio",
+        "0.90",
+        "--ple-backend",
+        "disk",
+        "--cuda-graph-max-bs",
+        "1"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1500,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "05b-CMD3",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "evidence/x299/05b/context_probe.py",
+        "--prompt-dir",
+        "evidence/x299/03b/fixtures",
+        "--contexts",
+        "4k,16k,32k",
+        "--decode",
+        "128",
+        "--jsonl",
+        "evidence/x299/05b/raw/ctx-<mode>.jsonl"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1800,
+      "expected_exit": 0,
+      "phase": "b"
+    }
+  ],
+  "performance_gate": {
+    "applies": true,
+    "result": "PASS",
+    "detail": "hybrid f1 +42.6% short, +28.1/43.0/32.7% at 4k/16k/32k; p95 improved (not regressed)"
+  },
+  "quality_gate": {
+    "applies": true,
+    "result": "CONDITIONAL/FAIL on bit-parity",
+    "detail": "greedy output diverges from offload; adopt only after /v1/score PPL (task 18) and task accuracy checks; offload stays the safe default"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "config-only; prod default not changed by 05b"
+  },
+  "limitations": [
+    "Short-context sweep used the bench KV default; the context verification used prod nvfp4 and confirms the ranking.",
+    "Greedy parity is not bit-exact across backends; hybrid's CPU/GPU expert split changes rounding. Semantic quality is not established here.",
+    "cpu-layers subsets (C8) were not explored; they are gated on task 09.",
+    "max-fetch values above 2 and OOM boundaries were not swept."
+  ],
+  "generated_utc": "2026-09-11T12:25:00Z"
+}

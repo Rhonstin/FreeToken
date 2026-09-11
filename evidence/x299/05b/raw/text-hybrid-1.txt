@@ -1,0 +1,5 @@
+We need solve problem. Need reason step by step. Problem: Find sum of all integer bases b>9 for which 17_b is a divisor of 97_b.
+
+Interpretation: In base b, digits 1,7 and 9,7. Since b>9, digits valid. 17_b = 1*b + 7 = b+7. 97_b = 9*b + 7 = 9b+7. Need b+7 divides 9b+7. Integer bases b>9. Find sum of all such b.
+
+Compute divisibility: b+7 | 9b+7. Express 9b+7 = 9(b+7) - 56? 9b+63 -56 = 9b+7. So b+7 divides 56. Since b>9, b+7 >16. Positive divisors of 56 greater than 16: 28,56? Also 56 divisors: 1,2,4,7,8,14,28,56. >16: 28,56. Then b = 

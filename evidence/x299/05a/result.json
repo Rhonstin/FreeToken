@@ -1,0 +1,92 @@
+{
+  "task_key": "05a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "cases": [
+    {
+      "id": "05a-C1-baseline",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-C2-grid",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-C3-fetch-fraction",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-C4-capabilities",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-C5-metric",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-N1-invalid-backend",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-N2-unsupported-format",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-N3-maxfetch-gt-misses",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-N4-oom",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-N5-hidden-fallback",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    },
+    {
+      "id": "05a-N6-graph-capture-failure",
+      "status": "pass",
+      "command_id": "05a-CMD1..4",
+      "log_path": "raw/capabilities.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "05a-capabilities",
+      "raw_path": "raw/capabilities.txt",
+      "sha256": "d7e0bd9d4603cf2565958d99fe952d24e3a040b05394ff0036089d229ad277a9"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "auto-strategy needs the benchbw profile installed at the default cache path to resolve hybrid; otherwise it resolves offload.",
+    "hybridmax-fetch 'relevant miss bound' is data-dependent; the grid {auto,0,1,2} may need extending after stage 1.",
+    "cpu-layers subsets are exploratory and gated on stage 1/2 results."
+  ],
+  "rollback_result": "not_required (no code change)",
+  "key_findings": {
+    "baseline_offload_tok_s": 19.63,
+    "hybrid_fetch_fraction": 0.3192,
+    "candidates": 9
+  }
+}

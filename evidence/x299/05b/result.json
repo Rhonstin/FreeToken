@@ -1,0 +1,195 @@
+{
+  "task_key": "05b",
+  "outcome": "implemented",
+  "outcome_reason": "Bounded one-factor sweep completed and the best-known throughput profile identified; no runtime code added, prod default left unchanged pending the quality gate.",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "05b-C0-baseline",
+      "status": "pass",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-C1-backend-sweep",
+      "status": "pass",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-C2-graph-factor",
+      "status": "pass",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-C3-winner-contexts",
+      "status": "pass",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-C4-no-fallback",
+      "status": "pass",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-C5-perf-gate",
+      "status": "pass",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-N1-invalid-backend",
+      "status": "pass",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-N2-unsupported-format",
+      "status": "skip",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-N3-maxfetch-gt-misses",
+      "status": "skip",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-N4-oom",
+      "status": "skip",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-N5-hidden-fallback",
+      "status": "pass",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-N6-graph-failure",
+      "status": "skip",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    },
+    {
+      "id": "05b-QUALITY-greedy-parity",
+      "status": "fail",
+      "command_id": "05b-CMD1..3",
+      "log_path": "raw/ctx-hybrid-1.jsonl"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "05b-hybrid_auto",
+      "raw_path": "raw/cand-hybrid_auto.jsonl"
+    },
+    {
+      "run_id": "05b-hybrid_f0",
+      "raw_path": "raw/cand-hybrid_f0.jsonl"
+    },
+    {
+      "run_id": "05b-hybrid_f1",
+      "raw_path": "raw/cand-hybrid_f1.jsonl"
+    },
+    {
+      "run_id": "05b-hybrid_f2",
+      "raw_path": "raw/cand-hybrid_f2.jsonl"
+    },
+    {
+      "run_id": "05b-cpu",
+      "raw_path": "raw/cand-cpu.jsonl"
+    },
+    {
+      "run_id": "05b-ctx-offload",
+      "raw_path": "raw/ctx-offload--1.jsonl",
+      "sha256": "462cb89229ba6fde3fc45b70b8c1b2e4d11356caf2839d28030466a6e2bf3559"
+    },
+    {
+      "run_id": "05b-ctx-hybrid",
+      "raw_path": "raw/ctx-hybrid-1.jsonl",
+      "sha256": "2cbb3d620a7215793ab955fb2ab17210d9bb41b85df7f72bfed9191ddec80f45"
+    },
+    {
+      "run_id": "05b-text-offload",
+      "raw_path": "raw/text-offload--1.txt",
+      "sha256": "54c6cec1421c15dab93111d00f43e41b11db252117e696e50f572706ed2b1278"
+    },
+    {
+      "run_id": "05b-text-hybrid",
+      "raw_path": "raw/text-hybrid-1.txt",
+      "sha256": "fb26c05eafd108ad7bea76fbe4d5057c81d11a57f80179e793134394899c4e3f"
+    }
+  ],
+  "failures": [
+    "quality: greedy bit-parity offload vs hybrid f1 (prefix 374 of 540 chars)"
+  ],
+  "limitations": [
+    "Short-context sweep used the bench KV default; the context verification used prod nvfp4 and confirms the ranking.",
+    "Greedy parity is not bit-exact across backends; hybrid's CPU/GPU expert split changes rounding. Semantic quality is not established here.",
+    "cpu-layers subsets (C8) were not explored; they are gated on task 09.",
+    "max-fetch values above 2 and OOM boundaries were not swept."
+  ],
+  "rollback_result": "not_required (no production code or default changed)",
+  "key_findings": {
+    "best_known_throughput": "hybrid max-fetch=1, graph=1, kv nvfp4",
+    "sweep_tok_s": {
+      "offload_graph1(03b)": 19.63,
+      "offload_graph0(04b)": 14.42,
+      "hybrid_auto": 21.72,
+      "hybrid_f0": 14.04,
+      "hybrid_f1": 27.99,
+      "hybrid_f2": 26.12,
+      "cpu": 15.19
+    },
+    "context_tok_s": {
+      "hybrid-f1": {
+        "4k": {
+          "tok_s": 24.32,
+          "p95": 53.71,
+          "prompt_tokens": 4165
+        },
+        "16k": {
+          "tok_s": 26.96,
+          "p95": 50.21,
+          "prompt_tokens": 16453
+        },
+        "32k": {
+          "tok_s": 23.67,
+          "p95": 58.24,
+          "prompt_tokens": 32836
+        }
+      },
+      "offload-f-1": {
+        "4k": {
+          "tok_s": 18.98,
+          "p95": 75.29,
+          "prompt_tokens": 4165
+        },
+        "16k": {
+          "tok_s": 18.85,
+          "p95": 77.64,
+          "prompt_tokens": 16453
+        },
+        "32k": {
+          "tok_s": 17.84,
+          "p95": 79.04,
+          "prompt_tokens": 32836
+        }
+      }
+    },
+    "context_gain_pct": {
+      "4k": 28.1,
+      "16k": 43.0,
+      "32k": 32.7
+    },
+    "graph_gain_pct_offload": 36.1,
+    "quality_bit_parity": "fail (hybrid changes greedy output)",
+    "adopted_default": "none (offload unchanged; hybrid quality-gated)"
+  }
+}
