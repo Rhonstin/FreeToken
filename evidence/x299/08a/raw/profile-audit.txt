@@ -1,0 +1,10 @@
+profile path evidence/x299/01b/raw/benchbw.json
+top-level keys: ['ceilings', 'cpu', 'dtype_kernels', 'dtypes', 'epoch', 'gpu', 'host', 'threshold', 'timestamp', 'version', 'workloads']
+version: 4
+gpu: {'index': 0, 'name': 'NVIDIA GeForce RTX 3090', 'uuid': 'GPU-fd98efd2-8559-aa03-d51e-99d494ae8061'}
+cpu: {'physical_cores': 6, 'threads_used': 6}
+host: llmserver
+timestamp: 2026-09-11T10:14:54+00:00
+has schema_version: False
+fingerprint-ish fields present: []
+dtype_kernels.nvfp4 keys: ['cpu_moe_gbs', 'cpu_moe_isa', 'cpu_moe_overlap_gbs', 'expert_bytes', 'isa_sweep', 'note', 'pcie_gather_gbs', 'pcie_gather_overlap_gbs', 'ratio', 'recommended', 'synth_experts']

@@ -1,0 +1,104 @@
+{
+  "task_key": "08a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "cases": [
+    {
+      "id": "08a-C1-audit",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-C2-schema",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-C3-matcher",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-C4-no-secrets",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-C5-overlap",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-C6-atomic",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-N1-same-gpu-diff-cpu",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-N2-changed-threads",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-N3-same-name-diff-bdf",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-N4-missing-fields",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-N5-unknown-schema",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-N6-nan-bandwidth",
+      "status": "pass",
+      "command_id": "08a-CMD1..2",
+      "log_path": "raw/profile-audit.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "08a-profile-audit",
+      "raw_path": "raw/profile-audit.txt",
+      "sha256": "57ccdee2093d3db279244d826314748c0e3be6b6f7e1944a24141dd6e19fd9a0"
+    },
+    {
+      "run_id": "08a-pytest",
+      "raw_path": "raw/pytest-profile.txt",
+      "sha256": "3dacc642bb7db457d876420f7d3df95658dce3c0a752c6ea4f365eb88843adbc"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Upstream refs #278/#37/#38/#39 were not fetched (offline); the proposal may diverge from them.",
+    "The exact fingerprint field set is proposed; 08b must keep it CPU-testable and pure.",
+    "The current installed profile (v4) would be rejected by the new matcher until re-benched with schema 5."
+  ],
+  "rollback_result": "not_required (no code change)",
+  "key_findings": {
+    "current_gate": "only gpu.name is checked; version/schema ignored",
+    "current_profile_has_fingerprint": false,
+    "proposed_schema_version": 5,
+    "negative_cases": 6
+  }
+}

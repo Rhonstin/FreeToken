@@ -16,6 +16,17 @@ from freetoken.moe.offload_cache import OffloadMoeCache
 
 Q = 1 << 16
 
+# A schema-5 fingerprint embedded in test profiles; passing it back as
+# current_fingerprint makes the matcher treat the profile as measured here.
+FP = {
+    "schema_version": 5,
+    "cpu": {"family": "6", "model": "85", "stepping": "4", "isa": "avx512", "threads": 6,
+            "sku": "FAKE CPU"},
+    "ram": {"total_bytes": 1 << 30, "observed_channels": 4, "configured_speed_mts": 2133},
+    "pcie": {"bdf": "00000000:65:00.0", "gen_max": 3, "width_max": 16},
+    "gpu": {"name": "FAKE GPU", "sm": "8.6"},
+}
+
 
 def _balanced_fetch(num_missing: int, frac_q16: int) -> int:
     """Reference split: F ~ frac * misses, rounded to whichever integer neighbor
@@ -42,6 +53,8 @@ def test_balanced_fetch_tracks_fraction():
 
 def test_load_hybrid_fetch_fraction(tmp_path):
     prof = {
+        "schema_version": 5,
+        "fingerprint": FP,
         "gpu": {"name": "FAKE GPU"},
         "dtype_kernels": {
             "bf16": {"cpu_moe_gbs": 100.0, "pcie_gather_gbs": 40.0},
@@ -56,14 +69,14 @@ def test_load_hybrid_fetch_fraction(tmp_path):
     path = tmp_path / "benchbw.json"
     path.write_text(json.dumps(prof))
     # standalone fallback: full-contention assumption -> pcie / cpu
-    assert load_hybrid_fetch_fraction("bf16", path=str(path)) == pytest.approx(0.4)
+    assert load_hybrid_fetch_fraction("bf16", path=str(path), current_fingerprint=FP) == pytest.approx(0.4)
     # overlapped pair preferred: pcie_ov / (pcie_ov + cpu_ov)
-    assert load_hybrid_fetch_fraction("nvfp4_x", path=str(path)) == pytest.approx(0.25)
+    assert load_hybrid_fetch_fraction("nvfp4_x", path=str(path), current_fingerprint=FP) == pytest.approx(0.25)
     # per-model fallback when there is no per-dtype entry for the format
-    assert load_hybrid_fetch_fraction("ds_fp4", path=str(path)) == pytest.approx(0.625)
-    assert load_hybrid_fetch_fraction("nvfp4", path=str(path)) is None
+    assert load_hybrid_fetch_fraction("ds_fp4", path=str(path), current_fingerprint=FP) == pytest.approx(0.625)
+    assert load_hybrid_fetch_fraction("nvfp4", path=str(path), current_fingerprint=FP) is None
     # a profile from different hardware is ignored
-    assert load_hybrid_fetch_fraction("bf16", gpu_name="OTHER", path=str(path)) is None
+    assert load_hybrid_fetch_fraction("bf16", gpu_name="OTHER", path=str(path), current_fingerprint=FP) is None
 
 
 def test_profile_lookup_prefers_the_gpu_uuid_file(tmp_path, monkeypatch):
@@ -74,15 +87,20 @@ def test_profile_lookup_prefers_the_gpu_uuid_file(tmp_path, monkeypatch):
     def write(path, name, verdict):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
-            json.dump({"gpu": {"name": name}, "dtypes": {"bf16": verdict}}, f)
+            json.dump({"schema_version": 5, "fingerprint": {**FP, "gpu": {"name": name, "sm": "8.6"}},
+                       "gpu": {"name": name}, "dtypes": {"bf16": verdict}}, f)
 
+    fp = {**FP, "gpu": {"name": "FAKE GPU", "sm": "8.6"}}
     # legacy single file only: used when the name matches, ignored otherwise
     write(default_profile_path(), "FAKE GPU", "hybrid")
-    assert load_backend_recommendation("bf16", gpu_name="FAKE GPU", gpu_uuid=uuid) == "hybrid"
-    assert load_backend_recommendation("bf16", gpu_name="OTHER", gpu_uuid=uuid) is None
+    assert load_backend_recommendation("bf16", gpu_name="FAKE GPU", gpu_uuid=uuid,
+                                       current_fingerprint=fp) == "hybrid"
+    assert load_backend_recommendation("bf16", gpu_name="OTHER", gpu_uuid=uuid,
+                                       current_fingerprint=fp) is None
     # this card's own file wins over the legacy one
     write(default_profile_path(uuid), "FAKE GPU", "offload")
-    assert load_backend_recommendation("bf16", gpu_name="FAKE GPU", gpu_uuid=uuid) == "offload"
+    assert load_backend_recommendation("bf16", gpu_name="FAKE GPU", gpu_uuid=uuid,
+                                       current_fingerprint=fp) == "offload"
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")

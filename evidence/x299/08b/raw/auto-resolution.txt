@@ -1,0 +1,3 @@
+resolved: Resolved config: moe_strategy='hybrid'
+moe_strategy='auto'
+moe_strategy='hybrid'

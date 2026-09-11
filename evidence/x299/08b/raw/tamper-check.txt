@@ -1,0 +1,5 @@
+clean (accept expected): ('hybrid', 0.2804123711340206)
+[1m[2026-09-11|14:26:35][0m [33mWARNING [0m benchbw profile /home/rhonstin/.cache/freetoken/benchbw/GPU-fd98efd2-8559-aa03-d51e-99d494ae8061.json rejected: cpu.model mismatch: stored='158' current='85'
+[1m[2026-09-11|14:26:35][0m [33mWARNING [0m benchbw profile /home/rhonstin/.cache/freetoken/benchbw/GPU-fd98efd2-8559-aa03-d51e-99d494ae8061.json rejected: cpu.model mismatch: stored='158' current='85'
+tampered cpu.model=158 (expect None,None): (None, None)
+restored

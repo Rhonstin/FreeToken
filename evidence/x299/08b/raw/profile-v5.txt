@@ -1,0 +1,7 @@
+schema_version 5
+has fingerprint True
+cpu {'family': '6', 'model': '85', 'stepping': '4', 'isa': 'avx512', 'threads': 6}
+ram {'total_bytes': 106917298176, 'observed_channels': 4, 'configured_speed_mts': 2133}
+pcie {'bdf': '00000000:65:00.0', 'gen_max': 3, 'width_max': 16}
+gpu {'name': 'NVIDIA GeForce RTX 3090', 'sm': '8.6'}
+dtypes {'nvfp4': 'hybrid'}

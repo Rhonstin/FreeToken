@@ -1,0 +1,267 @@
+{
+  "schema_version": 2,
+  "task_key": "08b",
+  "bead_id": "FreeToken-mtp-1ll.16",
+  "derived_from_contract": "../08a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "changed_files": [
+    "python/freetoken/moe/bench_profile.py (schema-5 gate + fingerprint + matcher + bw sanity)",
+    "python/freetoken/moe/benchbw.py (write schema_version + fingerprint)",
+    "tests/moe/test_hybrid_fetch.py (profiles updated to v5 + current_fingerprint)",
+    "tests/moe/test_bench_profile.py (new matcher tests)"
+  ],
+  "scope_files": [
+    "python/freetoken/moe/bench_profile.py",
+    "python/freetoken/moe/benchbw.py",
+    "python/freetoken/engine/engine.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/moe/bench_profile.py": [
+        "_cache_dir",
+        "default_profile_path",
+        "latest_profile_path",
+        "_load",
+        "_usable_profile",
+        "load_backend_recommendation",
+        "load_hybrid_fetch_fraction",
+        "_QUANT_TO_BENCH_FORMAT"
+      ],
+      "python/freetoken/moe/benchbw.py": [
+        "_atomic_write_json",
+        "default_out_path",
+        "run_benchbw (writes version=4, host, gpu{index,name,uuid}, cpu{physical_cores,threads_used})"
+      ],
+      "python/freetoken/engine/engine.py": [
+        "auto MoE backend resolution via bench_profile"
+      ]
+    },
+    "added": {
+      "python/freetoken/moe/bench_profile.py": [
+        "read_machine_fingerprint",
+        "profile_compatible",
+        "profile_bandwidths_valid",
+        "_FP_SCHEMA",
+        "_cpuinfo",
+        "_isa_tier",
+        "_physical_cores",
+        "_mem_total_bytes",
+        "_dmi_memory",
+        "_pcie_link"
+      ]
+    }
+  },
+  "inputs": {
+    "written_profile": {
+      "value": "schema_version 5\nhas fingerprint True\ncpu {'family': '6', 'model': '85', 'stepping': '4', 'isa': 'avx512', 'threads': 6}\nram {'total_bytes': 106917298176, 'observed_channels': 4, 'configured_speed_mts': 2133}\npcie {'bdf': '00000000:65:00.0', 'gen_max': 3, 'width_max': 16}\ngpu {'name': 'NVIDIA GeForce RTX 3090', 'sm': '8.6'}\ndtypes {'nvfp4': 'hybrid'}",
+      "source": "raw/profile-v5.txt",
+      "unit": "text"
+    },
+    "auto_resolution": {
+      "value": "resolved: Resolved config: moe_strategy='hybrid'\nmoe_strategy='auto'\nmoe_strategy='hybrid'",
+      "source": "raw/auto-resolution.txt",
+      "unit": "text"
+    },
+    "live_matcher": {
+      "value": "current cpu: {'family': '6', 'model': '85', 'stepping': '4', 'isa': 'avx512', 'threads': 6}\ncurrent ram: {'total_bytes': 106917298176, 'observed_channels': 4, 'configured_speed_mts': 2133} pcie: {'bdf': '00000000:65:00.0', 'gen_max': 3, 'width_max': 16} gpu: {'name': 'NVIDIA GeForce RTX 3090', 'sm': None}\nACCEPT same-machine: hybrid\n\u001b[1m[2026-09-11|14:21:24]\u001b[0m \u001b[33mWARNING \u001b[0m benchbw profile /tmp/tmp3xi54jpc/bad.json rejected: cpu.model mismatch: stored='158' current='85'\nREJECT diff-cpu: None\n\u001b[1m[2026-09-11|14:21:24]\u001b[0m \u001b[33mWARNING \u001b[0m benchbw profile /tmp/tmp3xi54jpc/bad2.json rejected: pcie.bdf mismatch: stored='00000000:17:00.0' current='00000000:65:00.0'\nREJECT diff-bdf: None\n\u001b[1m[2026-09-11|14:21:24]\u001b[0m \u001b[33mWARNING \u001b[0m benchbw profile /tmp/tmp3xi54jpc/leg.json has no usable schema_version (got None, want 5); treating it as informational only\nREJECT legacy: None\nACCEPT verdict: (True, 'compatible')",
+      "source": "raw/target-matcher-check.txt",
+      "unit": "text"
+    },
+    "tamper": {
+      "value": "clean (accept expected): ('hybrid', 0.2804123711340206)\n\u001b[1m[2026-09-11|14:26:35]\u001b[0m \u001b[33mWARNING \u001b[0m benchbw profile /home/rhonstin/.cache/freetoken/benchbw/GPU-fd98efd2-8559-aa03-d51e-99d494ae8061.json rejected: cpu.model mismatch: stored='158' current='85'\n\u001b[1m[2026-09-11|14:26:35]\u001b[0m \u001b[33mWARNING \u001b[0m benchbw profile /home/rhonstin/.cache/freetoken/benchbw/GPU-fd98efd2-8559-aa03-d51e-99d494ae8061.json rejected: cpu.model mismatch: stored='158' current='85'\ntampered cpu.model=158 (expect None,None): (None, None)\nrestored",
+      "source": "raw/tamper-check.txt",
+      "unit": "text"
+    }
+  },
+  "invariants": [
+    "The reader accepts a profile only with schema_version==5 and a fingerprint matching the current CPU/RAM/PCIe/threads/GPU.",
+    "Legacy (v<5) profiles are rejected and logged as informational.",
+    "The fingerprint excludes hostname, serials and MAC; RAM speed/channels are read best-effort via dmidecode (null when not permitted).",
+    "A rejection logs the exact mismatching field; the engine falls back to offload.",
+    "The matcher and fingerprint builder are torch-free and CPU-testable."
+  ],
+  "cases": [
+    {
+      "id": "08b-C1-schema5-written",
+      "given": "benchbw on target",
+      "action": "write profile",
+      "expected": "schema_version 5 + fingerprint",
+      "status": "pass",
+      "assertion": "profile-v5.txt shows schema_version 5 + fingerprint"
+    },
+    {
+      "id": "08b-C2-auto-uses-profile",
+      "given": "serve --moe-strategy auto",
+      "action": "resolve",
+      "expected": "hybrid from the v5 profile",
+      "status": "pass",
+      "assertion": "Resolved config: moe_strategy='hybrid'"
+    },
+    {
+      "id": "08b-C3-pure-matcher",
+      "given": "read_machine_fingerprint/profile_compatible",
+      "action": "unit tests",
+      "expected": "pure, CPU-testable",
+      "status": "pass",
+      "assertion": "tests/moe/test_bench_profile.py 10 passed"
+    },
+    {
+      "id": "08b-C4-no-secrets",
+      "given": "fingerprint",
+      "action": "inspect",
+      "expected": "no host/serial",
+      "status": "pass",
+      "assertion": "fingerprint excludes hostname/serials"
+    },
+    {
+      "id": "08b-C5-overlap-kept",
+      "given": "existing overlap",
+      "action": "reuse",
+      "expected": "not duplicated",
+      "status": "pass",
+      "assertion": "fetch fraction 0.280 from overlapped pair"
+    },
+    {
+      "id": "08b-C6-atomic-legacy",
+      "given": "write/read",
+      "action": "atomic + schema gate",
+      "expected": "partial never used; legacy rejected",
+      "status": "pass",
+      "assertion": "_atomic_write_json kept; v4/None rejected"
+    },
+    {
+      "id": "08b-N1-same-gpu-diff-cpu",
+      "given": "tampered cpu.model",
+      "action": "live reader",
+      "expected": "reject -> offload fallback",
+      "status": "pass",
+      "assertion": "tamper-check: (None, None), reason logged"
+    },
+    {
+      "id": "08b-N2-changed-threads",
+      "given": "threads 4 vs 6",
+      "action": "unit test",
+      "expected": "reject",
+      "status": "pass",
+      "assertion": "test_changed_threads_rejected"
+    },
+    {
+      "id": "08b-N3-same-name-diff-bdf",
+      "given": "other BDF",
+      "action": "live reader",
+      "expected": "reject",
+      "status": "pass",
+      "assertion": "target-matcher-check: diff-bdf None"
+    },
+    {
+      "id": "08b-N4-missing-fields",
+      "given": "missing cpu.model",
+      "action": "unit test",
+      "expected": "unverified reject",
+      "status": "pass",
+      "assertion": "test_missing_required_field_is_unverified"
+    },
+    {
+      "id": "08b-N5-unknown-schema",
+      "given": "schema 4/None/'5'",
+      "action": "unit + live",
+      "expected": "reject; legacy informational",
+      "status": "pass",
+      "assertion": "target legacy reject; test_unknown_schema_rejected"
+    },
+    {
+      "id": "08b-N6-nan-bandwidth",
+      "given": "NaN/Inf/<=0",
+      "action": "unit test",
+      "expected": "reject",
+      "status": "pass",
+      "assertion": "test_bandwidth_sanity"
+    }
+  ],
+  "commands": [
+    {
+      "id": "08b-CMD1",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/moe/test_bench_profile.py",
+        "tests/moe/test_hybrid_fetch.py",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/target-matcher-check.txt"
+    },
+    {
+      "id": "08b-CMD2",
+      "argv": [
+        "env",
+        "CUDA_HOME=...",
+        "/opt/freetoken-venv/bin/ft",
+        "bench",
+        "bw",
+        "--dtype",
+        "nvfp4",
+        "--cpu-threads",
+        "6"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-CMD3",
+      "argv": [
+        "/opt/freetoken-venv/bin/ft",
+        "serve",
+        "--moe-strategy",
+        "auto",
+        "... fixed ..."
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/auto-resolution.txt"
+    }
+  ],
+  "performance_gate": {
+    "applies": false,
+    "reason": "validity task; no speed claim"
+  },
+  "quality_gate": {
+    "applies": true,
+    "result": "PASS",
+    "detail": "unit tests + live accept/reject on the target"
+  },
+  "rollback_recipe": {
+    "applies": true,
+    "recipe": "restore python/freetoken/moe/bench_profile.py and benchbw.py from /opt/FreeToken/.x299-backup/; no service default change is required",
+    "verified": "backup present"
+  },
+  "limitations": [
+    "gpu.sm is caller-supplied (torch): the reader cannot derive it, so it is compared only when both sides have it.",
+    "RAM speed/channels need dmidecode (root or sudo -n); when unreadable they are null and skipped.",
+    "Upstream refs #278/#37/#38/#39 still not fetched (offline).",
+    "The previous v4 profile at the default cache path is intentionally rejected; a fresh benchbw run replaces it with v5."
+  ],
+  "generated_utc": "2026-09-11T14:30:00Z"
+}

@@ -56,8 +56,10 @@ from freetoken.gpu_select import (
     single_gpu_arg,
 )
 from freetoken.kernel.pinned import alloc_pinned_tensor
+from freetoken.moe.bench_profile import read_machine_fingerprint
 from freetoken.moe.cpu_executor import physical_core_cpus, resolve_threads_and_affinity
 from freetoken.utils import init_logger
+from freetoken.version import __version__ as _FT_VERSION
 
 logger = init_logger(__name__)
 
@@ -719,6 +721,7 @@ def run_benchbw(
     device = torch.device("cuda", device_index)
     torch.cuda.set_device(device)
     gpu = gpu_identity(device_index)
+    cap = torch.cuda.get_device_capability(device_index)
 
     # Machine-parseable progress on stdout (opt-in), so the daemon/Desktop can stream feedback
     # while the bench runs -- mirrors ft checkpoint's FTCONVERT lines. `done`/`total` count the
@@ -780,6 +783,7 @@ def run_benchbw(
 
     result = {
         "version": 4,
+        "schema_version": 5,
         "timestamp": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
         "epoch": int(time.time()),
         "host": socket.gethostname(),
@@ -796,6 +800,21 @@ def run_benchbw(
         "dtypes": {f: e["recommended"] for f, e in dtypes_out.items()},
         "dtype_kernels": dtypes_out,
         "workloads": workloads_out,
+        # Versioned machine fingerprint: the reader refuses this profile on any other
+        # CPU/RAM/PCIe/thread configuration, not just another GPU name.
+        "fingerprint": read_machine_fingerprint(
+            gpu_name=gpu["name"],
+            gpu_sm=f"{cap[0]}.{cap[1]}",
+            runtime={
+                "torch": torch.__version__,
+                "cuda": torch.version.cuda,
+                "driver": os.environ.get("FREETOKEN_DRIVER_VERSION"),
+                "freetoken": _FT_VERSION,
+            },
+            expert={"formats": sorted(dtypes_out)},
+            threads=cpu["threads"],
+            concurrency=1,
+        ),
     }
 
     out_path = os.path.expanduser(out_path or default_out_path(gpu["uuid"]))

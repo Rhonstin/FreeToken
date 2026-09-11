@@ -1,0 +1,430 @@
+{
+  "schema_version": 2,
+  "task_key": "08a",
+  "bead_id": "FreeToken-mtp-1ll.15",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/moe/bench_profile.py",
+    "python/freetoken/moe/benchbw.py",
+    "python/freetoken/engine/engine.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/moe/bench_profile.py": [
+        "_cache_dir",
+        "default_profile_path",
+        "latest_profile_path",
+        "_load",
+        "_usable_profile",
+        "load_backend_recommendation",
+        "load_hybrid_fetch_fraction",
+        "_QUANT_TO_BENCH_FORMAT"
+      ],
+      "python/freetoken/moe/benchbw.py": [
+        "_atomic_write_json",
+        "default_out_path",
+        "run_benchbw (writes version=4, host, gpu{index,name,uuid}, cpu{physical_cores,threads_used})"
+      ],
+      "python/freetoken/engine/engine.py": [
+        "auto MoE backend resolution via bench_profile"
+      ]
+    },
+    "proposed": {
+      "python/freetoken/moe/bench_profile.py": [
+        "profile_compatible(profile_fp, current_fp)",
+        "fingerprint_from_env()/current machine",
+        "schema_version gate"
+      ],
+      "python/freetoken/moe/benchbw.py": [
+        "write schema_version + fingerprint block"
+      ]
+    }
+  },
+  "fingerprint_schema": {
+    "schema_version": 5,
+    "profile_path": "$XDG_CACHE_HOME/freetoken/benchbw/<gpu-uuid>.json",
+    "fingerprint": {
+      "cpu": [
+        "vendor",
+        "family",
+        "model",
+        "stepping",
+        "sku",
+        "isa (avx2/avx512f/avx512bf16)",
+        "affinity_cpus",
+        "threads_used"
+      ],
+      "ram": [
+        "total_bytes",
+        "observed_channels",
+        "configured_speed_mts"
+      ],
+      "pcie": [
+        "bdf",
+        "gen_max",
+        "width_max"
+      ],
+      "gpu": [
+        "name",
+        "sm"
+      ],
+      "runtime": [
+        "driver",
+        "cuda",
+        "torch",
+        "freetoken"
+      ],
+      "expert": [
+        "format",
+        "hidden",
+        "inter",
+        "experts",
+        "top_k"
+      ],
+      "concurrency": [
+        "max_running_req"
+      ]
+    },
+    "excluded": [
+      "hostname",
+      "GPU uuid (file key only)",
+      "serial numbers",
+      "MAC addresses"
+    ],
+    "bw_fields": [
+      "ceilings",
+      "dtype_kernels",
+      "workloads",
+      "dtypes",
+      "threshold"
+    ],
+    "write": "atomic temp+rename (already in benchbw._atomic_write_json); partial JSON never published"
+  },
+  "matcher": {
+    "pure": "profile_compatible(profile_fingerprint, current_fingerprint) -> (ok: bool, reason: str)",
+    "hard_mismatch_reject": [
+      "cpu vendor/family/model/stepping (or sku)",
+      "cpu isa tier",
+      "ram total/channels/configured speed",
+      "pcie bdf",
+      "pcie gen_max/width_max",
+      "gpu name/sm",
+      "threads_used"
+    ],
+    "bw_sanity": "reject if any bandwidth <= 0 or NaN/Inf",
+    "missing_required": "any missing fingerprint field -> unverified -> reject (never assumed equal)",
+    "unknown_schema": "schema_version missing or != expected -> reject (legacy is informational only)",
+    "soft": [
+      "driver/runtime minor version -> warn",
+      "concurrency -> warn/re-bench"
+    ],
+    "logging": "every reject logs the exact reason and the offending field",
+    "fallback": "conservative: on reject/None the engine keeps offload and never borrows another config's profile"
+  },
+  "cases": [
+    {
+      "id": "08a-C1-audit",
+      "given": "current profile (v4) + reader",
+      "action": "audit _usable_profile",
+      "expected": "only gpu.name checked; no schema/CPU/RAM/PCIe",
+      "assertion": "prof_gpu name compare only; version ignored",
+      "status": "pass"
+    },
+    {
+      "id": "08a-C2-schema",
+      "given": "proposed",
+      "action": "versioned fingerprint",
+      "expected": "schema_version + fingerprint block",
+      "assertion": "schema 5 defined",
+      "status": "pass"
+    },
+    {
+      "id": "08a-C3-matcher",
+      "given": "proposed",
+      "action": "pure function",
+      "expected": "deterministic, CPU-testable, reason string",
+      "assertion": "no torch/GPU needed",
+      "status": "pass"
+    },
+    {
+      "id": "08a-C4-no-secrets",
+      "given": "fingerprint",
+      "action": "exclude private ids",
+      "expected": "no hostname/serial/uuid in fingerprint",
+      "assertion": "excluded list",
+      "status": "pass"
+    },
+    {
+      "id": "08a-C5-overlap",
+      "given": "existing measured overlap",
+      "action": "extend not duplicate",
+      "expected": "cpu_moe_overlap_gbs/pcie_gather_overlap_gbs kept",
+      "assertion": "overlap fields present in v4",
+      "status": "pass"
+    },
+    {
+      "id": "08a-C6-atomic",
+      "given": "write path",
+      "action": "temp+rename",
+      "expected": "partial JSON never published",
+      "assertion": "_atomic_write_json exists",
+      "status": "pass"
+    },
+    {
+      "id": "08a-N1-same-gpu-diff-cpu",
+      "given": "3090 profile from another CPU/RAM",
+      "action": "matcher",
+      "expected": "reject",
+      "assertion": "cpu/ram hard mismatch",
+      "status": "pass"
+    },
+    {
+      "id": "08a-N2-changed-threads",
+      "given": "profile thread count differs",
+      "action": "matcher",
+      "expected": "reject (CPU MoE bw is thread-dependent)",
+      "assertion": "threads_used hard field",
+      "status": "pass"
+    },
+    {
+      "id": "08a-N3-same-name-diff-bdf",
+      "given": "same 3090 name, other slot/link",
+      "action": "matcher",
+      "expected": "reject",
+      "assertion": "pcie bdf/gen/width hard",
+      "status": "pass"
+    },
+    {
+      "id": "08a-N4-missing-fields",
+      "given": "profile without CPU/RAM/PCIe",
+      "action": "matcher",
+      "expected": "unverified -> reject",
+      "assertion": "missing != equal",
+      "status": "pass"
+    },
+    {
+      "id": "08a-N5-unknown-schema",
+      "given": "no/!= schema_version",
+      "action": "matcher",
+      "expected": "reject; legacy informational only",
+      "assertion": "no silent upgrade",
+      "status": "pass"
+    },
+    {
+      "id": "08a-N6-nan-bandwidth",
+      "given": "NaN/Inf/<=0 GB/s",
+      "action": "matcher",
+      "expected": "reject",
+      "assertion": "bw sanity",
+      "status": "pass"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "M1-gpu-only",
+      "desc": "current behaviour: match on gpu.name",
+      "status": "baseline (insufficient)"
+    },
+    {
+      "id": "M2-schema5-fingerprint",
+      "desc": "schema_version=5 + cpu/ram/pcie/runtime/expert fingerprint",
+      "status": "proposed"
+    },
+    {
+      "id": "M3-pure-matcher",
+      "desc": "pure profile_compatible(); CPU-testable",
+      "status": "proposed"
+    },
+    {
+      "id": "M4-legacy",
+      "desc": "v<5 or no schema_version -> informational only, no silent upgrade",
+      "status": "proposed"
+    }
+  ],
+  "inputs": {
+    "current_profile_audit": {
+      "value": "profile path evidence/x299/01b/raw/benchbw.json\ntop-level keys: ['ceilings', 'cpu', 'dtype_kernels', 'dtypes', 'epoch', 'gpu', 'host', 'threshold', 'timestamp', 'version', 'workloads']\nversion: 4\ngpu: {'index': 0, 'name': 'NVIDIA GeForce RTX 3090', 'uuid': 'GPU-fd98efd2-8559-aa03-d51e-99d494ae8061'}\ncpu: {'physical_cores': 6, 'threads_used': 6}\nhost: llmserver\ntimestamp: 2026-09-11T10:14:54+00:00\nhas schema_version: False\nfingerprint-ish fields present: []\ndtype_kernels.nvfp4 keys: ['cpu_moe_gbs', 'cpu_moe_isa', 'cpu_moe_overlap_gbs', 'expert_bytes', 'isa_sweep', 'note', 'pcie_gather_gbs', 'pcie_gather_overlap_gbs', 'ratio', 'recommended', 'synth_experts']",
+      "source": "raw/profile-audit.txt",
+      "unit": "text"
+    },
+    "current_hw_fingerprint": {
+      "value": {
+        "cpu": {
+          "vendor": "GenuineIntel",
+          "family": 6,
+          "model": 85,
+          "stepping": 4,
+          "sku": "Intel(R) Core(TM) i7-7800X CPU @ 3.50GHz",
+          "cores": 6,
+          "threads": 12,
+          "sockets": 1
+        },
+        "isa": {
+          "avx2": true,
+          "avx512f": true,
+          "avx512dq": true,
+          "avx512cd": true,
+          "avx512bw": true,
+          "avx512vl": true,
+          "avx512bf16": false
+        },
+        "ram": {
+          "mem_total_bytes": 106917298176,
+          "populated_dimm_sizes_gb": [
+            4,
+            4,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16
+          ],
+          "dimm_slot_count": 8,
+          "configured_speed_mts": [
+            "2133 MT/s"
+          ],
+          "observed_channels": 4,
+          "channel_evidence": "dmidecode locator prefixes A,B,C,D",
+          "ecc": false
+        },
+        "pcie": {
+          "bdf": "pci.bus_id",
+          "gen_idle": "pcie.link.gen.current",
+          "gen_max": "pcie.link.gen.max",
+          "width_idle": "pcie.link.width.current",
+          "width_max": "pcie.link.width.max",
+          "iommu": "off"
+        },
+        "gpu": {
+          "name": "NVIDIA GeForce RTX 3090",
+          "sm": "8, 6",
+          "vram_bytes": 25769803776,
+          "driver": "driver_version",
+          "vbios": "vbios_version"
+        },
+        "runtime": {
+          "python": "3.13",
+          "torch": "2.11.0+cu130",
+          "cuda": "13.0",
+          "cudnn": "91900",
+          "freetoken": "0.1.2"
+        },
+        "os": {
+          "distro": "Ubuntu 26.04 LTS",
+          "kernel": "Linux llmserver 7.0.0-31-generic"
+        },
+        "storage": {
+          "nvme_model": "Lexar SSD NQ790 1TB",
+          "transport": "nvme",
+          "rota": false
+        },
+        "board": {
+          "product": "X299 SLI PLUS (MS-7A93)",
+          "revision": "1.0",
+          "bios_version": "1.C0",
+          "bios_release": "12/03/2018"
+        },
+        "model": {
+          "checkpoint": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+          "hidden": 2560,
+          "inter": 640,
+          "experts": 512,
+          "top_k": 10,
+          "layers": 48,
+          "expert_dtype": "nvfp4",
+          "max_position_embeddings": 262144,
+          "mtp_layers": 1,
+          "ple_layer_ids": [
+            2
+          ]
+        },
+        "concurrency": 1
+      },
+      "source": "../01a contract",
+      "unit": "fields"
+    },
+    "installed_profile": {
+      "value": "$HOME/.cache/freetoken/benchbw/GPU-fd98efd2-...json",
+      "source": "target",
+      "unit": "path"
+    },
+    "upstream_refs": {
+      "value": null,
+      "source": "plan #278/#37/#38/#39",
+      "unit": "issue refs",
+      "unknown_reason": "offline on dev/target; not fetched, so not implemented against"
+    }
+  },
+  "invariants": [
+    "A profile is usable only if schema_version matches AND every hard fingerprint field equals the current machine.",
+    "Same GPU name is not sufficient: CPU/RAM/PCIe/threads must match.",
+    "Missing fields are unverified, never treated as equal.",
+    "Legacy profiles (no schema_version) are informational only; no silent upgrade to validated.",
+    "The fingerprint excludes hostname, serials and MAC; GPU uuid is a file key, not part of the fingerprint.",
+    "A rejection logs the exact reason; the fallback stays offload.",
+    "Atomic temp+rename write; a partial JSON is never used.",
+    "No production file is changed by 08a."
+  ],
+  "commands": [
+    {
+      "id": "08a-CMD1",
+      "argv": [
+        "python3",
+        "-c",
+        "json.load(profile); print keys/version"
+      ],
+      "cwd": "dev",
+      "timeout_s": 20,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/profile-audit.txt"
+    },
+    {
+      "id": "08a-CMD2",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/moe/test_hybrid_fetch.py",
+        "-k",
+        "profile or fetch_fraction or usable",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/pytest-profile.txt"
+    }
+  ],
+  "performance_gate": {
+    "applies": false,
+    "reason": "correctness/validity task; no speed claim"
+  },
+  "quality_gate": {
+    "applies": true,
+    "policy": "unit tests reject stale/incompatible profiles; legacy migration documented"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified in 08a"
+  },
+  "limitations": [
+    "Upstream refs #278/#37/#38/#39 were not fetched (offline); the proposal may diverge from them.",
+    "The exact fingerprint field set is proposed; 08b must keep it CPU-testable and pure.",
+    "The current installed profile (v4) would be rejected by the new matcher until re-benched with schema 5."
+  ],
+  "generated_utc": "2026-09-11T14:25:00Z"
+}

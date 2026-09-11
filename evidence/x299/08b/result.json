@@ -1,0 +1,126 @@
+{
+  "task_key": "08b",
+  "outcome": "implemented",
+  "outcome_reason": "Versioned fingerprint + pure matcher implemented in production code and verified end-to-end on the target; prod default unchanged (config-only auto path).",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "08b-C1-schema5-written",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-C2-auto-uses-profile",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-C3-pure-matcher",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-C4-no-secrets",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-C5-overlap-kept",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-C6-atomic-legacy",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-N1-same-gpu-diff-cpu",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-N2-changed-threads",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-N3-same-name-diff-bdf",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-N4-missing-fields",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-N5-unknown-schema",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    },
+    {
+      "id": "08b-N6-nan-bandwidth",
+      "status": "pass",
+      "command_id": "08b-CMD1..3",
+      "log_path": "raw/profile-v5.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "08b-profile-v5",
+      "raw_path": "raw/profile-v5.txt",
+      "sha256": "fa3cb19c11065386737d6f9bc564bbfc6473299beea8ef0daaf89aab0282106b"
+    },
+    {
+      "run_id": "08b-auto",
+      "raw_path": "raw/auto-resolution.txt",
+      "sha256": "22bff8439956c0930facdc43cda6808c360847c8fc5495b61ccc75c8413b0c3c"
+    },
+    {
+      "run_id": "08b-matcher",
+      "raw_path": "raw/target-matcher-check.txt",
+      "sha256": "bdb8958b5fd2b82beda9601fefdc8b670c564c70216ea08a45e32b9a54034fe9"
+    },
+    {
+      "run_id": "08b-tamper",
+      "raw_path": "raw/tamper-check.txt",
+      "sha256": "aef1f83fbf773d9c9c508af1a1feadcdb4f1d5b527ec108d40b117e9e9b20f67"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "gpu.sm is caller-supplied (torch): the reader cannot derive it, so it is compared only when both sides have it.",
+    "RAM speed/channels need dmidecode (root or sudo -n); when unreadable they are null and skipped.",
+    "Upstream refs #278/#37/#38/#39 still not fetched (offline).",
+    "The previous v4 profile at the default cache path is intentionally rejected; a fresh benchbw run replaces it with v5."
+  ],
+  "rollback_result": "backup at /opt/FreeToken/.x299-backup/; not rolled back (change kept)",
+  "key_findings": {
+    "schema_version": 5,
+    "auto_resolved": "hybrid",
+    "fetch_fraction": 0.2804,
+    "live_rejections": [
+      "diff-cpu",
+      "diff-bdf",
+      "legacy"
+    ],
+    "pytest": {
+      "passed": 13,
+      "skipped": 2,
+      "note": "2 CUDA-only skips on dev"
+    }
+  }
+}

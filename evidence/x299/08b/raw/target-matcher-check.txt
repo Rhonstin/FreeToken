@@ -1,0 +1,10 @@
+current cpu: {'family': '6', 'model': '85', 'stepping': '4', 'isa': 'avx512', 'threads': 6}
+current ram: {'total_bytes': 106917298176, 'observed_channels': 4, 'configured_speed_mts': 2133} pcie: {'bdf': '00000000:65:00.0', 'gen_max': 3, 'width_max': 16} gpu: {'name': 'NVIDIA GeForce RTX 3090', 'sm': None}
+ACCEPT same-machine: hybrid
+[1m[2026-09-11|14:21:24][0m [33mWARNING [0m benchbw profile /tmp/tmp3xi54jpc/bad.json rejected: cpu.model mismatch: stored='158' current='85'
+REJECT diff-cpu: None
+[1m[2026-09-11|14:21:24][0m [33mWARNING [0m benchbw profile /tmp/tmp3xi54jpc/bad2.json rejected: pcie.bdf mismatch: stored='00000000:17:00.0' current='00000000:65:00.0'
+REJECT diff-bdf: None
+[1m[2026-09-11|14:21:24][0m [33mWARNING [0m benchbw profile /tmp/tmp3xi54jpc/leg.json has no usable schema_version (got None, want 5); treating it as informational only
+REJECT legacy: None
+ACCEPT verdict: (True, 'compatible')
