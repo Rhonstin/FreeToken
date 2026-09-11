@@ -1,0 +1,147 @@
+{
+  "task_key": "07b",
+  "outcome": "implemented",
+  "outcome_reason": "Right-sized KV + auto expert cache gives a measured, quality-neutral +28% at 16k; delivered as a workload-scoped preset, prod long-context preset unchanged.",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "07b-C1-frontier",
+      "status": "pass",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-C2-auto-vs-manual",
+      "status": "pass",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-C3-rightsized-kv",
+      "status": "pass",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-C4-quality-parity",
+      "status": "pass",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-C5-prefill-64k",
+      "status": "pass",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-C6-headroom",
+      "status": "pass",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-N1-tiny-cache",
+      "status": "skip",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-N2-fragmentation",
+      "status": "pass",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-N3-prefill-peak",
+      "status": "pass",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-N4-rebuild-cold",
+      "status": "skip",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    },
+    {
+      "id": "07b-N5-fixed-vs-auto",
+      "status": "pass",
+      "command_id": "07b-CMD1..2",
+      "log_path": "raw/split.jsonl"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "07b-split",
+      "raw_path": "raw/split.jsonl",
+      "sha256": "241ddc56c01dd5cfd67047333eb2342ac227aa05e3191bc0b8badb8d65efb49e"
+    },
+    {
+      "run_id": "07b-split2",
+      "raw_path": "raw/split2.jsonl",
+      "sha256": "78abe097b96e21dd5b5976a881b14b2dc7f6d8a09478be0b0e647940d9a3c0fb"
+    },
+    {
+      "run_id": "07b-miss",
+      "raw_path": "raw/miss.txt",
+      "sha256": "6af557e0e6f02529e6fbfdbc5578677d3d45117962d20806c50995fde4257d98"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "manual --moe-cache-size 4000 (17.52 tok/s) regressed vs auto 3978 (23.6); not reproduced, flagged for follow-up.",
+    "64k prefill was validated at prod geometry, not at the max cache size.",
+    "Graph/scratch headroom is accounted via memory_ratio but not separately measured."
+  ],
+  "rollback_result": "not_required (runtime flags only; no default changed)",
+  "key_findings": {
+    "frontier_16k": {
+      "auto": {
+        "tok_s": 23.62,
+        "p95": 69.46,
+        "sha": "f8cb8d6f5b7b"
+      },
+      "auto-b": {
+        "tok_s": 23.65,
+        "p95": 69.82,
+        "sha": "f8cb8d6f5b7b"
+      },
+      "ref220k": {
+        "tok_s": 18.44,
+        "p95": 78.05,
+        "sha": "f8cb8d6f5b7b"
+      },
+      "s2600": {
+        "tok_s": 18.19,
+        "p95": 80.12,
+        "sha": "f8cb8d6f5b7b"
+      },
+      "s3200": {
+        "tok_s": 20.28,
+        "p95": 75.7,
+        "sha": "f8cb8d6f5b7b"
+      },
+      "s3200-b": {
+        "tok_s": 20.29,
+        "p95": 75.76,
+        "sha": "f8cb8d6f5b7b"
+      },
+      "s4000": {
+        "tok_s": 17.52,
+        "p95": 84.69,
+        "sha": "f8cb8d6f5b7b"
+      },
+      "t64k-prod": {
+        "tok_s": 18.59,
+        "prompt_tokens": 65603
+      }
+    },
+    "auto_geometry": "3978 slots / 516 pages / overlap",
+    "gain_auto_vs_prod_at_16k_pct": 28.1,
+    "greedy_parity": true,
+    "prefill_64k_ok": true,
+    "best_preset": "num-tokens 32768 + --moe-cache-auto for <=32k workloads"
+  }
+}

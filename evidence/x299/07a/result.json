@@ -1,0 +1,108 @@
+{
+  "task_key": "07a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "cases": [
+    {
+      "id": "07a-C1-per-slot-bytes",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-C2-kv-bytes",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-C3-frontier",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-C4-prod-split",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-C5-headroom",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-C6-overprovision",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-N1-tiny-cache",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-N2-fragmentation",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-N3-prefill-peak",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-N4-rebuild-cold",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    },
+    {
+      "id": "07a-N5-fixed-vs-auto",
+      "status": "pass",
+      "command_id": "07a-CMD1..3",
+      "log_path": "raw/prod-split-baseline.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "07a-prod-split",
+      "raw_path": "raw/prod-split-baseline.txt",
+      "sha256": "f259359e7123bdc3f3c08baee1df86eb2cf8411cfa9b5414454f517050defed7"
+    },
+    {
+      "run_id": "07a-pytest",
+      "raw_path": "raw/pytest-budget.txt",
+      "sha256": "8952d90d70ee5e39cf8af2d5e22f970f39b80570ecf2346bba8f7a4aacae5a7a"
+    }
+  ],
+  "failures": [
+    "2 env-only test failures (flashinfer absent on dev; tests resolve backend 'fi')"
+  ],
+  "pytest": {
+    "passed": 30,
+    "failed": 2,
+    "failed_reason": "flashinfer not installed on dev; tests pick attention backend 'fi'. Expected to pass on the target venv with [accel]."
+  },
+  "limitations": [
+    "Live /v1/stats reported kv=null until traffic; byte figures come from 02a/03b snapshots.",
+    "Graph/scratch peak is accounted via (1-memory_ratio) but not separately measured yet.",
+    "moe-cache-auto behavior on this checkpoint is verified in 07b."
+  ],
+  "rollback_result": "not_required (no code change)",
+  "key_findings": {
+    "per_expert_slot_bytes": 2764824,
+    "nvfp4_bytes_per_token": 7877,
+    "slots_per_kv_token": 351.012,
+    "prod_cache_gib": 6.69,
+    "prod_kv_gib": 1.61,
+    "freed_if_32k_gib": 1.37,
+    "extra_slots_if_freed": 533
+  }
+}

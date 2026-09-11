@@ -1,0 +1,44 @@
+[
+  {
+    "id": "07b-CMD1",
+    "argv": [
+      "/opt/freetoken-venv/bin/ft",
+      "serve",
+      "--moe-strategy",
+      "offload",
+      "--moe-cache-size",
+      "<N|auto>",
+      "--num-tokens",
+      "<T>",
+      "--kv-cache-dtype",
+      "nvfp4",
+      "--memory-ratio",
+      "0.90",
+      "--moe-collect-stats",
+      "... fixed ..."
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1500,
+    "expected_exit": 0,
+    "phase": "b"
+  },
+  {
+    "id": "07b-CMD2",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "evidence/x299/05b/context_probe.py",
+      "--prompt-dir",
+      "evidence/x299/03b/fixtures",
+      "--contexts",
+      "16k",
+      "--decode",
+      "128"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 900,
+    "expected_exit": 0,
+    "phase": "b"
+  }
+]

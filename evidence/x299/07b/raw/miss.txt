@@ -1,0 +1,6 @@
+s2600 16k rc=0 vram_used_mib=20154 moe miss: 0.34
+s3200 16k rc=0 vram_used_mib=21734 moe miss: 0.30
+s4000 16k rc=0 vram_used_mib=23854 moe miss: 0.24
+auto 16k rc=0 vram_used_mib=23794 moe miss: 0.24
+ref220k 16k rc=0 vram_used_mib=21594 moe miss: 0.34
+prefill64k 64k rc=0 vram_used_mib=19922 

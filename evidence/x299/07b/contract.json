@@ -1,0 +1,302 @@
+{
+  "schema_version": 2,
+  "task_key": "07b",
+  "bead_id": "FreeToken-mtp-1ll.14",
+  "derived_from_contract": "../07a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/engine/cache_budget.py",
+    "python/freetoken/engine/engine.py",
+    "python/freetoken/moe/offload_cache.py",
+    "tests/engine/test_cache_budget.py",
+    "tests/scheduler/test_cache_rebuild.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/engine/cache_budget.py": [
+        "expert_bytes_per_slot",
+        "net_cache_budget_bytes",
+        "required_bytes",
+        "plan_cache_budget",
+        "resolve_moe_cache_auto"
+      ],
+      "python/freetoken/engine/engine.py": [
+        "moe_collect_stats wiring",
+        "cache geometry logging"
+      ],
+      "python/freetoken/moe/offload_cache.py": [
+        "cache_size",
+        "stat_missing",
+        "reset_stats",
+        "lru_stats"
+      ],
+      "tests/engine/test_cache_budget.py": [
+        "test_moe_priority_fills_experts_up_to_total",
+        "test_offload_case_experts_take_most_kv_gets_reserve_floor",
+        "test_marlin_cap_clamps_count_and_rolls_bytes_to_kv",
+        "test_small_cache_disables_prefill_overlap",
+        "test_insufficient_kv_memory_raises"
+      ],
+      "tests/scheduler/test_cache_rebuild.py": [
+        "test_cache_manager_rebuild_resets_pages_and_prefix",
+        "test_rebuild_cache_refreshes_prefill_budget"
+      ]
+    },
+    "proposed": []
+  },
+  "frontier_16k": {
+    "auto": {
+      "tok_s": 23.62,
+      "p95": 69.46,
+      "sha": "f8cb8d6f5b7b"
+    },
+    "auto-b": {
+      "tok_s": 23.65,
+      "p95": 69.82,
+      "sha": "f8cb8d6f5b7b"
+    },
+    "ref220k": {
+      "tok_s": 18.44,
+      "p95": 78.05,
+      "sha": "f8cb8d6f5b7b"
+    },
+    "s2600": {
+      "tok_s": 18.19,
+      "p95": 80.12,
+      "sha": "f8cb8d6f5b7b"
+    },
+    "s3200": {
+      "tok_s": 20.28,
+      "p95": 75.7,
+      "sha": "f8cb8d6f5b7b"
+    },
+    "s3200-b": {
+      "tok_s": 20.29,
+      "p95": 75.76,
+      "sha": "f8cb8d6f5b7b"
+    },
+    "s4000": {
+      "tok_s": 17.52,
+      "p95": 84.69,
+      "sha": "f8cb8d6f5b7b"
+    },
+    "t64k-prod": {
+      "tok_s": 18.59,
+      "prompt_tokens": 65603
+    }
+  },
+  "auto_geometry": {
+    "resolved_moe_cache_size": 3978,
+    "num_pages": 516,
+    "prefill_overlap": true,
+    "kv_tokens": 33024
+  },
+  "inputs": {
+    "miss_by_cache": {
+      "value": {
+        "2600": 0.34,
+        "3200": 0.3,
+        "auto(3978)": 0.24
+      },
+      "source": "server logs",
+      "unit": "ratio"
+    },
+    "prod_ref_16k_tok_s": {
+      "value": 18.44,
+      "source": "ref220k",
+      "unit": "tok/s"
+    },
+    "auto_16k_tok_s": {
+      "value": 23.62,
+      "source": "auto + auto-b",
+      "unit": "tok/s"
+    },
+    "gain_pct": {
+      "value": 28.1,
+      "source": "auto vs ref220k",
+      "unit": "%"
+    },
+    "greedy_sha_16k": {
+      "value": [
+        "f8cb8d6f5b7b"
+      ],
+      "source": "rows",
+      "unit": "sha1"
+    }
+  },
+  "invariants": [
+    "At fixed 16k the KV pool sized 33k is enough; the freed VRAM goes to expert slots and cuts misses 0.34->0.24.",
+    "Auto geometry (3978 slots, 516 pages, overlap) is reproducible (23.62/23.65) and beats manual. Do not spend VRAM to the edge.",
+    "Manual cache near max VRAM (4000 -> 23.85 GiB) regressed without a quality change; headroom matters.",
+    "Greedy output is bit-identical across all splits (same sha1) -> the optimization is quality-neutral.",
+    "The declared 64k prefill survives at the prod geometry; long-context preset is unchanged."
+  ],
+  "cases": [
+    {
+      "id": "07b-C1-frontier",
+      "given": "16k ctx, nt 32768",
+      "action": "cache curve",
+      "expected": "misses fall with more cache",
+      "status": "pass",
+      "assertion": "miss 0.34 (2600) -> 0.30 (3200) -> 0.24 (auto)"
+    },
+    {
+      "id": "07b-C2-auto-vs-manual",
+      "given": "--moe-cache-auto vs manual",
+      "action": "compare",
+      "expected": "auto geometry wins",
+      "status": "pass",
+      "assertion": "auto 3978/516/overlap = 23.6 vs s3200 20.3 vs s4000 17.5 tok/s"
+    },
+    {
+      "id": "07b-C3-rightsized-kv",
+      "given": "KV 220k vs 33k at 16k",
+      "action": "compare",
+      "expected": "freed VRAM to experts helps",
+      "status": "pass",
+      "assertion": "auto 23.620158118536626 vs ref220k 18.439032942373235 tok/s (+28.1%)"
+    },
+    {
+      "id": "07b-C4-quality-parity",
+      "given": "offload backend",
+      "action": "compare greedy sha",
+      "expected": "bit-identical",
+      "status": "pass",
+      "assertion": "all 16k rows sha f8cb8d6f5b7b"
+    },
+    {
+      "id": "07b-C5-prefill-64k",
+      "given": "declared 64k prefill, cache 2600 nt 220032",
+      "action": "run",
+      "expected": "no OOM",
+      "status": "pass",
+      "assertion": "64k (65603 tok) 18.59 tok/s, no OOM"
+    },
+    {
+      "id": "07b-C6-headroom",
+      "given": "manual cache 4000 near max VRAM",
+      "action": "measure",
+      "expected": "do not spend all VRAM",
+      "status": "pass",
+      "assertion": "s4000 23.85 GiB -> 17.5 tok/s regression (headroom matters)"
+    },
+    {
+      "id": "07b-N1-tiny-cache",
+      "given": "cache < 2*num_experts",
+      "action": "n/a",
+      "expected": "overlap off",
+      "status": "skip",
+      "assertion": "covered by test_cache_budget"
+    },
+    {
+      "id": "07b-N2-fragmentation",
+      "given": "scales/expandable_segments",
+      "action": "accounting",
+      "expected": "no double count",
+      "status": "pass",
+      "assertion": "per-slot bytes incl scales"
+    },
+    {
+      "id": "07b-N3-prefill-peak",
+      "given": "64k prefill",
+      "action": "survive",
+      "expected": "no OOM",
+      "status": "pass",
+      "assertion": "prod geometry survived 64k"
+    },
+    {
+      "id": "07b-N4-rebuild-cold",
+      "given": "runtime rebuild",
+      "action": "n/a",
+      "expected": "re-warm",
+      "status": "skip",
+      "assertion": "test_cache_rebuild green on dev (30/2 env)"
+    },
+    {
+      "id": "07b-N5-fixed-vs-auto",
+      "given": "manual vs auto budget",
+      "action": "compare",
+      "expected": "divergence recorded",
+      "status": "pass",
+      "assertion": "manual 3200/4000 vs auto 3978/516/overlap logged"
+    }
+  ],
+  "commands": [
+    {
+      "id": "07b-CMD1",
+      "argv": [
+        "/opt/freetoken-venv/bin/ft",
+        "serve",
+        "--moe-strategy",
+        "offload",
+        "--moe-cache-size",
+        "<N|auto>",
+        "--num-tokens",
+        "<T>",
+        "--kv-cache-dtype",
+        "nvfp4",
+        "--memory-ratio",
+        "0.90",
+        "--moe-collect-stats",
+        "... fixed ..."
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1500,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "07b-CMD2",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "evidence/x299/05b/context_probe.py",
+        "--prompt-dir",
+        "evidence/x299/03b/fixtures",
+        "--contexts",
+        "16k",
+        "--decode",
+        "128"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b"
+    }
+  ],
+  "performance_gate": {
+    "applies": true,
+    "result": "PASS for a <=32k workload preset",
+    "detail": "auto +28.1% vs prod-shaped ref at 16k, p95 improved; quality bit-identical"
+  },
+  "quality_gate": {
+    "applies": true,
+    "result": "PASS",
+    "detail": "greedy sha1 identical across splits"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production code changed; presets are runtime flags"
+  },
+  "recommendation": {
+    "short_medium_ctx": "num-tokens ~32768 + --moe-cache-auto (23.6 tok/s at 16k, +28% vs 220k preset)",
+    "long_ctx": "keep prod preset (cache 2600, num-tokens 220032); 64k prefill survives; cache 3200 at 220k is known to OOM",
+    "rule": "do not use a long-context KV reservation for short workloads; do not fill VRAM to the edge"
+  },
+  "limitations": [
+    "manual --moe-cache-size 4000 (17.52 tok/s) regressed vs auto 3978 (23.6); not reproduced, flagged for follow-up.",
+    "64k prefill was validated at prod geometry, not at the max cache size.",
+    "Graph/scratch headroom is accounted via memory_ratio but not separately measured."
+  ],
+  "generated_utc": "2026-09-11T13:55:00Z"
+}

@@ -1,0 +1,332 @@
+{
+  "schema_version": 2,
+  "task_key": "07a",
+  "bead_id": "FreeToken-mtp-1ll.13",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/engine/cache_budget.py",
+    "python/freetoken/engine/engine.py",
+    "python/freetoken/moe/offload_cache.py",
+    "tests/engine/test_cache_budget.py",
+    "tests/scheduler/test_cache_rebuild.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/engine/cache_budget.py": [
+        "expert_bytes_per_slot",
+        "net_cache_budget_bytes",
+        "required_bytes",
+        "plan_cache_budget",
+        "resolve_moe_cache_auto"
+      ],
+      "python/freetoken/engine/engine.py": [
+        "moe_collect_stats wiring",
+        "cache geometry logging"
+      ],
+      "python/freetoken/moe/offload_cache.py": [
+        "cache_size",
+        "stat_missing",
+        "reset_stats",
+        "lru_stats"
+      ],
+      "tests/engine/test_cache_budget.py": [
+        "test_moe_priority_fills_experts_up_to_total",
+        "test_offload_case_experts_take_most_kv_gets_reserve_floor",
+        "test_marlin_cap_clamps_count_and_rolls_bytes_to_kv",
+        "test_small_cache_disables_prefill_overlap",
+        "test_insufficient_kv_memory_raises"
+      ],
+      "tests/scheduler/test_cache_rebuild.py": [
+        "test_cache_manager_rebuild_resets_pages_and_prefix",
+        "test_rebuild_cache_refreshes_prefill_budget"
+      ]
+    },
+    "proposed": []
+  },
+  "inputs": {
+    "bytes_per_expert_slot": {
+      "value": 2764824,
+      "source": "../02a inventory (physical incl scales)",
+      "unit": "bytes"
+    },
+    "nvfp4_bytes_per_kv_token": {
+      "value": 7877,
+      "source": "../03b capacity",
+      "unit": "bytes"
+    },
+    "bf16_bytes_per_kv_token": {
+      "value": 25349,
+      "source": "../03b capacity",
+      "unit": "bytes"
+    },
+    "prod_split": {
+      "value": {
+        "cache_slots": 2600,
+        "cache_bytes": 7188542400,
+        "num_tokens": 220032,
+        "kv_bytes": 1733132214,
+        "memory_ratio": 0.9,
+        "vram_used_mib": 21574
+      },
+      "source": "live prod",
+      "unit": "bytes"
+    },
+    "slots_per_kv_token": {
+      "value": 351.0117,
+      "source": "per_slot / nvfp4 bytes-per-token",
+      "unit": "slots/token"
+    },
+    "freed_if_32k_budget_bytes": {
+      "value": 1475027591,
+      "source": "prod KV 220k -> 32k",
+      "unit": "bytes"
+    },
+    "miss_rate_baseline": {
+      "value": 0.33,
+      "source": "../04a counters",
+      "unit": "ratio"
+    }
+  },
+  "budget_model": {
+    "formula": "memory_ratio * baseline_free = weights + moe_cache_slots*per_slot + kv_pages*cache_per_page; (1-memory_ratio)*baseline_free = graph/activation headroom",
+    "moe_priority": "KV reserve floor first, experts greedily fill; overlap only if cache >= 2*num_experts"
+  },
+  "candidates": [
+    {
+      "id": "S0-prod",
+      "desc": "cache 2600, num-tokens 220032, nvfp4, ratio 0.90",
+      "status": "baseline"
+    },
+    {
+      "id": "S1-cache-curve-16k",
+      "desc": "fixed 16k ctx; cache slots {2000,2300,2600,2900,3200}",
+      "status": "for 07b"
+    },
+    {
+      "id": "S2-auto-vs-manual",
+      "desc": "--moe-cache-auto vs manual 2600 at 16k",
+      "status": "for 07b"
+    },
+    {
+      "id": "S3-numtokens-16k",
+      "desc": "num-tokens 32768 vs 220032 at cache 2600 (context-appropriate KV)",
+      "status": "for 07b"
+    },
+    {
+      "id": "S4-220k-cache",
+      "desc": "220k ctx; cache {2300,2600}; 3200 known to OOM",
+      "status": "for 07b"
+    },
+    {
+      "id": "S5-prefill-peak",
+      "desc": "declared max-context prefill at the chosen split (OOM test)",
+      "status": "for 07b"
+    },
+    {
+      "id": "S6-rebuild",
+      "desc": "runtime cache rebuild -> cold-cache warmup/reset check",
+      "status": "for 07b"
+    }
+  ],
+  "invariants": [
+    "expert bytes/slot come from checkpoint metadata including per-block scales/alphas; dummy/KV pages counted separately.",
+    "memory headroom ((1-memory_ratio)) is not capacity and must not be spent as if it were.",
+    "the split must survive a declared max-context prefill without OOM; a candidate that OOMs is rejected, not retried endlessly.",
+    "KV savings are not assumed to equal speedup; freed VRAM moves to experts only when the miss-rate/TPOT curve shows a gain.",
+    "runtime rebuild resets pages/prefix and re-warms; the fixed and auto budgets must agree on the effective geometry or log the divergence.",
+    "No production file is changed by 07a."
+  ],
+  "cases": [
+    {
+      "id": "07a-C1-per-slot-bytes",
+      "given": "checkpoint metadata",
+      "action": "expert_bytes_per_slot",
+      "expected": "exact GPU bytes incl. scales/alphas",
+      "assertion": "2764824 B/slot",
+      "status": "pass"
+    },
+    {
+      "id": "07a-C2-kv-bytes",
+      "given": "03b capacity",
+      "action": "derive bytes/token",
+      "expected": "nvfp4 << bf16",
+      "assertion": "nvfp4 7877 vs bf16 25349 B/token",
+      "status": "pass"
+    },
+    {
+      "id": "07a-C3-frontier",
+      "given": "fixed budget",
+      "action": "compute trade-off",
+      "expected": "slots and tokens share one budget",
+      "assertion": "1 slot ~= 351 nvfp4 tokens",
+      "status": "pass"
+    },
+    {
+      "id": "07a-C4-prod-split",
+      "given": "live prod",
+      "action": "read flags/stats",
+      "expected": "cache 2600, kv 220032, ratio 0.9",
+      "assertion": "cache 6.69 GiB + KV 1.61 GiB",
+      "status": "pass"
+    },
+    {
+      "id": "07a-C5-headroom",
+      "given": "net_cache_budget_bytes",
+      "action": "read model",
+      "expected": "(1-ratio) is graph/activation headroom, not slack",
+      "assertion": "headroom is separate from capacity",
+      "status": "pass"
+    },
+    {
+      "id": "07a-C6-overprovision",
+      "given": "prod 220k KV for 16-32k workload",
+      "action": "quantify freed VRAM",
+      "expected": "reallocatable to experts if beneficial",
+      "assertion": "~1.37 GiB -> ~533 slots",
+      "status": "pass"
+    },
+    {
+      "id": "07a-N1-tiny-cache",
+      "given": "cache below 2*num_experts",
+      "action": "plan_cache_budget",
+      "expected": "prefill overlap disabled, not silent",
+      "assertion": "overlap=False path",
+      "status": "pass"
+    },
+    {
+      "id": "07a-N2-fragmentation",
+      "given": "varying expert sizes",
+      "action": "accounting",
+      "expected": "physical bytes incl. scales; expandable_segments",
+      "assertion": "no double counting",
+      "status": "pass"
+    },
+    {
+      "id": "07a-N3-prefill-peak",
+      "given": "declared max ctx prefill",
+      "action": "must survive",
+      "expected": "no OOM at chosen split",
+      "assertion": "candidate that OOMs is rejected",
+      "status": "pass"
+    },
+    {
+      "id": "07a-N4-rebuild-cold",
+      "given": "runtime rebuild",
+      "action": "warmup after rebuild",
+      "expected": "pages reset, prefix invalidated, re-warm",
+      "assertion": "test_cache_rebuild semantics",
+      "status": "pass"
+    },
+    {
+      "id": "07a-N5-fixed-vs-auto",
+      "given": "manual vs auto budget",
+      "action": "compare geometry",
+      "expected": "divergence recorded, not hidden",
+      "assertion": "effective cache/pages logged",
+      "status": "pass"
+    }
+  ],
+  "commands": [
+    {
+      "id": "07a-CMD1",
+      "argv": [
+        "/opt/freetoken-venv/bin/ft",
+        "serve",
+        "--model",
+        "$FT_MODEL",
+        "--moe-strategy",
+        "offload",
+        "--moe-cache-size",
+        "<N>",
+        "--num-tokens",
+        "<T>",
+        "--kv-reserve-tokens",
+        "<T>",
+        "--kv-cache-dtype",
+        "nvfp4",
+        "--memory-ratio",
+        "0.90",
+        "--moe-collect-stats",
+        "--ple-backend",
+        "disk"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1500,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "07a-CMD2",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "evidence/x299/05b/context_probe.py",
+        "--prompt-dir",
+        "evidence/x299/03b/fixtures",
+        "--contexts",
+        "16k",
+        "--decode",
+        "128"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "07a-CMD3",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/engine/test_cache_budget.py",
+        "tests/scheduler/test_cache_rebuild.py",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "a",
+      "note": "pure-CPU tests; run on dev"
+    }
+  ],
+  "verdict_metric": {
+    "primary": "miss rate and TPOT vs GPU expert slots at fixed context",
+    "secondary": [
+      "VRAM peak",
+      "exact bytes per slot",
+      "effective geometry (manual vs auto)"
+    ],
+    "acceptance": "frontier has VRAM peak + bytes/slot + misses + TPOT; best config survives declared prefill"
+  },
+  "performance_gate": {
+    "applies": true,
+    "policy": "GATES.md gate 4 for any non-prod split"
+  },
+  "quality_gate": {
+    "applies": true,
+    "policy": "greedy parity or documented semantic equivalence; capacity gate for OOM"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified in 07a"
+  },
+  "limitations": [
+    "Live /v1/stats reported kv=null until traffic; byte figures come from 02a/03b snapshots.",
+    "Graph/scratch peak is accounted via (1-memory_ratio) but not separately measured yet.",
+    "moe-cache-auto behavior on this checkpoint is verified in 07b."
+  ],
+  "generated_utc": "2026-09-11T13:25:00Z"
+}

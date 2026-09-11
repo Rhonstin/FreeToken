@@ -1,0 +1,17 @@
+### /v1/stats
+{"instance_id":"a859ae32-28ac-4e8b-9319-c771a6204040","model":{"id":"Qwen3.8-Flash-Next-NVFP4","ctx":262144,"attn":"hybrid_linear","moe":true,"sampling":{"temperature":1.0,"top_k":20,"top_p":0.95}},"uptime_s":340,"kv":null,"mamba":null,"swa":null,"vram_bytes":0,"gpus":[{"index":0,"name":"NVIDIA GeForce RTX 3090","uuid":"GPU-fd98efd2-8559-aa03-d51e-99d494ae8061","total_bytes":25293225984}],"throughput":{"decode_tps":0.0,"prefill_tps":0.0},"requests":{"active":0,"completed":0,"p95_ms":0,"ttft_mean_ms":0,"prompt_tokens_total":0,"completion_tokens_total":0}}
+### nvidia-smi
+24576 MiB, 21574 MiB, 2549 MiB
+### prod flags
+Environment=FT_MODEL=/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4
+ExecStart=/usr/local/bin/freetoken-serve
+Environment=FT_MODEL=/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4
+Environment=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+ExecStart=
+ExecStart=/usr/local/bin/freetoken-serve-exp --num-tokens 220032 --kv-reserve-tokens 220032 --kv-cache-dtype nvfp4 --memory-ratio 0.90 --moe-strategy offload --moe-cache-size 2600
+### budget symbols
+17:def expert_bytes_per_slot(sources: dict[str, "list[torch.Tensor]"]) -> int:
+31:def net_cache_budget_bytes(
+41:def required_bytes(
+48:def plan_cache_budget(
+98:def resolve_moe_cache_auto(
