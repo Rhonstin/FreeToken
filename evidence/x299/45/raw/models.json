@@ -1,0 +1,1 @@
+{"object":"list","data":[{"id":"Qwen3.8-Flash-Next-NVFP4","object":"model","created":1789153742,"owned_by":"FreeToken","root":"/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4","max_model_len":262144,"context_length":262144,"supported_reasoning_efforts":["xhigh","medium","low"],"default_reasoning_effort":"xhigh"}]}

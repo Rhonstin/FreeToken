@@ -1,0 +1,64 @@
+{
+  "task_key": "45",
+  "bead_id": "FreeToken-mtp-1ll.45",
+  "title": "Move prod to --moe-cache-auto with 220k KV (after a full 220k prefill)",
+  "outcome": "implemented",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e + worktree (dev source f5baaeb + #45 evidence)",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "adoption": {
+    "file": "/etc/systemd/system/freetoken.service.d/mtp-test.conf",
+    "before": "ExecStart=/usr/local/bin/freetoken-serve-exp --num-tokens 220032 --kv-reserve-tokens 220032 --kv-cache-dtype nvfp4 --memory-ratio 0.90 --moe-strategy offload --moe-cache-size 2600",
+    "after": "ExecStart=... --moe-strategy offload --moe-cache-auto --max-running-requests 1",
+    "backup": "/opt/FreeToken/.x299-backup/mtp-test.conf.before-45",
+    "keep": ["num-tokens 220032", "kv-reserve-tokens 220032", "kv-cache-dtype nvfp4", "memory-ratio 0.90"]
+  },
+  "measurements": {
+    "prod_manual_2600_16k_tok_s": 19.16,
+    "auto_mr4_16k_tok_s": 19.25,
+    "auto_mr2_16k_tok_s": 20.45,
+    "auto_mr1_16k_tok_s_test": 21.03,
+    "auto_mr1_16k_tok_s_adopted": 21.88,
+    "auto_mr1_64k_tok_s_test": 21.91,
+    "prod_shaped_64k_tok_s_07b": 18.59,
+    "auto_mr1_16k_gain_pct": 14.2,
+    "auto_mr1_64k_gain_pct": 17.8,
+    "resolved_cache": {"mr1": 3447, "mr2": 3280, "mr4": 2779},
+    "num_pages": {"mr1": 3438, "mr2": 3439, "mr4": 3441},
+    "max_prefill_tokens": 217853,
+    "max_prefill_ttft_s": 224.15,
+    "max_prefill_decode_tok_s": 21.43,
+    "sustained_217k_decode_tok_s": 21.57,
+    "greedy_sha1_adopted": "f8cb8d6f5b7b",
+    "greedy_matches_prod": true,
+    "vram_after_init_gib": 2.20
+  },
+  "concurrency": {
+    "kv_pool": "single shared 220032-token pool (num_pages 3438 x 64); requests share it via the page table, identical prefixes are deduplicated by the radix cache",
+    "identical_prompt_n2_16k_aggregate_tok_s": 37.33,
+    "identical_prompt_n1_16k_tok_s": 20.96,
+    "distinct_prompt_n4_16k_aggregate_tok_s": 3.97,
+    "distinct_prompt_n4_48k_aggregate_tok_s": 1.54,
+    "distinct_prompt_n4_60k_aggregate_tok_s": 1.46,
+    "distinct_prompt_n4_60k_total_tokens": 242626,
+    "finding": "distinct prompts collapse aggregate throughput (PCIe expert gather is shared); the identical-prompt n=2/n=4 wins were radix prefix sharing. 4x60k (>220k) is not rejected but serialised on page availability: no request gets a private 220k while others run.",
+    "batched_vs_single_greedy": "bs=2 output sha differs from bs=1 (6033d571 vs f8cb8d6f); greedy is not batch-invariant"
+  },
+  "cases": [
+    {"id": "45-C1-vram-16k", "status": "pass", "evidence": "auto mr1 21.88 vs manual 19.16 = +14.2% (>=5%)"},
+    {"id": "45-C2-vram-64k", "status": "pass", "evidence": "auto mr1 21.91 vs prod-shaped 18.59 = +17.8%"},
+    {"id": "45-C3-max-prefill", "status": "pass", "evidence": "217853 tokens, TTFT 224.15 s, no OOM; sustained 21.57 tok/s"},
+    {"id": "45-C4-greedy-parity", "status": "pass", "evidence": "sha1 f8cb8d6f5b7b identical to prod manual"},
+    {"id": "45-C5-rollback", "status": "pass", "evidence": "backup drop-in + documented recipe"},
+    {"id": "45-C6-concurrency", "status": "pass", "evidence": "shared 220k pool; distinct-prompt n=4 aggregate 1.5-4 tok/s"}
+  ],
+  "rollback_recipe": "sudo cp /opt/FreeToken/.x299-backup/mtp-test.conf.before-45 /etc/systemd/system/freetoken.service.d/mtp-test.conf && sudo systemctl daemon-reload && sudo systemctl restart freetoken.service (restores --moe-cache-size 2600).",
+  "limitations": [
+    "The 16k A/B baseline was re-measured on the current prod build (19.16/19.17); 07b had 18.44, so the gain is stated against the freshly measured 19.16.",
+    "max prefilled prompt was 217853 tokens (~99% of the 220032 declared max); 220032 exactly was not sent because prompt_tokens includes the chat template and the earlier 241402-token attempt was dropped.",
+    "Batched greedy is not bit-identical to single-request greedy (numerics), and distinct-prompt concurrency is net-negative on this PCIe-bound box; --max-running-requests 1 was chosen for the single-request goal.",
+    "Concurrency numbers used repeated/rotated doc text; real workloads may vary."
+  ],
+  "evidence": ["raw/run3.log", "raw/auto220k.jsonl", "raw/maxprefill.json", "raw/adopted.jsonl", "raw/adopted-maxprefill.json", "raw/parallel-16k.jsonl", "raw/parallel-n4.jsonl", "raw/parallel-distinct.jsonl", "raw/mr-sweep.txt"],
+  "generated_utc": "2026-09-11"
+}

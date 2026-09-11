@@ -1,0 +1,9 @@
+auto220k-16k rc=1 vram=1 
+auto220k-64k rc=1 vram=1 
+maxprefill rc=1 peak_vram=1
+auto220k-16k rc=1 vram=772 
+auto220k-64k rc=1 vram=772 
+maxprefill rc=1 peak_vram=772
+auto220k-16k rc=0 vram=23814 moe miss: 0.28
+auto220k-64k rc=0 vram=23814 moe miss: 0.27
+maxprefill rc=0 peak_vram=23816
