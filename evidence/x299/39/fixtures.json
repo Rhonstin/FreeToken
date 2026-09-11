@@ -1,0 +1,72 @@
+{
+  "task_key": "20a",
+  "bead_id": "FreeToken-mtp-1ll.39",
+  "note": "final campaign fixtures",
+  "valid": [
+    {
+      "id": "20a-F1-ab",
+      "given": "baseline vs adopted",
+      "when": "paired 16k/64k",
+      "then": ">=5%",
+      "assertion": "paired"
+    },
+    {
+      "id": "20a-F2-throttle",
+      "given": "192k sustained",
+      "when": "sample clocks",
+      "then": "no throttle",
+      "assertion": "clocks"
+    },
+    {
+      "id": "20a-F3-rollback",
+      "given": "adopted prod",
+      "when": "restore baseline + restart + measure",
+      "then": "baseline number",
+      "assertion": "verified"
+    }
+  ],
+  "invalid_negative": [
+    {
+      "id": "20a-N1-stale-fp",
+      "given": "stale fingerprint",
+      "when": "match",
+      "then": "reject",
+      "existing": false
+    },
+    {
+      "id": "20a-N2-dirty-hash",
+      "given": "dirty no hash",
+      "when": "record",
+      "then": "fail",
+      "existing": false
+    },
+    {
+      "id": "20a-N3-missing-raw",
+      "given": "number no raw",
+      "when": "verify",
+      "then": "fail",
+      "existing": false
+    },
+    {
+      "id": "20a-N4-incomplete-test",
+      "given": "not run",
+      "when": "report",
+      "then": "no pass",
+      "existing": false
+    },
+    {
+      "id": "20a-N5-throttle",
+      "given": "sustained throttle",
+      "when": "accept",
+      "then": "fail",
+      "existing": false
+    },
+    {
+      "id": "20a-N6-rollback-fail",
+      "given": "rollback fails",
+      "when": "rollback",
+      "then": "fail closed",
+      "existing": false
+    }
+  ]
+}

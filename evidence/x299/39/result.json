@@ -1,0 +1,91 @@
+{
+  "task_key": "20a",
+  "bead_id": "FreeToken-mtp-1ll.39",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "cases": [
+    {
+      "id": "20a-C1-suite",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-C2-ab",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-C3-profile",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-C4-throttle",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-C5-rollback",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-N1-stale-fp",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-N2-dirty-hash",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-N3-missing-raw",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-N4-incomplete-test",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-N5-throttle",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "20a-N6-rollback-fail",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "20a-campaign-summary",
+      "raw_path": "../49/result.json",
+      "result": "baseline 19.16 -> adopted 27.95 tok/s (+45.9%)"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Env-only dev failures (flashinfer) are expected to pass on target with [accel].",
+    "Test_bench_profile.py is dev-only (not deployed to target)."
+  ],
+  "rollback_result": "b-phase (40)",
+  "generated_utc": "2026-09-11"
+}

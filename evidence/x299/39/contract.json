@@ -1,0 +1,237 @@
+{
+  "schema_version": 2,
+  "task_key": "20a",
+  "bead_id": "FreeToken-mtp-1ll.39",
+  "title": "X299/3090 profiles and final regression campaign - contract and fixtures",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "configs": {
+    "campaign_baseline": "--moe-strategy offload --moe-cache-size 2600 --num-tokens 220032 --kv-cache-dtype nvfp4 --memory-ratio 0.90",
+    "adopted": "--moe-strategy hybrid --moe-hybrid-max-fetch 1 --moe-cache-auto --max-running-requests 1 --num-tokens 220032 --kv-cache-dtype nvfp4 --memory-ratio 0.90"
+  },
+  "scope_files": [
+    "docs/cli.md",
+    "docs/models.md",
+    "benchmarks/README.md",
+    "benchmarks/bench_kv_quant.py",
+    "python/freetoken/moe/bench_profile.py"
+  ],
+  "symbols": {
+    "existing": [
+      "bench_profile fingerprint schema_version 5 + matcher",
+      "benchmarks/bench_kv_quant.py schema v2",
+      "prod systemd drop-in"
+    ],
+    "proposed": []
+  },
+  "inputs": {
+    "baseline_16k_tok_s": [
+      19.16,
+      "this campaign",
+      "tok/s"
+    ],
+    "adopted_16k_tok_s": [
+      27.95,
+      "49 accepted prod",
+      "tok/s"
+    ],
+    "adopted_64k_tok_s": [
+      25.09,
+      "49 test server",
+      "tok/s"
+    ],
+    "gpu": [
+      "RTX3090 24GB",
+      "01a",
+      "-"
+    ],
+    "cpu": [
+      "i7-7800X 6c/12t",
+      "01a",
+      "-"
+    ],
+    "ram": [
+      "104GB DDR4-2133",
+      "01a",
+      "GiB"
+    ],
+    "pcie": [
+      "Gen3 x16 under load",
+      "01a",
+      "-"
+    ],
+    "dirty_files": [
+      92,
+      "target git status",
+      "files"
+    ]
+  },
+  "invariants": [
+    "Every reported number has a raw sample path; tests are not reported as run unless run.",
+    "Fingerprint (CPU/GPU/PCIe/runtime/expert geometry/concurrency) matches the run host; a stale fingerprint invalidates a profile.",
+    "The dirty worktree is recorded as git SHA + worktree_diff_sha256, not just HEAD.",
+    "Throttle check during sustained decode shows no sustained clock reduction.",
+    "The rollback command is executed and verified, not only written."
+  ],
+  "cases": [
+    {
+      "id": "20a-C1-suite",
+      "given": "all changed subsystems",
+      "action": "run the protecting tests on dev and target",
+      "expected": "green (env-only skips called out)",
+      "assertion": "no failures",
+      "required_hardware": null,
+      "status": "b-phase"
+    },
+    {
+      "id": "20a-C2-ab",
+      "given": "campaign baseline vs adopted config",
+      "action": "paired 16k/64k decode",
+      "expected": ">=5% adopted",
+      "assertion": "paired A/B",
+      "required_hardware": "RTX3090",
+      "status": "b-phase"
+    },
+    {
+      "id": "20a-C3-profile",
+      "given": "host + profile file",
+      "action": "fingerprint/match",
+      "expected": "exact match",
+      "assertion": "no unverified fields",
+      "required_hardware": null,
+      "status": "b-phase"
+    },
+    {
+      "id": "20a-C4-throttle",
+      "given": "sustained 192k decode",
+      "action": "sample clocks",
+      "expected": "no sustained throttle",
+      "assertion": "clocks within spec",
+      "required_hardware": "RTX3090",
+      "status": "b-phase"
+    },
+    {
+      "id": "20a-C5-rollback",
+      "given": "adopted prod",
+      "action": "restore baseline drop-in, restart, measure, re-adopt",
+      "expected": "baseline ~19.2 then adopted ~28",
+      "assertion": "rollback works",
+      "required_hardware": "RTX3090",
+      "status": "b-phase"
+    },
+    {
+      "id": "20a-N1-stale-fp",
+      "given": "stale fingerprint",
+      "action": "match",
+      "expected": "reject",
+      "assertion": "mismatch -> unverified",
+      "required_hardware": null,
+      "status": "design"
+    },
+    {
+      "id": "20a-N2-dirty-hash",
+      "given": "dirty tree without hash",
+      "action": "record",
+      "expected": "fail",
+      "assertion": "hash required",
+      "required_hardware": null,
+      "status": "design"
+    },
+    {
+      "id": "20a-N3-missing-raw",
+      "given": "claimed number without raw",
+      "action": "verify",
+      "expected": "fail",
+      "assertion": "raw path required",
+      "required_hardware": null,
+      "status": "design"
+    },
+    {
+      "id": "20a-N4-incomplete-test",
+      "given": "test not run",
+      "action": "report",
+      "expected": "not reported as pass",
+      "assertion": "no false green",
+      "required_hardware": null,
+      "status": "design"
+    },
+    {
+      "id": "20a-N5-throttle",
+      "given": "sustained throttle",
+      "action": "accept",
+      "expected": "fail capacity gate",
+      "assertion": "clocks checked",
+      "required_hardware": "RTX3090",
+      "status": "design"
+    },
+    {
+      "id": "20a-N6-rollback-fail",
+      "given": "rollback command fails",
+      "action": "rollback",
+      "expected": "fail closed",
+      "assertion": "prod restored verified",
+      "required_hardware": "RTX3090",
+      "status": "design"
+    }
+  ],
+  "commands": [
+    {
+      "id": "20a-CMD1",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/moe/test_bench_profile.py",
+        "tests/moe/test_benchbw_verdict.py",
+        "tests/moe/test_hybrid_fetch.py",
+        "tests/moe/test_offload.py",
+        "tests/engine/test_lookup_draft.py",
+        "tests/kvcache",
+        "tests/scheduler/test_scheduler_chunked_prefill.py",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "20a-CMD2",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "evidence/x299/05b/context_probe.py",
+        "--origin",
+        "http://127.0.0.1:1919",
+        "--contexts",
+        "16k,64k"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b"
+    }
+  ],
+  "performance_gate": {
+    "metric": "median decode tok/s",
+    "threshold": ">=5% adopted vs baseline",
+    "null_result": "no_change ADR"
+  },
+  "quality_gate": {
+    "note": "GSM8K parity (48) + byte tests exact + no stale fingerprint"
+  },
+  "rollback_recipe": "sudo cp /opt/FreeToken/.x299-backup/mtp-test.conf.before-49 ... && daemon-reload && restart (to offload auto/mr1); or before-45 for manual 2600.",
+  "limitations": [
+    "Env-only dev failures (flashinfer) are expected to pass on target with [accel].",
+    "Test_bench_profile.py is dev-only (not deployed to target)."
+  ],
+  "generated_utc": "2026-09-11"
+}

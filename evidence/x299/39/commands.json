@@ -1,0 +1,40 @@
+[
+  {
+    "id": "20a-CMD1",
+    "argv": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/moe/test_bench_profile.py",
+      "tests/moe/test_benchbw_verdict.py",
+      "tests/moe/test_hybrid_fetch.py",
+      "tests/moe/test_offload.py",
+      "tests/engine/test_lookup_draft.py",
+      "tests/kvcache",
+      "tests/scheduler/test_scheduler_chunked_prefill.py",
+      "-m",
+      "not slow"
+    ],
+    "cwd": "dev worktree",
+    "timeout_s": 900,
+    "expected_exit": 0,
+    "phase": "b"
+  },
+  {
+    "id": "20a-CMD2",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "evidence/x299/05b/context_probe.py",
+      "--origin",
+      "http://127.0.0.1:1919",
+      "--contexts",
+      "16k,64k"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 900,
+    "expected_exit": 0,
+    "phase": "b"
+  }
+]
