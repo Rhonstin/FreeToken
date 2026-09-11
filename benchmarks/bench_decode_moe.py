@@ -437,6 +437,8 @@ def run_one(args: argparse.Namespace, backend: str, depth: int) -> dict:
     decode_time = stamps[-1] - stamps[0]
     gaps = sorted((b - a) * 1e3 for a, b in zip(stamps, stamps[1:]))
     row = {
+        "schema_version": 2,
+        "type": "measured",
         "model": args.model,
         "backend": backend,
         "mtp_depth": depth,
@@ -447,7 +449,10 @@ def run_one(args: argparse.Namespace, backend: str, depth: int) -> dict:
         "decode_steps": steps,
         "decode_tok_s": steps / decode_time if decode_time > 0 else 0.0,
         "ms_per_token": decode_time / steps * 1e3 if steps > 0 else 0.0,
+        "numerator": "completion_tokens - 1",
+        "denominator": "last_token_event_ts - first_token_event_ts (s)",
         "event_ms_p50": gaps[len(gaps) // 2],
+        "event_ms_p95": gaps[min(len(gaps) - 1, int(len(gaps) * 0.95))],
         "event_ms_p99": gaps[min(len(gaps) - 1, int(len(gaps) * 0.99))],
         "ttft_ms": (stamps[0] - r["t0"]) * 1e3,
         "ttft_cold_ms": (

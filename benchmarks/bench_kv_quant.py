@@ -6,9 +6,9 @@ handful of times. Every request run is a row: cold = first request after load, w
 the measured repeats that follow a warmup. Capacity comes from the server's own
 "Allocating N tokens for KV cache" line, mixed with the reported VRAM. Quality covers
 needle retrieval at three depths, greedy-prefix agreement against bf16, a JSON /
-tool-call format check and a small coding check. NLL/PPL is BLOCKED: the server has no
-logprob API (`_completion_unsupported_reason` rejects `logprobs`), so it is reported
-as not-run rather than approximated.
+tool-call format check and a small coding check. NLL/PPL is not measured here: the
+chat API rejects `logprobs`; teacher-forced PPL is available separately via
+POST /v1/score.
 
 Thresholds to ratify in task 02: retrieval drop <= 2 percentage points, decode
 slowdown <= 10%, TTFT <= +15%; anything missing those is "experimental".
@@ -93,6 +93,7 @@ def stream(origin: str, model_id: str, prompt: str, args: argparse.Namespace,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }).encode(),
         headers={"Content-Type": "application/json"},
     )
@@ -131,13 +132,18 @@ def run_row(origin: str, model_id: str, prompt: str, args: argparse.Namespace,
     span = r["stamps"][-1] - r["stamps"][0]
     gaps = sorted((b - a) * 1e3 for a, b in zip(r["stamps"], r["stamps"][1:]))
     return {
+        "schema_version": 2, "type": "warm" if warm else "cold",
         "mode": mode, "context": ctx_label, "warm": warm,
         "prompt_tokens": r["usage"].get("prompt_tokens"),
         "completion_tokens": r["usage"].get("completion_tokens", len(r["stamps"])),
+        "events": len(r["stamps"]),
         "ttft_ms": (r["stamps"][0] - r["t0"]) * 1e3,
         "decode_tok_s": steps / span if span > 0 else 0.0,
         "ms_per_token": span / steps * 1e3 if steps > 0 else 0.0,
+        "numerator": "completion_tokens - 1",
+        "denominator": "last_token_event_ts - first_token_event_ts (s)",
         "event_ms_p50": gaps[len(gaps) // 2] if gaps else None,
+        "event_ms_p95": gaps[min(len(gaps) - 1, int(len(gaps) * 0.95))] if gaps else None,
         "event_ms_p99": gaps[min(len(gaps) - 1, int(len(gaps) * 0.99))] if gaps else None,
         "output_sha1": hashlib.sha1(r["text"].encode()).hexdigest()[:12],
         "text": r["text"],
@@ -231,6 +237,8 @@ def main(argv=None) -> int:
                    help="concurrent requests per context (>1 = concurrency phase)")
     p.add_argument("--json", dest="json_out", required=True)
     p.add_argument("--skip-modes", default="", help="comma list to skip (bf16,fp8)")
+    p.add_argument("--raw-jsonl", default=None,
+                   help="append every row here as immutable schema-versioned JSONL")
     args = p.parse_args(argv)
 
     skip = {m.strip() for m in args.skip_modes.split(",") if m.strip()}
@@ -241,15 +249,24 @@ def main(argv=None) -> int:
         if path.is_file():
             prompts[label] = json.loads(path.read_text().splitlines()[0])["prompt"]
 
-    report: dict = {"model": args.model, "decode": args.decode, "cache": args.cache,
-                    "mem_ratio": args.mem_ratio, "graph": not args.no_graph,
+    report: dict = {"schema_version": 2, "model": args.model, "decode": args.decode,
+                    "cache": args.cache, "mem_ratio": args.mem_ratio, "graph": not args.no_graph,
+                    "metric_numerator": "completion_tokens - 1",
+                    "metric_denominator": "last_token_event_ts - first_token_event_ts (s)",
                     "prompts": {k: len(v) for k, v in prompts.items()}, "rows": [],
                     "quality": [], "capacity": {}, "commands": {}}
     out_path = Path(args.json_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_rows = open(args.raw_jsonl, "a") if args.raw_jsonl else None
 
     def flush():
         out_path.write_text(json.dumps(report, indent=1))
+
+    def emit(row: dict) -> None:
+        report["rows"].append(row)
+        if raw_rows is not None:
+            raw_rows.write(json.dumps(row) + "\n")
+            raw_rows.flush()
 
     for mode in MODES:
         if mode in skip:
@@ -293,11 +310,12 @@ def main(argv=None) -> int:
                         for i, row in enumerate(rows):
                             row["repeat"] = i
                             row["parallel"] = args.parallel
-                            report["rows"].append(row)
+                            emit(row)
                         agg_steps = sum(r["completion_tokens"] - 1 for r in rows)
                         span = max(r["ttft_ms"] + r["ms_per_token"] * (r["completion_tokens"] - 1)
                                    for r in rows) - min(r["ttft_ms"] for r in rows)
-                        report["rows"].append({
+                        emit({
+                            "schema_version": 2, "type": "aggregate",
                             "mode": mode, "context": label, "warm": True,
                             "repeat": 0, "parallel": args.parallel, "aggregate": True,
                             "decode_tok_s": agg_steps / span * 1e3,
@@ -313,7 +331,7 @@ def main(argv=None) -> int:
                         row = run_row(origin, model_id, prompts[label], args, label, mode,
                                       warm=i > 0)
                         row["repeat"] = i
-                        report["rows"].append(row)
+                        emit(row)
                         flush()
                         print(f"[bench] {mode} {label} rep{i}: ttft {row['ttft_ms']:.0f} ms, "
                               f"{row['decode_tok_s']:.2f} tok/s", flush=True)
