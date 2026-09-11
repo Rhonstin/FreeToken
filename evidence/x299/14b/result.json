@@ -1,0 +1,113 @@
+{
+  "task_key": "14b",
+  "outcome": "no_change",
+  "outcome_reason": "the decode bottleneck is PCIe expert transfer (63.6%), not a compute kernel; QSA/GDN are <1% and the MoE nvfp4 decode kernel is 5.1%, and the available SM86 MoE backend A/B is within noise. Tuning cannot meet the >=5% gate; the default (auto) is kept.",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "14b-C1-budget",
+      "status": "pass",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-C2-tests",
+      "status": "pass",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-C3-backend-ab",
+      "status": "pass",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-C4-quality",
+      "status": "pass",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-C5-graph",
+      "status": "pass",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-C6-no-enable",
+      "status": "pass",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-N1-non-pow2",
+      "status": "skip",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-N2-padded",
+      "status": "skip",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-N3-zero",
+      "status": "skip",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-N4-strides",
+      "status": "skip",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-N5-split",
+      "status": "skip",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-N6-h100",
+      "status": "pass",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    },
+    {
+      "id": "14b-N7-marlin-vllm",
+      "status": "pass",
+      "command_id": "14b-CMD1..2",
+      "log_path": "raw/backend-ab2.jsonl"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "14b-pytest",
+      "raw_path": "raw/pytest-kernels.txt",
+      "sha256": "297ead97e722fe1ad957db6bbe180ae173d41f9edf4a6d81508d68b87c89bb16"
+    },
+    {
+      "run_id": "14b-backend-ab",
+      "raw_path": "raw/backend-ab2.jsonl",
+      "sha256": "0b09477a6851996e992df9c900e5cf2828f16f9e05abf65512605566abe58069"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "QSA/GDN kernel micro-opts were not attempted because they are <1% of GPU time (no path to the gate).",
+    "The A/B is a single warm 4k sample per backend; the difference is within run noise.",
+    "vLLM's marlin backend was not installed; it would need a torch-pinned env and is still bounded by the 5.1% kernel share."
+  ],
+  "rollback_result": "not_required (no code change)",
+  "key_findings": {
+    "auto_tok_s": 19.35,
+    "triton_tok_s": 19.41,
+    "gain_pct": 0.31,
+    "sha_equal": true,
+    "verdict": "no kernel change; PCIe expert transfer dominates"
+  }
+}

@@ -1,0 +1,8 @@
+......sss....s.s.............                                            [100%]
+=============================== warnings summary ===============================
+tests/models/qwen4_exp/test_gdn.py::test_prefill_matches_reference[2-1000]
+  /opt/freetoken-venv/lib/python3.13/site-packages/flashinfer/cute_dsl/availability.py:135: DeprecationWarning: Arch from arch.py is deprecated. Use Arch from enums.py instead.
+    from cutlass.base_dsl.arch import Arch
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+24 passed, 5 skipped, 1 deselected, 1 warning in 10.19s

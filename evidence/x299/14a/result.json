@@ -1,0 +1,93 @@
+{
+  "task_key": "14a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "cases": [
+    {
+      "id": "14a-C1-kernel-shares",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-C2-keys",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-C3-backends",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-C4-qsa-config",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-C5-tests",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-N1-non-pow2",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-N2-padded-batch",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-N3-zero-length",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-N4-strides",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-N5-split-boundary",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    },
+    {
+      "id": "14a-N6-no-h100",
+      "status": "pass",
+      "command_id": "14a-CMD1..2",
+      "log_path": "../04b/raw/nsys-stats.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "14a-nsys-shares",
+      "raw_path": "../04b/raw/nsys-stats.txt",
+      "sha256": "bbeef181e096a8a089fd953e68523ec963763e5f92afd47245b745f32c50527a"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "QSA and GDN are <1% of GPU kernel time; even a perfect kernel saves little of full-model TPOT.",
+    "The dominant cost is PCIe expert gather (63.6%), not a compute kernel.",
+    "b12x/native FP8 kernels are not assumed available on SM86."
+  ],
+  "rollback_result": "not_required (no code change)",
+  "key_findings": {
+    "dominant": "expert gather 63.6% (PCIe)",
+    "marlin": 5.1,
+    "qsa": 0.4,
+    "gdn": 0.7
+  }
+}

@@ -1,0 +1,262 @@
+{
+  "schema_version": 2,
+  "task_key": "14b",
+  "bead_id": "FreeToken-mtp-1ll.28",
+  "derived_from_contract": "../14a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/attention/qsa_sparse.py",
+    "python/freetoken/kernel/triton/qsa/attend.py",
+    "python/freetoken/models/qwen4_exp/gdn.py",
+    "python/freetoken/moe/fused_nvfp4.py",
+    "tests/moe/test_nvfp4_backends.py",
+    "tests/models/qwen4_exp/test_gdn.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/kernel/triton/qsa/attend.py": [
+        "_qsa_sparse_paged_gqa_splitk_kernel",
+        "_qsa_merge_splitk_kernel",
+        "decode block_n 16 / splits 64 / partial_warps 4",
+        "wide-tile prefill config"
+      ],
+      "python/freetoken/attention/qsa_sparse.py": [
+        "_resolve_block_topk",
+        "FREETOKEN_QSA_TORCH_TOPK"
+      ],
+      "python/freetoken/models/qwen4_exp/gdn.py": [
+        "GatedDeltaNet (vendored FLA triton kernels)",
+        "causal_conv1d"
+      ],
+      "python/freetoken/moe/fused_nvfp4.py": [
+        "fused_experts_decode_nvfp4_marlin",
+        "fused_experts_decode_nvfp4_serial",
+        "_decode_gemm_marlin",
+        "_decode_gemm",
+        "fixed block sizes (no autotune in graph)"
+      ],
+      "python/freetoken/layers/quantization/moe/nvfp4.py": [
+        "triton backend",
+        "marlin",
+        "b12x"
+      ]
+    },
+    "proposed": []
+  },
+  "inputs": {
+    "kernel_shares": {
+      "value": {
+        "fast_index_copy_multi (expert gather/PCIe)": 63.6,
+        "ampere_bf16_s16816gemm": 9.7,
+        "cutlass_wmma_bf16": 6.9,
+        "_decode_nvfp4_marlin_kernel": 5.1,
+        "gemv2T_kernel": 2.7,
+        "cutlass_wmma_bf16_x1": 2.0,
+        "gemvx": 1.6,
+        "_prefill_nvfp4_moe_kernel": 1.2,
+        "fused_sigmoid_gating_delta_rule_update_kernel (GDN)": 0.7,
+        "_router_triton_kernel": 0.4,
+        "_qsa_sparse_paged_gqa_splitk_kernel": 0.2,
+        "_qsa_block_topk_kernel": 0.2
+      },
+      "source": "../04b/raw/nsys-stats.txt",
+      "unit": "%"
+    },
+    "backend_ab": {
+      "value": {
+        "auto_tok_s": 19.35,
+        "triton_tok_s": 19.41,
+        "gain_pct": 0.31,
+        "sha_equal": true
+      },
+      "source": "raw/backend-ab2.jsonl",
+      "unit": "tok/s"
+    },
+    "pytest": {
+      "value": "24 passed, 5 skipped",
+      "source": "raw/pytest-kernels.txt",
+      "unit": "tests"
+    }
+  },
+  "cases": [
+    {
+      "id": "14b-C1-budget",
+      "given": "04b nsys",
+      "action": "kernel budget",
+      "expected": "compute kernels are small vs the gate",
+      "status": "pass",
+      "assertion": "gather 63.6%, marlin 5.1%, QSA 0.2%, GDN 0.7% -> <5% headroom"
+    },
+    {
+      "id": "14b-C2-tests",
+      "given": "target venv",
+      "action": "reference tests",
+      "expected": "green",
+      "status": "pass",
+      "assertion": "24 passed, 5 skipped (test_gdn, test_nvfp4_backends, test_qsa_fp8/nvfp4)"
+    },
+    {
+      "id": "14b-C3-backend-ab",
+      "given": "SM86 nvfp4 MoE",
+      "action": "auto vs triton full-model 4k",
+      "expected": "no significant difference",
+      "status": "pass",
+      "assertion": "auto 19.35 vs triton 19.41 tok/s (+0.31%)"
+    },
+    {
+      "id": "14b-C4-quality",
+      "given": "greedy",
+      "action": "compare output sha1",
+      "expected": "identical",
+      "status": "pass",
+      "assertion": "sha adcf8b78a6d8"
+    },
+    {
+      "id": "14b-C5-graph",
+      "given": "CUDA graph on",
+      "action": "replay",
+      "expected": "stable",
+      "status": "pass",
+      "assertion": "both probes ran with --cuda-graph-max-bs 1"
+    },
+    {
+      "id": "14b-C6-no-enable",
+      "given": "no gain",
+      "action": "keep defaults",
+      "expected": "no code change",
+      "status": "pass",
+      "assertion": "auto remains the default"
+    },
+    {
+      "id": "14b-N1-non-pow2",
+      "given": "dims",
+      "action": "fixture",
+      "expected": "masked",
+      "status": "skip",
+      "assertion": "covered by kernel tests"
+    },
+    {
+      "id": "14b-N2-padded",
+      "given": "pad",
+      "action": "fixture",
+      "expected": "ignored",
+      "status": "skip",
+      "assertion": "kernel tests"
+    },
+    {
+      "id": "14b-N3-zero",
+      "given": "empty",
+      "action": "fixture",
+      "expected": "no launch",
+      "status": "skip",
+      "assertion": "kernel tests"
+    },
+    {
+      "id": "14b-N4-strides",
+      "given": "strides",
+      "action": "fixture",
+      "expected": "aware",
+      "status": "skip",
+      "assertion": "kernel tests"
+    },
+    {
+      "id": "14b-N5-split",
+      "given": "split edges",
+      "action": "fixture",
+      "expected": "exact",
+      "status": "skip",
+      "assertion": "qsa kernels tests"
+    },
+    {
+      "id": "14b-N6-h100",
+      "given": "autotune",
+      "action": "policy",
+      "expected": "no H100 borrow",
+      "status": "pass",
+      "assertion": "SM86 only"
+    },
+    {
+      "id": "14b-N7-marlin-vllm",
+      "given": "explicit marlin",
+      "action": "capability",
+      "expected": "rejected without vLLM",
+      "status": "pass",
+      "assertion": "KernelSelectionError: kernel 'marlin' cannot run here: vLLM is not installed; default triton marlin-style kernel is used instead"
+    }
+  ],
+  "commands": [
+    {
+      "id": "14b-CMD1",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/models/qwen4_exp/test_gdn.py",
+        "tests/moe/test_nvfp4_backends.py",
+        "tests/kernels/test_qsa_fp8.py",
+        "tests/kernels/test_qsa_nvfp4.py",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b",
+      "artifact": "raw/pytest-kernels.txt"
+    },
+    {
+      "id": "14b-CMD2",
+      "argv": [
+        "/opt/freetoken-venv/bin/ft",
+        "serve",
+        "--moe-strategy",
+        "offload",
+        "--quant-backend",
+        "<none|moe.nvfp4=triton>",
+        "... fixed ..."
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1200,
+      "expected_exit": 0,
+      "phase": "b"
+    }
+  ],
+  "performance_gate": {
+    "applies": true,
+    "result": "FAIL / no-change",
+    "detail": "the A/B backend difference is +0.31% (noise); the whole MoE compute kernel is 5.1% of GPU time and QSA/GDN <1%, so no kernel change can reach the >=5% full-model gate"
+  },
+  "quality_gate": {
+    "applies": true,
+    "result": "PASS",
+    "detail": "QSA/GDN/MoE reference tests green; greedy output sha1 identical across backends"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified"
+  },
+  "decision": {
+    "outcome": "no_change",
+    "reason": "the decode bottleneck is PCIe expert transfer (63.6%), not a compute kernel; QSA/GDN are <1% and the MoE nvfp4 decode kernel is 5.1%, and the available SM86 MoE backend A/B is within noise. Tuning cannot meet the >=5% gate; the default (auto) is kept.",
+    "marlin_note": "explicit moe.nvfp4=marlin needs vLLM (not installed); the default already runs a Triton marlin-style NVFP4 decode kernel",
+    "revisit_if": "a profile shows a compute kernel >10% of GPU time, or a backend with a genuine full-model gain appears"
+  },
+  "limitations": [
+    "QSA/GDN kernel micro-opts were not attempted because they are <1% of GPU time (no path to the gate).",
+    "The A/B is a single warm 4k sample per backend; the difference is within run noise.",
+    "vLLM's marlin backend was not installed; it would need a torch-pinned env and is still bounded by the 5.1% kernel share."
+  ],
+  "generated_utc": "2026-09-11T15:38:00Z"
+}
