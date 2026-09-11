@@ -34,6 +34,56 @@ _QUANT_TO_BENCH_FORMAT = {
 }
 
 
+# A dtype verdict / fetch fraction transfers to a model whose experts are within this factor of
+# the benched ones (either way). Beyond it the entry is skipped and the caller falls back to
+# offload; `ft bench bw --model` for the model's geometry is the remedy. The CPU side has a
+# per-expert fixed cost, so a verdict measured on much larger experts overstates the small-expert
+# case (upstream PR #278).
+EXPERT_BYTES_TOLERANCE = 2.0
+_GEOMETRY_KEYS = ("hidden", "inter", "experts", "top_k")
+_warned: set = set()
+
+
+def _geometry_matches(entry_model, geometry) -> bool:
+    if not isinstance(entry_model, dict) or not geometry:
+        return False
+    return all(entry_model.get(k) == geometry.get(k) for k in _GEOMETRY_KEYS)
+
+
+def _model_entry(prof: dict, fmt: str, geometry) -> dict | None:
+    """``kernels[fmt]`` of the per-model workload benched at exactly ``geometry``, else None."""
+    for wl in (prof.get("workloads") or {}).values():
+        if isinstance(wl, dict) and _geometry_matches(wl.get("model"), geometry):
+            entry = (wl.get("kernels") or {}).get(fmt)
+            if isinstance(entry, dict):
+                return entry
+    return None
+
+
+def _comparable(entry, fmt: str, expert_bytes) -> bool:
+    """Whether ``entry`` was benched on experts comparable to ``expert_bytes``.
+
+    Unknown on either side -> assumed comparable (older profiles carry no ``expert_bytes``;
+    callers that pass none keep the format-only join). A too-different entry logs once.
+    """
+    benched = entry.get("expert_bytes") if isinstance(entry, dict) else None
+    if not benched or not expert_bytes:
+        return True
+    ratio = max(benched, expert_bytes) / min(benched, expert_bytes)
+    if ratio <= EXPERT_BYTES_TOLERANCE:
+        return True
+    key = (fmt, benched, expert_bytes)
+    if key not in _warned:
+        _warned.add(key)
+        logger.warning(
+            f"benchbw profile: the {fmt!r} entry was benched on {benched / 2**20:.2f} MB experts, "
+            f"this model's are {expert_bytes / 2**20:.2f} MB ({ratio:.1f}x apart); not applying "
+            f"its verdict. Run `ft bench bw --model <preset>` for this model's geometry "
+            f"(see `ft bench bw --help`)"
+        )
+    return False
+
+
 def _cache_dir() -> str:
     cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
     return os.path.join(cache, "freetoken")
@@ -336,6 +386,9 @@ def load_backend_recommendation(
     path: str | None = None,
     gpu_uuid: str | None = None,
     current_fingerprint: dict | None = None,
+    *,
+    expert_bytes: int | None = None,
+    geometry: dict | None = None,
 ) -> str | None:
     """Bench-recommended offload-family backend for ``quant_format`` on this GPU, or ``None``.
 
@@ -344,20 +397,30 @@ def load_backend_recommendation(
     near-threshold format) resolves conservatively to ``"offload"``. ``None`` means "no usable
     profile" (see ``_usable_profile``) or no entry for this format. The caller keeps its own
     default (offload) on ``None``.
+
+    ``geometry`` (``{hidden, inter, experts, top_k}``) selects a per-model bench of exactly the
+    served model first; ``expert_bytes`` (the model's per-expert bank bytes) then gates every
+    other entry through :func:`_comparable`.
     """
     fmt = _QUANT_TO_BENCH_FORMAT.get(quant_format, quant_format)
     prof = _usable_profile(gpu_name, path, gpu_uuid, current_fingerprint)
     if prof is None:
         return None
 
-    # Preferred: the per-dtype tuning verdicts (`ft bench bw --dtype`), a direct format->backend
-    # map -- the axis the backend pick is meant to key on.
+    # Best: this exact geometry was benched (`ft bench bw --model`).
+    entry = _model_entry(prof, fmt, geometry)
+    if entry is not None and entry.get("recommended") in ("hybrid", "offload"):
+        return entry["recommended"]
+
+    # Next: the per-dtype tuning verdicts (`ft bench bw --dtype`), the axis the backend pick
+    # keys on -- applied only when benched on comparable experts.
     dtypes = prof.get("dtypes")
     if isinstance(dtypes, dict) and dtypes.get(fmt) in ("hybrid", "offload"):
-        return dtypes[fmt]
+        if _comparable((prof.get("dtype_kernels") or {}).get(fmt), fmt, expert_bytes):
+            return dtypes[fmt]
 
-    # Fallback: a per-model profile (`ft bench bw --model`). Aggregate the workloads sharing this
-    # format -- unanimous hybrid -> hybrid; any offload (a near-threshold split) -> offload.
+    # Fallback: other per-model workloads sharing this format, comparable experts only --
+    # unanimous hybrid -> hybrid; any offload (a near-threshold split) -> offload.
     workloads = prof.get("workloads")
     if not isinstance(workloads, dict):
         return None
@@ -367,6 +430,7 @@ def load_backend_recommendation(
         if isinstance(wl, dict)
         for entry in [(wl.get("kernels") or {}).get(fmt)]
         if isinstance(entry, dict) and entry.get("recommended")
+        and _comparable(entry, fmt, expert_bytes)
     ]
     if not picks:
         return None
@@ -379,6 +443,9 @@ def load_hybrid_fetch_fraction(
     path: str | None = None,
     gpu_uuid: str | None = None,
     current_fingerprint: dict | None = None,
+    *,
+    expert_bytes: int | None = None,
+    geometry: dict | None = None,
 ) -> float | None:
     """Benched hybrid fetch fraction for ``quant_format``, or ``None``.
 
@@ -388,20 +455,21 @@ def load_hybrid_fetch_fraction(
     running concurrently -- the real contention regime): fetched/misses = pcie_ov /
     (pcie_ov + cpu_ov). Older profiles without it fall back to the standalone bandwidths
     under a full-DRAM-contention assumption (cpu keeps cpu - pcie under DMA), which
-    reduces to pcie/cpu. Per-dtype entry first, then any per-model entry with this format.
-    ``None`` = no usable profile; clamped to [0, 1].
+    reduces to pcie/cpu. A per-model entry of the served ``geometry`` first, then the
+    per-dtype entry, then any per-model entry with this format -- each only when benched on
+    experts comparable to ``expert_bytes``. ``None`` = no usable profile; clamped to [0, 1].
     """
     fmt = _QUANT_TO_BENCH_FORMAT.get(quant_format, quant_format)
     prof = _usable_profile(gpu_name, path, gpu_uuid, current_fingerprint)
     if prof is None:
         return None
-    entries = [(prof.get("dtype_kernels") or {}).get(fmt)] + [
+    entries = [_model_entry(prof, fmt, geometry), (prof.get("dtype_kernels") or {}).get(fmt)] + [
         (wl.get("kernels") or {}).get(fmt)
         for wl in (prof.get("workloads") or {}).values()
         if isinstance(wl, dict)
     ]
     for entry in entries:
-        if not isinstance(entry, dict):
+        if not isinstance(entry, dict) or not _comparable(entry, fmt, expert_bytes):
             continue
         cpu_ov, pcie_ov = entry.get("cpu_moe_overlap_gbs"), entry.get("pcie_gather_overlap_gbs")
         if cpu_ov and pcie_ov:

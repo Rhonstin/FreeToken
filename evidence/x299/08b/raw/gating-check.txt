@@ -1,0 +1,4 @@
+with per-model entry (expect hybrid): ('hybrid', 0.3085)
+[1m[2026-09-11|14:41:10][0m [33mWARNING [0m benchbw profile: the 'nvfp4' entry was benched on 7.61 MB experts, this model's are 2.64 MB (2.9x apart); not applying its verdict. Run `ft bench bw --model <preset>` for this model's geometry (see `ft bench bw --help`)
+dtype-only, 2.9x-away experts (expect None,None): (None, None)
+comparable experts (expect hybrid): hybrid
