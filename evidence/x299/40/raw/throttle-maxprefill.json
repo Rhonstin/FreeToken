@@ -1,0 +1,25 @@
+{
+  "prompt_chars": 830000,
+  "runs": [
+    {
+      "prompt_tokens": 217853,
+      "completion_tokens": 95,
+      "ttft_s": 227.826,
+      "total_s": 232.114,
+      "decode_tok_s": 21.92,
+      "chunks": 95,
+      "tag": "prefill-peak",
+      "health_after": "ok"
+    },
+    {
+      "prompt_tokens": 217853,
+      "completion_tokens": 159,
+      "ttft_s": 6.184,
+      "total_s": 11.882,
+      "decode_tok_s": 27.73,
+      "chunks": 159,
+      "tag": "sustained-decode",
+      "health_after": "ok"
+    }
+  ]
+}

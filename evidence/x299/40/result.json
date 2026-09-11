@@ -1,0 +1,94 @@
+{
+  "task_key": "20b",
+  "bead_id": "FreeToken-mtp-1ll.40",
+  "title": "X299/3090 profiles and final regression campaign - execution and acceptance",
+  "outcome": "implemented",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "suites": {
+    "dev": "332 passed, 14 skipped, 1 failed (test_adjust_config_... env-only: flashinfer absent)",
+    "target": "339 passed, 1 skipped, 2 failed (tests/moe/test_hybrid_fetch.py schema-legacy cases; same tests pass on dev with the updated file)"
+  },
+  "final_ab": {
+    "baseline_manual2600_offload_16k_tok_s": 18.15,
+    "adopted_hybrid_auto_mr1_16k_tok_s": 27.93,
+    "gain_pct": 53.9,
+    "baseline_sha1": "f8cb8d6f5b7b",
+    "adopted_sha1": "367552b84f44"
+  },
+  "throttle": {
+    "samples": 120,
+    "sm_clock_mhz": [
+      1695,
+      2025
+    ],
+    "temp_c": [
+      37,
+      64
+    ],
+    "peak_power_w": 348,
+    "verdict": "no thermal throttle (peak 64C << 83-93C throttle; SM clock reaches max 2025 MHz)"
+  },
+  "max_prefill_adopted": {
+    "tokens": 217853,
+    "ttft_s": 227.83,
+    "decode_tok_s": 21.92,
+    "sustained_tok_s": 27.73,
+    "oom": false
+  },
+  "rollback": {
+    "command": "cp .x299-backup/mtp-test.conf.before-45 -> drop-in; daemon-reload; restart",
+    "verified": true,
+    "baseline_after_rollback_tok_s": 18.15,
+    "readopt_verified": true,
+    "readopted_tok_s": 27.93
+  },
+  "cases": [
+    {
+      "id": "20a-C1-suite",
+      "status": "pass",
+      "detail": "dev 332 passed (1 env-only fail); target 339 passed (2 test-file-skew fails)"
+    },
+    {
+      "id": "20a-C2-ab",
+      "status": "pass",
+      "detail": "18.15 -> 27.93 tok/s (+53.9%)"
+    },
+    {
+      "id": "20a-C3-profile",
+      "status": "pass",
+      "detail": "fingerprint + diff sha pinned"
+    },
+    {
+      "id": "20a-C4-throttle",
+      "status": "pass",
+      "detail": "temp peak 64C, no throttle"
+    },
+    {
+      "id": "20a-C5-rollback",
+      "status": "pass",
+      "detail": "baseline restored 18.15, adopted re-verified 27.93"
+    },
+    {
+      "id": "20a-N4-incomplete-test",
+      "status": "pass",
+      "detail": "env-only and skew failures reported, not hidden"
+    }
+  ],
+  "rollback_recipe": "Adopted config is the systemd drop-in; .x299-backup/mtp-test.conf.before-40 (adopted) and before-45 (baseline) both exist. Verified end-to-end.",
+  "limitations": [
+    "Target has a stale tests/moe/test_hybrid_fetch.py (legacy schema) vs the new schema-5 bench_profile code; dev carries the updated test. Not a product regression.",
+    "test_bench_profile.py is dev-only.",
+    "baseline variance: manual-2600 offload measured 18.15-19.17 across runs."
+  ],
+  "evidence": [
+    "raw/pytest-dev.txt",
+    "raw/pytest-target.txt",
+    "raw/clocks.txt",
+    "raw/throttle.json",
+    "raw/rollback.jsonl"
+  ],
+  "generated_utc": "2026-09-11"
+}

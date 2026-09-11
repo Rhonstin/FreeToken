@@ -1,0 +1,130 @@
+...................ss........sF.s.......s............................... [ 20%]
+........................................................................ [ 41%]
+...........s............................................................ [ 62%]
+.........ssss........................................................... [ 83%]
+...................................................ss....                [100%]
+=================================== FAILURES ===================================
+___________ test_adjust_config_converts_moe_cache_rate_to_cache_size ___________
+
+    def test_adjust_config_converts_moe_cache_rate_to_cache_size():
+        from types import SimpleNamespace
+    
+        from freetoken.distributed import DistributedInfo
+        from freetoken.engine.config import EngineConfig
+        from freetoken.engine.engine import _adjust_config
+    
+        config = EngineConfig(
+            model_path="/tmp/freetoken-test-model",
+            tp_info=DistributedInfo(rank=0, size=1),
+            dtype=torch.float16,
+            attention_backend="fi",
+            moe_cache_rate=0.3,
+        )
+        object.__setattr__(
+            config,
+            "model_config",
+            SimpleNamespace(
+                has_swa_attention=False,
+                has_linear_attention=False,
+                is_moe=True,
+                num_layers=10,
+                num_moe_layers=10,
+                num_experts=8,
+                expert_quant="none",
+                moe_strategy="auto",
+            ),
+        )
+    
+>       _adjust_config(config)
+
+tests/moe/test_offload.py:444: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/freetoken/engine/engine.py:1668: in _adjust_config
+    _validate_attention_backend_choice(config, override, required_attn_types)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+config = EngineConfig(model_path='/tmp/freetoken-test-model', tp_info=DistributedInfo(rank=0, size=1), dtype=torch.float16, max...0, use_dummy_weight=False, use_pynccl=True, max_seq_len_override=None, num_page_override=None, num_token_override=None)
+override = <function _adjust_config.<locals>.override at 0x79337ff685e0>
+required = frozenset({<AttnType.FULL: 'full'>})
+
+    def _validate_attention_backend_choice(config, override, required: frozenset[AttnType]) -> None:
+        """Config-time type x backend capability check for the resolved (or explicit)
+        backend string: every comma part must serve every required type and have its
+        packages/arch available. Replaces the per-model gates; in particular this is
+        where a DSV4 or MLA checkpoint rejects a generic backend before weights load,
+        and where a generic model rejects dsa/dsv4_sparse."""
+        from freetoken.attention import validate_attn_backend
+    
+        # Name membership first (ArgumentTypeError listing the supported names): the CLI already
+        # ran this, but the programmatic EngineConfig path reaches here unvalidated and would
+        # otherwise die on a bare KeyError from the info lookup below.
+        validate_attn_backend(config.attention_backend, allow_auto=False)
+    
+        model_config = config.model_config
+        backend_parts = [p.strip() for p in config.attention_backend.split(",")]
+        for part in backend_parts:
+            info = attention_backend_info(part)
+            missing = required - info.supported_types
+            if missing:
+                valid = [
+                    name
+                    for name in (
+                        "fa", "fi", "trtllm", "triton", "dsa", "dsv4_sparse", "m3_sparse",
+                        "qsa_sparse",
+                    )
+                    if required <= attention_backend_info(name).supported_types
+                ]
+                missing_names = "/".join(sorted(t.value for t in missing))
+                raise ValueError(
+                    f"{getattr(model_config, 'model_type', 'model')} uses {missing_names} "
+                    f"attention, which backend {part!r} does not support; valid backends: "
+                    f"{', '.join(valid)} (or auto), got {config.attention_backend!r}."
+                )
+            if AttnType.SWA in required and not info.consumes_attn_spec:
+                # SWA models drive window/sinks/sm_scale through the per-call AttentionSpec;
+                # a backend that drops it would attend with the wrong window silently.
+                raise ValueError(
+                    f"backend {part!r} does not consume the per-call AttentionSpec that "
+                    f"SWA models require, got {config.attention_backend!r}."
+                )
+    
+        # A quantized KV pool is only readable by a backend that applies its per-(token,
+        # head) scales; one that hands the cache to an external kernel would silently
+        # attend to raw e4m3 codes. Rejected here, before any weight is resident.
+        kv_quant = getattr(config, "kv_quant", "none")
+        if not _backend_supports_kv_quant(config.attention_backend, kv_quant):
+            fp8_backends = [
+                name
+                for name in ("trtllm", "fi", "fa", "triton")
+                if required <= attention_backend_info(name).supported_types
+                and _backend_supports_kv_quant(name, kv_quant)
+            ]
+            raise ValueError(
+                f"--kv-cache-dtype {kv_quant} needs an attention backend that decodes the KV "
+                f"scales; {config.attention_backend!r} does not. Valid for this model: "
+                f"{', '.join(fp8_backends) or 'none'} (or use --kv-cache-dtype bf16)."
+            )
+    
+        # An explicitly-selected backend may require a package that isn't installed. Auto
+        # never resolves to one of these when its package is missing, so this only fires for
+        # explicit --attention-backend choices.
+        for part in backend_parts:
+            info = attention_backend_info(part)
+            if info.requires_flashinfer and not _flashinfer_available():
+>               raise RuntimeError(
+                    f"Attention backend {config.attention_backend!r} requires flashinfer, which is "
+                    "not installed. Install it with `pip install 'freetoken[fi]'` (or "
+                    "'freetoken[accel]'), or use --attention-backend triton."
+                )
+E               RuntimeError: Attention backend 'fi' requires flashinfer, which is not installed. Install it with `pip install 'freetoken[fi]'` (or 'freetoken[accel]'), or use --attention-backend triton.
+
+python/freetoken/engine/engine.py:258: RuntimeError
+=============================== warnings summary ===============================
+tests/kvcache/radix/test_hybrid_radix.py::test_page_size_must_divide_chunk_size[1-True]
+  /opt/FreeToken-mtp/python/freetoken/kernel/fla/utils.py:224: UserWarning: Triton is not supported on current platform, roll back to CPU.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/moe/test_offload.py::test_adjust_config_converts_moe_cache_rate_to_cache_size
+1 failed, 332 passed, 14 skipped, 1 warning in 3.86s
