@@ -1,0 +1,7 @@
+copy rc=1
+A-nvfp4 dtype=nvfp4 --moe-cache-size 2600 rc=0 vram=20294 [K + V = 0.24 GiB] [] moe miss: 0.34
+A-fp8 dtype=fp8 --moe-cache-size 2600 rc=0 vram=20454 [K + V = 0.40 GiB] [] moe miss: 0.35
+A-bf16 dtype=bf16 --moe-cache-size 2600 rc=0 vram=20854 [K + V = 0.77 GiB] [] moe miss: 0.34
+B-nvfp4 dtype=nvfp4 --moe-cache-auto rc=0 vram=23934 [K + V = 0.24 GiB] [resolved moe_cache_size=3979 num_pages=513 (prefill_overlap=True)] moe miss: 0.24
+B-fp8 dtype=fp8 --moe-cache-auto rc=0 vram=23934 [K + V = 0.40 GiB] [resolved moe_cache_size=3915 num_pages=512 (prefill_overlap=True)] moe miss: 0.23
+B-bf16 dtype=bf16 --moe-cache-auto rc=0 vram=23934 [K + V = 0.77 GiB] [resolved moe_cache_size=3772 num_pages=512 (prefill_overlap=True)] moe miss: 0.24

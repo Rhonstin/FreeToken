@@ -1,0 +1,33 @@
+{
+  "task_key": "18b", "bead_id": "FreeToken-mtp-1ll.36",
+  "title": "Joint tuning of KV quantization and expert residency - execution and acceptance",
+  "outcome": "no_change",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "protocol": "offload, num-tokens 32768, memory-ratio 0.90, 16k greedy decode + /v1/score PPL. A = same slots (cache 2600, isolates codec). B = same VRAM (--moe-cache-auto, captures residency).",
+  "A_same_slots": {"cache_slots": 2600,
+    "nvfp4": {"tok_s": 18.52, "kv_gib": 0.24, "miss": 0.34, "ppl": 4.241486},
+    "fp8":   {"tok_s": 17.65, "kv_gib": 0.40, "miss": 0.35, "ppl": 4.226028},
+    "bf16":  {"tok_s": 18.47, "kv_gib": 0.77, "miss": 0.34, "ppl": 4.223690}},
+  "B_same_vram": {
+    "nvfp4": {"cache_slots": 3979, "tok_s": 23.68, "miss": 0.24},
+    "fp8":   {"cache_slots": 3915, "tok_s": 24.45, "miss": 0.23},
+    "bf16":  {"cache_slots": 3772, "tok_s": 23.82, "miss": 0.24}},
+  "analysis": [
+    "Same slots isolates the codec: nvfp4 18.52 vs bf16 18.47 (equal) vs fp8 17.65 (-4.6%) -> the codec alone does not speed decode.",
+    "Same VRAM: fp8 24.45 vs nvfp4 23.68 vs bf16 23.82, all within ~3% (noise); fp8's B edge is NOT a residency gain (it resolved FEWER slots, 3915 < 3979) and A shows fp8 slower, so the B ordering is noise.",
+    "PPL vs bf16: fp8 +0.055%, nvfp4 +0.42% -> small; nvfp4 keeps 3.2x capacity.",
+    "Negative case 'FP8 faster only due extra expert slots' does not apply (fewer slots and inconsistent A/B), but the B difference is not robust enough to adopt."
+  ],
+  "decision": {"change": false, "reason": "no codec/residency combination beats the current nvfp4 + auto choice beyond noise; keep --kv-cache-dtype nvfp4.", "fp8": "not adopted (no robust gain, halves capacity vs nvfp4)"},
+  "cases": [
+    {"id": "18a-C1-same-slots", "status": "pass", "detail": "decoded the codec effect in isolation"},
+    {"id": "18a-C2-same-vram", "status": "pass", "detail": "resolved slots per codec recorded"},
+    {"id": "18a-N1-fp8-attr", "status": "pass", "detail": "fp8 B edge is not residency (fewer slots, A contradicts)"},
+    {"id": "18a-C0-byte-tests", "status": "pass", "detail": "KV bytes 0.24/0.40/0.77 GiB for nvfp4/fp8/bf16 at 32768 tokens"}
+  ],
+  "rollback_recipe": "n/a (no production change; prod keeps nvfp4). Revert any experiment via drop-in.",
+  "limitations": ["16k workload, single request; PPL from the 41 corpus.", "A/B deltas within run noise (~3%); no repeated trials."],
+  "evidence": ["raw/summary.txt", "raw/probe.jsonl", "raw/ppl-A-nvfp4.json", "raw/ppl-A-fp8.json", "raw/ppl-A-bf16.json"],
+  "generated_utc": "2026-09-11"
+}
