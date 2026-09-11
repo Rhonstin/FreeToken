@@ -18,6 +18,11 @@ class PendingReq:
     sampling_params: SamplingParams
     chunked_req: ChunkedReq | None = None
     mm_embeds: torch.Tensor | None = None
+    # Teacher-forced scoring (internal /v1/score): score instead of generate; ``score_chunk``
+    # caps the rows per prefill forward (0 = the normal prefill budget). Kept on the pending
+    # record so every chunk continuation inherits it.
+    score_only: bool = False
+    score_chunk: int = 0
 
     @property
     def input_len(self) -> int:

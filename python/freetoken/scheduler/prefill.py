@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, List, Tuple
 
 import torch
-from freetoken.core import Batch, Req
+from freetoken.core import SCORE_CHUNK_MAX, Batch, Req
 from freetoken.utils import align_down, div_ceil, init_logger
 
 from .utils import PendingReq
@@ -124,6 +124,12 @@ class PrefillAdder:
     ) -> Req | None:
         remain_len = pending_req.input_len - cached_len
         chunk_size = min(self.token_budget, remain_len)
+        if pending_req.score_only and pending_req.score_chunk > 0:
+            # Teacher-forced scoring caps the rows shipped per forward (bounded logits memory);
+            # the cap composes with the budget and the swa/alignment floors below, all of
+            # which can only shrink the chunk further. SCORE_CHUNK_MAX is the defensive
+            # ceiling for callers that bypass the route's own validation.
+            chunk_size = min(chunk_size, min(pending_req.score_chunk, SCORE_CHUNK_MAX))
         if self.cache_manager.swa_paged:
             # Cap this chunk by the swa the pool can back this pass. swa is allocated per token in
             # allocate_paged, and token_budget (max_extend_tokens, default 8192) won't chunk a
@@ -193,6 +199,13 @@ class PrefillAdder:
         req.mamba_next_track_idx = next_track_idx
         req.mamba_restore_src = restore_src
         req.swa_evicted_seqlen = swa_evicted_seqlen  # carry the extend-free watermark across chunks
+        req.score_only = pending_req.score_only
+        req.score_chunk = pending_req.score_chunk
+        if pending_req.score_only:
+            # The chunk's own input_ids stop at the chunk end, but scoring row i needs
+            # token i+1 -- for an intermediate chunk that is the first token of the NEXT
+            # chunk. Keep a reference to the complete prompt on every chunk.
+            req.score_full_ids = pending_req.input_ids
         return req
 
     def try_add_one(self, pending_req: PendingReq) -> Req | None:
@@ -245,7 +258,14 @@ class PrefillManager:
 
     def add_one_req(self, req: UserMsg) -> None:
         self.pending_list.append(
-            PendingReq(req.uid, req.input_ids, req.sampling_params, mm_embeds=req.mm_embeds)
+            PendingReq(
+                req.uid,
+                req.input_ids,
+                req.sampling_params,
+                mm_embeds=req.mm_embeds,
+                score_only=req.score_only,
+                score_chunk=req.score_chunk,
+            )
         )
 
     def schedule_next_batch(self, prefill_budget: int) -> Batch | None:
@@ -267,7 +287,15 @@ class PrefillManager:
         # once at admission, so continuation chunks (already-chunked reqs) contribute 0.
         log_new_tokens = 0
         log_cached_tokens = 0
+        # Scoring runs isolated: never mixed with generation rows in one forward (the engine's
+        # all-rows logits would collide with the one-token-per-request sampling contract), and
+        # one scoring request per batch so the retained logits stay bounded by ``score_chunk``.
+        batch_score_only: bool | None = None
         for pending_req in self.pending_list:
+            if batch_score_only is None:
+                batch_score_only = pending_req.score_only
+            elif pending_req.score_only != batch_score_only:
+                break
             is_continuation = pending_req.chunked_req is not None
             if req := adder.try_add_one(pending_req):
                 pending_req.chunked_req = None
@@ -285,12 +313,15 @@ class PrefillManager:
                 log_new_tokens += req.extend_len
                 if not is_continuation:
                     log_cached_tokens += req.cache_handle.cached_len
+                if batch_score_only:
+                    break
             else:
                 break  # We cannot add more requests
         if len(reqs) == 0:
             return None
         self.pending_list = chunked_list + self.pending_list[len(reqs) :]
         batch = Batch(reqs=reqs, phase="prefill")
+        batch.score_only = bool(batch_score_only)
         batch.log_new_tokens = log_new_tokens
         batch.log_cached_tokens = log_cached_tokens
         batch.prompt_admissions = prompt_admissions

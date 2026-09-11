@@ -326,12 +326,12 @@ class GGUFTiedLMHead:
         state_dict.pop(f"{prefix}.weight", None)
         state_dict.pop(f"{prefix}.bias", None)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, *, all_rows: bool = False) -> torch.Tensor:
         from freetoken.core import get_global_ctx
         from freetoken.layers.gguf import fused_mul_mat_gguf
 
         batch = get_global_ctx().batch
-        if batch.is_prefill:
+        if batch.is_prefill and not all_rows and not getattr(batch, "score_only", False):
             indices = batch.attn_metadata.get_last_indices(batch.size)
             x = x[indices].contiguous()
         return fused_mul_mat_gguf(x, self._embedding.qweight, self._quant_type)

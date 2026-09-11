@@ -95,8 +95,16 @@ class CacheManager:
         assert input_len > 0, "Input length must be greater than 0."
         # Multimodal requests must not reuse a shared prefix: image-placeholder tokens
         # have identical ids across images but carry different content (and KV), so a
-        # match would serve the wrong image's KV. Match against the empty prefix.
-        ids = req.input_ids[:0] if req.mm_embeds is not None else req.input_ids[: input_len - 1]
+        # match would serve the wrong image's KV. Scoring requests skip the match too:
+        # a prefix hit would skip forwarding the matched tokens, and their positions
+        # would then never produce logits for the NLL pass (an empty match forwards and
+        # scores every token). Both cases match against the empty prefix.
+        score_only = getattr(req, "score_only", False)
+        ids = (
+            req.input_ids[:0]
+            if (req.mm_embeds is not None or score_only)
+            else req.input_ids[: input_len - 1]
+        )
         if self.is_swa:
             from freetoken.kvcache.swa_radix_cache import SWACacheHandle
             m = self.prefix_cache.match_prefix(ids)
@@ -343,6 +351,22 @@ class CacheManager:
         """
         self.free_token_tail(req, keep_len=committed)
         req.commit_spec(committed)
+
+    def discard_req(self, req: Req) -> None:
+        """Release a finished request's own pages/slots WITHOUT inserting its prefix into
+        the tree. Scoring requests finish this way: they must not seed the shared prefix
+        cache with a measurement corpus (which would pin pages and evict serving entries).
+        Matching is disabled for them anyway, so ``cache_handle.cached_len`` is 0 in
+        practice; the matched-prefix slice is still unlocked rather than freed, because
+        those pages belong to the tree. Single-shot like ``cache_req(finished=True)``."""
+        old_handle = req.cache_handle
+        tail = self._padded_tail(req, old_handle.cached_len)
+        if self.swa_paged:
+            self._free_swa(tail)
+        self._free(tail)
+        self.unlock(old_handle)
+        if self.is_hybrid:
+            self._free_req_slots(req)
 
     def cache_req(self, req: Req, *, finished: bool) -> None:
         if self.is_swa:

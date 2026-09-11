@@ -72,6 +72,22 @@ class TokenizeMsg(BaseTokenizerMsg):
     sampling_params: SamplingParams
     chat_template_kwargs: Dict[str, Any] | None = None
     tools: List[Dict[str, Any]] | None = None
+    # Teacher-forced scoring (internal /v1/score): tokenize raw text and return per-token
+    # NLLs instead of generating. ``score_chunk`` caps the prefill rows per forward.
+    score_only: bool = False
+    score_chunk: int = 0
+
+
+@dataclass
+class ScoreChunkMsg(BaseTokenizerMsg):
+    # scheduler -> tokenizer/detokenizer worker -> frontend: one scoring chunk's per-row
+    # NLLs (teacher-forced), translated into a UserReply carrying ``nlls``. ``finished``
+    # marks the request's final chunk; the frontend accumulates the chunk lists so the
+    # wire reply stays bounded by the chunk size regardless of prompt length.
+    uid: int
+    nlls: List[float]
+    top1_hits: int = 0
+    finished: bool = False
 
 
 @dataclass

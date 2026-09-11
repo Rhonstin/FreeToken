@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from freetoken.core import SCORE_CHUNK_MAX
+
 
 class MessageContent(BaseModel):
     type: str
@@ -126,6 +128,19 @@ class CompletionRequest(BaseModel):
         if self.max_completion_tokens is not None:
             self.max_tokens = self.max_completion_tokens
         return self
+
+
+# Teacher-forced scoring (internal ``POST /v1/score``). ``chunk`` caps the prefill rows
+# per forward; the all-rows logits retire at the end of each chunk. At 1024 rows and a
+# 248k vocab the retained logits are ~0.5 GiB bf16 / ~1 GiB fp32, so the cap is a memory
+# guard, not a throughput knob. SCORE_CHUNK_MAX (core) is the hard ceiling the scheduler
+# also enforces.
+SCORE_CHUNK_DEFAULT = 1024
+
+
+class ScoreRequest(BaseModel):
+    text: str
+    chunk: int = Field(default=SCORE_CHUNK_DEFAULT, ge=1, le=SCORE_CHUNK_MAX)
 
 
 class ModelCard(BaseModel):

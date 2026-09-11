@@ -14,6 +14,13 @@ if TYPE_CHECKING:
     from freetoken.moe.offload_cache import OffloadMoeCache
 
 
+# Teacher-forced scoring (internal /v1/score): the hard cap on rows forwarded per scoring
+# chunk. The engine retains the chunk's all-rows logits until the drain scores it, so this
+# bounds that tensor (~0.5 GiB bf16 / ~1 GiB fp32 at a 248k vocab); the route validates
+# against it and the scheduler clamps to it defensively.
+SCORE_CHUNK_MAX = 2048
+
+
 @dataclass
 class SamplingParams:
     temperature: float = 0.0
@@ -74,6 +81,19 @@ class Req:
     # PLE slot_states riding the same slots). Allocated on the first spec_snapshot and
     # freed at finish. A rejected draft suffix rolls back with one copy instead of a replay.
     spec_journal_slot: int | None = None
+
+    # --- teacher-forced scoring (internal /v1/score) ---
+    # When set, this request is a scoring pass: every row of each prefill chunk is projected
+    # through lm_head (no last-row selection), no token is sampled, and the scheduler scores
+    # row i against ``score_full_ids[i + 1]``. ``score_chunk`` caps the rows per chunk
+    # (0 = the normal prefill budget); ``score_full_ids`` is the complete prompt (the chunk's
+    # own ``input_ids`` stops at the chunk end, so the boundary target comes from here).
+    # ``score_chunk_len`` is set by Engine.forward_batch to the rows just forwarded, letting
+    # the drain slice the all-rows logits without relying on post-``complete_n`` lengths.
+    score_only: bool = False
+    score_chunk: int = 0
+    score_full_ids: torch.Tensor | None = None
+    score_chunk_len: int = 0
 
     def __post_init__(self) -> None:
         assert self.input_ids.is_cpu
@@ -230,6 +250,12 @@ class Batch:
     # at their defaults for plain batches.
     spec_finalized: bool = False
     spec_accepted: "Dict[int, List[int]] | None" = None
+    # Teacher-forced scoring batch (internal /v1/score): every row was forwarded and the
+    # engine returned all-rows logits in ForwardOutput.spec_logits, so the drain scores
+    # rows instead of streaming sampled tokens. Scoring requests never share a batch with
+    # generation requests (PrefillManager admits one scoring request alone) and never
+    # decode, so this never mixes with plain/spec semantics.
+    score_only: bool = False
 
     @property
     def spec_active(self) -> bool:

@@ -37,6 +37,10 @@ class UserMsg(BaseBackendMsg):
     # Optional precomputed multimodal soft-token embeddings (GPU tensor). Only used by
     # the in-process offline path; remains None for the (serialized) online path.
     mm_embeds: torch.Tensor | None = None
+    # Teacher-forced scoring (internal /v1/score): score the prompt instead of generating;
+    # ``score_chunk`` caps the prefill rows per forward (0 = the normal prefill budget).
+    score_only: bool = False
+    score_chunk: int = 0
 
 
 @dataclass

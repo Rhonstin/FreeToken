@@ -347,7 +347,9 @@ class ForwardOutput(NamedTuple):
     copy_done_event: torch.cuda.Event
     # Scoring logits [num_rows, vocab] for a multi-token (speculative) decode step, else
     # None. The verify driver slices per-request target rows out of these (row i holds
-    # p_{i+1}); plain batches pay nothing (no tensor is retained).
+    # p_{i+1}); plain batches pay nothing (no tensor is retained). A teacher-forced
+    # scoring batch (internal /v1/score) also lands here: all rows of the prefill chunk,
+    # scored by the scheduler against the known successor tokens.
     spec_logits: torch.Tensor | None = None
     # Per-request anchor rows of the target's 4-stream residual (uid -> [4H] view),
     # for the NEXT step's draft closure. Retained only for eager forwards of MTP runs
@@ -1061,6 +1063,7 @@ class Engine:
     def forward_batch(self, batch: Batch, args: BatchSamplingArgs) -> ForwardOutput:
         assert torch.cuda.current_stream() == self.stream
         use_graph = self.graph_runner.can_use_cuda_graph(batch)
+        score_only = bool(getattr(batch, "score_only", False))
         with self.ctx.forward_batch(batch), self.model.forward_host_ctx(batch, use_graph):
             logits = self.graph_runner.replay(batch) if use_graph else self.model.forward()
         if self.cpu_moe_executor is not None:
@@ -1084,9 +1087,20 @@ class Engine:
             # Rows actually forwarded this step: the chunk for prefill, one row for plain
             # decode, 1 anchor + spec_depth for a multi-token step. complete_one's
             # cached_len = device_len is exactly extend_len == 1, so this generalizes it.
+            # Scoring keeps its pre-forward row count here: the drain cannot recover it
+            # after complete_n rewrites cached_len/device_len.
+            if score_only:
+                req.score_chunk_len = req.extend_len
             req.complete_n(req.extend_len)
 
-        if batch.spec_active:
+        if score_only:
+            # Teacher-forced scoring: retain every row's logits for the scheduler's NLL
+            # pass and skip sampling entirely (the logits are read, not sampled). Score
+            # batches are prefill-only, never CUDA-graph replays, and never share a batch
+            # with plain requests, so next_tokens stays empty.
+            spec_logits = logits
+            next_tokens_gpu = torch.empty(0, dtype=torch.int32, device=logits.device)
+        elif batch.spec_active:
             # Multi-token (speculative) batches are always verified by the scheduler's
             # driver, and the drain streams the VERIFIED tokens (batch.spec_accepted);
             # these row samples are never read, so sampling every row (an argmax over a

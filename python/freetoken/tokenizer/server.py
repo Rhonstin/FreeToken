@@ -20,6 +20,7 @@ from freetoken.message import (
     DetokenizeMsg,
     ErrorReplyMsg,
     PromptAdmittedMsg,
+    ScoreChunkMsg,
     TokenizeMsg,
     UserMsg,
     UserReply,
@@ -53,6 +54,17 @@ def _prompt_admitted_reply(msg: PromptAdmittedMsg) -> UserReply:
 def _error_reply(msg: ErrorReplyMsg) -> UserReply:
     return UserReply(
         uid=msg.uid, incremental_output="", finished=True, error=msg.error, error_code=msg.code,
+    )
+
+
+def _score_reply(msg: ScoreChunkMsg) -> UserReply:
+    """Translate one scoring chunk onto the ack path; the frontend accumulates ``nlls``."""
+    return UserReply(
+        uid=msg.uid,
+        incremental_output="",
+        finished=msg.finished,
+        nlls=msg.nlls,
+        top1_hits=msg.top1_hits,
     )
 
 
@@ -168,6 +180,7 @@ def tokenize_worker(
             abort_msg = [m for m in pending_msg if isinstance(m, AbortMsg)]
             prompt_admitted_msg = [m for m in pending_msg if isinstance(m, PromptAdmittedMsg)]
             error_reply_msg = [m for m in pending_msg if isinstance(m, ErrorReplyMsg)]
+            score_chunk_msg = [m for m in pending_msg if isinstance(m, ScoreChunkMsg)]
             # Cache-rebuild control messages are pure passthrough (no tokenization):
             # CacheRebuildMsg (api -> scheduler) and CacheRebuildResultMsg (scheduler -> api).
             for m in pending_msg:
@@ -197,7 +210,13 @@ def tokenize_worker(
             n_control = sum(
                 isinstance(
                     m,
-                    (CacheRebuildMsg, CacheRebuildResultMsg, ErrorReplyMsg, PromptAdmittedMsg),
+                    (
+                        CacheRebuildMsg,
+                        CacheRebuildResultMsg,
+                        ErrorReplyMsg,
+                        PromptAdmittedMsg,
+                        ScoreChunkMsg,
+                    ),
                 )
                 for m in pending_msg
             )
@@ -234,6 +253,10 @@ def tokenize_worker(
             for msg in abort_msg:
                 detokenize_manager.discard(msg.uid)
 
+            # Scoring chunks ride the sampled-reply path (the frontend's ack loop already
+            # drives it) so a chunk's NLL list is delivered as soon as its forward drains.
+            sampled_replies.extend(_score_reply(msg) for msg in score_chunk_msg)
+
             _send_generation_replies(
                 send_frontend,
                 [_prompt_admitted_reply(msg) for msg in prompt_admitted_msg],
@@ -254,7 +277,13 @@ def tokenize_worker(
                     )
                 if ok_msgs:
                     backend = [
-                        UserMsg(uid=msg.uid, input_ids=t, sampling_params=msg.sampling_params)
+                        UserMsg(
+                            uid=msg.uid,
+                            input_ids=t,
+                            sampling_params=msg.sampling_params,
+                            score_only=msg.score_only,
+                            score_chunk=msg.score_chunk,
+                        )
                         for msg, t in zip(ok_msgs, ok_tensors, strict=True)
                     ]
                     send_backend.put(backend[0] if len(backend) == 1 else BatchBackendMsg(data=backend))

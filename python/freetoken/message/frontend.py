@@ -56,6 +56,10 @@ class UserReply(BaseFrontendMsg):
     finish_reason: str | None = None
     # The stop string that ended generation (Anthropic reports it as stop_reason='stop_sequence').
     matched_stop: str | None = None
+    # Teacher-forced scoring (internal /v1/score): this chunk's per-row NLLs, plus its
+    # count of argmax==target rows. None on every non-scoring reply.
+    nlls: list[float] | None = None
+    top1_hits: int = 0
 
 
 @dataclass

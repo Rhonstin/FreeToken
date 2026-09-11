@@ -18,6 +18,7 @@ from freetoken.message import (
     ErrorReplyMsg,
     ExitMsg,
     PromptAdmittedMsg,
+    ScoreChunkMsg,
     UserMsg,
 )
 from freetoken.utils import (
@@ -57,6 +58,37 @@ Indice2D: TypeAlias = Tuple[torch.Tensor, torch.Tensor]
 
 def _gib(n_bytes: int) -> str:
     return f"{n_bytes / (1 << 30):.2f} GiB"
+
+
+# Score rows per fp32 working block: the NLL pass converts a block to fp32 and reduces it,
+# so the transient is block x vocab x 4B (~64 MiB at a 248k vocab) regardless of the chunk
+# size. Small enough to stay far below the retained logits; large enough to amortize launches.
+_SCORE_NLL_BLOCK = 64
+
+
+def _score_nlls_from_logits(
+    logits: torch.Tensor, targets: torch.Tensor, block: int = _SCORE_NLL_BLOCK
+) -> tuple[List[float], int]:
+    """Teacher-forced NLL per row plus the argmax-hit count.
+
+    ``logits`` is [rows, vocab] (row i = distribution over token i+1), ``targets`` the
+    [<= rows] successor ids: NLL_i = logsumexp(z_i) - z_i[t_i]. Row-blocked so the fp32
+    working copy stays bounded; ``logsumexp`` avoids materializing a full ``log_softmax``.
+    Pure torch (CPU or CUDA), so it is unit-testable without an engine.
+    """
+    n = int(targets.numel())
+    if n == 0:
+        return [], 0
+    nll_parts: List[torch.Tensor] = []
+    hits = 0
+    for start in range(0, n, block):
+        z = logits[start : start + block].float()
+        t = targets[start : start + block].to(device=z.device, dtype=torch.long)
+        nll_parts.append(
+            (torch.logsumexp(z, dim=-1) - z.gather(1, t.unsqueeze(1)).squeeze(1)).cpu()
+        )
+        hits += int((z.argmax(dim=-1) == t).sum().item())
+    return torch.cat(nll_parts).tolist(), hits
 
 
 def _gdn_row_slots(batch: Batch, padding_slot: int) -> List[int]:
@@ -366,6 +398,11 @@ class Scheduler(SchedulerIOMixin):
         # and some callers/tests still pass the 3-tuple form; both index identically.
         next_tokens_cpu = forward_output[1]
         forward_output[2].synchronize()
+        if getattr(batch, "score_only", False):
+            # Teacher-forced scoring: no sampled tokens to stream, no decode state to
+            # transition -- score each request's rows and release it on its final chunk.
+            self._process_score_batch(batch, forward_output)
+            return
         reply: List[DetokenizeMsg] = []
         new_finished_reqs: Set[Req] = set()
         # Per-request slice of next_tokens_cpu: one token for a plain batch, 1 + spec_depth
@@ -552,6 +589,60 @@ class Scheduler(SchedulerIOMixin):
         )
         self.send_result(reply)
 
+    def _process_score_batch(self, batch: Batch, forward_output) -> None:
+        """Drain a teacher-forced scoring batch (internal /v1/score).
+
+        The engine retained every row's logits in ``spec_logits`` (row i of a request is
+        the distribution over token i+1). For each request, slice this chunk's rows and
+        score them against the successor tokens from the full prompt (``score_full_ids``):
+        an intermediate chunk's last row predicts the first token of the NEXT chunk, so
+        the boundary needs no retained state -- the token list is known up front. The
+        final row of the final chunk has no successor and is not scored, so N tokens
+        yield N-1 NLLs. Chunks stream to the frontend as they complete; the request is
+        released (KV pages discarded, not cached) on its final chunk.
+        """
+        logits = forward_output.spec_logits
+        assert logits is not None, "score batch finished without all-rows logits"
+        offset = 0
+        replies: List[ScoreChunkMsg] = []
+        with self.cache_manager.lazy_free_region():
+            for req in batch.reqs:
+                n = req.score_chunk_len
+                rows = logits[offset : offset + n]
+                offset += n
+                if req.aborted:
+                    # Aborted while this chunk was in flight: free here (the forward is
+                    # drained); the abort ack stays the uid's terminal reply.
+                    self._free_req_resources(req)
+                    continue
+                nlls, hits = self._score_req_chunk(req, rows)
+                final = not isinstance(req, ChunkedReq)
+                if final:
+                    self._free_req_resources(req)
+                replies.append(
+                    ScoreChunkMsg(uid=req.uid, nlls=nlls, top1_hits=hits, finished=final)
+                )
+        if replies:
+            self.send_result(replies)
+
+    def _score_req_chunk(self, req: Req, rows: torch.Tensor) -> Tuple[List[float], int]:
+        """One chunk's (NLLs, top-1 hits) for ``req`` against its successor tokens.
+
+        Rows are positions ``[start, end)`` where ``end = req.cached_len`` (the engine's
+        ``complete_n`` already advanced lengths) and ``start = end - score_chunk_len``;
+        the targets are ``full[start + 1 : min(end + 1, L)]``. That slice is one shorter
+        than the row span exactly on the final chunk, where the last row has no successor.
+        """
+        chunk_len = req.score_chunk_len
+        start = req.cached_len - chunk_len
+        full = req.score_full_ids if req.score_full_ids is not None else req.input_ids
+        end = min(start + chunk_len + 1, int(full.numel()))
+        targets = full[start + 1 : end]
+        assert targets.numel() <= rows.shape[0], (
+            f"score targets {targets.numel()} exceed rows {rows.shape[0]}"
+        )
+        return _score_nlls_from_logits(rows[: targets.numel()], targets)
+
     def _moe_stats(self) -> dict | None:
         """Combined MoE decode cache readout for the periodic log (opt-in flag).
 
@@ -641,7 +732,11 @@ class Scheduler(SchedulerIOMixin):
                 return
             input_len, max_seq_len = len(msg.input_ids), self.engine.max_seq_len
             max_output_len = max_seq_len - input_len
-            if max_output_len <= 0:
+            score_only = getattr(msg, "score_only", False)
+            # A scoring request never decodes, so only the prompt must fit: input_len ==
+            # max_seq_len is legal for /v1/score (there is no room for a continuation,
+            # but no continuation is ever asked for).
+            if max_output_len < 0 or (max_output_len == 0 and not score_only):
                 logger.warning_rank0(
                     f"Input sequence length {input_len} exceeds {max_seq_len}, "
                     f"request {msg.uid} is dropped."
@@ -760,8 +855,12 @@ class Scheduler(SchedulerIOMixin):
             self._last_target_hidden.pop(req.uid, None)
         # Polymorphic free: the DSV4 manager returns the request's window pages + cmp/idx blocks
         # to their tier free-lists; the generic manager frees its KV pages (it reads
-        # page_table[req.table_idx], so free the table entry after).
-        self.cache_manager.cache_req(req, finished=True)
+        # page_table[req.table_idx], so free the table entry after). Scoring requests discard
+        # instead of caching: a measurement prompt must not seed the shared prefix cache.
+        if getattr(req, "score_only", False):
+            self.cache_manager.discard_req(req)
+        else:
+            self.cache_manager.cache_req(req, finished=True)
         self.table_manager.free(req.table_idx)
         req.table_idx = -1
 
@@ -1284,11 +1383,14 @@ class Scheduler(SchedulerIOMixin):
             # release + length rotation, acceptance counters). The drain then streams
             # the accepted tokens instead of re-appending row spans.
             self._verify_spec_batch(batch, forward_output, spec_state)
-        if not getattr(batch, "spec_finalized", False):
+        if not getattr(batch, "spec_finalized", False) and not getattr(
+            batch, "score_only", False
+        ):
             # A finalized spec batch already holds its verified tokens in the pool
             # (the verify pass wrote them back over the forward's sampled rows, which
             # differ under stochastic sampling); writing the sampler's rows here
-            # would clobber verified tokens with unverified ones.
+            # would clobber verified tokens with unverified ones. A scoring batch
+            # sampled nothing (next_tokens is empty); its rows are write-mapped -1.
             self.token_pool[output_mapping] = forward_output.next_tokens_gpu
         self.decode_manager.filter_reqs(forward_input.batch.reqs)
         return forward_output

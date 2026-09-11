@@ -16,6 +16,7 @@ from .tokenizer import (
     DetokenizeMsg,
     ErrorReplyMsg,
     PromptAdmittedMsg,
+    ScoreChunkMsg,
     TokenizeMsg,
 )
 
@@ -34,6 +35,7 @@ __all__ = [
     "DetokenizeMsg",
     "ErrorReplyMsg",
     "PromptAdmittedMsg",
+    "ScoreChunkMsg",
     "TokenizeMsg",
     "BaseFrontendMsg",
     "BatchFrontendMsg",
