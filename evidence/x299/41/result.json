@@ -1,0 +1,23 @@
+{
+  "task": "FreeToken-mtp-1ll.41",
+  "title": "Validate hybrid MoE split quality (PPL/accuracy) before default",
+  "outcome": "no_change",
+  "method": "teacher-forced POST /v1/score over a fixed non-repetitive corpus (README/CONTRIBUTING/weather), offload vs hybrid --moe-hybrid-max-fetch=1, prod-like nvfp4/220k KV",
+  "corpus": {"passages": 5, "tokens": 3794, "file": "corpus.jsonl"},
+  "results": {
+    "offload": {"agg_ppl": 4.241486321128844, "mean_top1_rate": 0.6356245025654804},
+    "hybrid_f1": {"agg_ppl": 4.241486321128844, "mean_top1_rate": 0.6356245025654804},
+    "identical": true
+  },
+  "interpretation": [
+    "/v1/score is teacher-forced over the prompt, i.e. a PREFILL path; the hybrid CPU/GPU expert split only changes DECODE. Prefill is served by the same offload path, so the PPL being bit-identical is expected and does NOT validate the decode-time split.",
+    "The decode path is not bit-identical: 05b measured offload vs hybrid-f1 greedy outputs sharing only 374/540 chars before diverging (CPU/GPU expert rounding).",
+    "Therefore the quantitative quality of hybrid decode remains unestablished; hybrid must not become the default on the strength of this PPL result."
+  ],
+  "decision": {
+    "adopt_hybrid_default": false,
+    "reason": "prefill quality unchanged (bit-identical PPL), but the decode-time split changes greedy output and has no accuracy evidence yet; keep offload as the default",
+    "prerequisite": "a decode-path accuracy campaign (GSM8K/AIME subset, offload vs hybrid) or a decode-path teacher-forced runner"
+  },
+  "evidence": ["raw/ppl-offload.json", "raw/ppl-hybrid.json", "corpus.jsonl", "score_ppl.py", "run_41.sh"]
+}
