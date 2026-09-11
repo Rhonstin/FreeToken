@@ -1,0 +1,27 @@
+{
+  "task_key": "43",
+  "bead_id": "FreeToken-mtp-1ll.43",
+  "title": "Add negative-fixture tests for the decode bench (timeout/crash/empty/usage)",
+  "outcome": "implemented",
+  "change": "new tests/benchmarks/test_bench_decode_moe_negatives.py (12 cases) covering the bench's failure branches",
+  "cases": [
+    "empty output (quality_prefix empty plain/spec)",
+    "missing usage chunk -> SystemExit (usage)",
+    "HTTP error -> SystemExit",
+    "server exited during startup (crash)",
+    "health status error (crash)",
+    "not ready after timeout (timeout)",
+    "spec counters absent -> None",
+    "spec 0/0 -> rate 0.0",
+    "bad problem index -> SystemExit",
+    "greedy sampling resolution"
+  ],
+  "result": "12 passed on dev",
+  "evidence": [
+    "raw/pytest.txt"
+  ],
+  "limitations": [
+    "Pure-helper/failure-branch coverage; no live server (the integration runs are 34/36/49)."
+  ],
+  "generated_utc": "2026-09-11"
+}

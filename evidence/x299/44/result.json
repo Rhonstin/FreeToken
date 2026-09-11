@@ -1,0 +1,47 @@
+{
+  "task_key": "44",
+  "bead_id": "FreeToken-mtp-1ll.44",
+  "title": "Explain the manual moe-cache-size 4000 vs auto 3978 regression",
+  "outcome": "no_change",
+  "measurements": {
+    "s2600": {
+      "tok_s": 18.19,
+      "miss": 0.34,
+      "vram_mib": 20154
+    },
+    "s3200": {
+      "tok_s": 20.28,
+      "miss": 0.3,
+      "vram_mib": 21734
+    },
+    "s4000": {
+      "tok_s": 17.52,
+      "miss": 0.24,
+      "vram_mib": 23854,
+      "free_after_init_gib": 2.16
+    },
+    "auto": {
+      "tok_s": 23.62,
+      "miss": 0.24,
+      "vram_mib": 23794,
+      "cache_slots": 3978
+    }
+  },
+  "analysis": [
+    "s4000 and auto resolve nearly the same residency (miss 0.24 both; 4000 vs 3978 slots), so the 17.52 vs 23.62 gap is NOT a hit-rate effect.",
+    "s4000 runs with only 2.16 GiB free after init and via the manual path; auto also enables prefill_overlap. The regression is consistent with VRAM-pressure/allocator+graph effects under the tighter headroom and the absence of the auto overlap path, not with cache capacity.",
+    "switching to s3200 (20.28) or auto (23.62) recovers; manual sizes near the edge are not advisable."
+  ],
+  "decision": {
+    "fix": false,
+    "reason": "prod mode is --moe-cache-auto (adopted 45/49), which resolves the safe size itself; the manual near-edge configuration is not used. Documented, no code change."
+  },
+  "evidence": [
+    "../07b/raw/miss.txt",
+    "../07b/raw/split.jsonl"
+  ],
+  "limitations": [
+    "Diagnosed from the 07b sweep; not re-measured after the hybrid adoption."
+  ],
+  "generated_utc": "2026-09-11"
+}
