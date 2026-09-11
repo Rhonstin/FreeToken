@@ -33,6 +33,7 @@ def one(origin: str, model: str, prompt: str, max_tokens: int, idx: int, out: li
     t_first = None
     usage = None
     text = []
+    stamps: list = []
     try:
         with urllib.request.urlopen(req, timeout=3600) as resp:
             for raw in resp:
@@ -51,14 +52,21 @@ def one(origin: str, model: str, prompt: str, max_tokens: int, idx: int, out: li
                     if tok:
                         if t_first is None:
                             t_first = time.perf_counter()
+                        stamps.append(time.perf_counter())
                         text.append(tok)
     except Exception as e:  # noqa: BLE001
         out.append({"idx": idx, "error": f"{type(e).__name__}: {e}"})
         return
     t_end = time.perf_counter()
     s = "".join(text)
+    import statistics as _st
+    iv = [(stamps[i + 1] - stamps[i]) * 1000 for i in range(len(stamps) - 1)]
+    pct = (lambda q: round(_st.quantiles(iv, n=100)[q - 1], 2) if len(iv) >= 2 else None)
     out.append({
         "idx": idx,
+        "it_ms_p50": pct(50),
+        "it_ms_p95": pct(95),
+        "it_ms_mean": round(sum(iv) / len(iv), 2) if iv else None,
         "prompt_tokens": (usage or {}).get("prompt_tokens"),
         "completion_tokens": (usage or {}).get("completion_tokens"),
         "ttft_ms": round((t_first - t0) * 1000, 1) if t_first else None,
