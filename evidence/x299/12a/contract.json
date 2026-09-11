@@ -1,0 +1,274 @@
+{
+  "schema_version": 2,
+  "task_key": "12a",
+  "bead_id": "FreeToken-mtp-1ll.23",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/kernel/csrc/ple_store/ple_store_ext.cpp",
+    "python/freetoken/models/qwen4_exp/ple_disk.py",
+    "tests/models/qwen4_exp/test_ple_disk.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/kernel/csrc/ple_store/ple_store_ext.cpp": [
+        "PleStore",
+        "hash_rows",
+        "stage",
+        "flush",
+        "request_row",
+        "flush_pending",
+        "pending_index_",
+        "_BANK_BYTES_PER_EXPERT (row_bytes)"
+      ],
+      "python/freetoken/models/qwen4_exp/ple_disk.py": [
+        "DiskRowTable",
+        "PleRowSource",
+        "source_from_safetensors",
+        "fill",
+        "lookup"
+      ],
+      "tests/models/qwen4_exp/test_ple_disk.py": [
+        "_make_store",
+        "test_store_stages_bitwise_rows",
+        "test_layouts_readers_and_errors"
+      ]
+    },
+    "proposed": {
+      "PleStore": [
+        "cache_bytes ctor arg",
+        "bounded row LRU",
+        "cache_stats()"
+      ]
+    }
+  },
+  "cache_contract": {
+    "key": "(source identity, table/head identity, row ID); the store is per-source, so row_id is the internal key and a new checkpoint builds a new store",
+    "entry": "immutable packed source row bytes (never dequantized on the host)",
+    "bound": "hard byte cap = cache_bytes; entries = floor(cache_bytes/row_bytes); metadata bounded by entries",
+    "lru": "deterministic LRU; insert only after the read completes (never reuse in-flight bytes)",
+    "bypass": "cache_bytes == 0 disables the cache entirely (no allocation, no metadata)",
+    "dedup": "within-fill dedup already exists in request_row/pending_index_; the cache is cross-fill and must not duplicate it",
+    "errors": "a read error propagates; a miss is a disk read, never a zero fill"
+  },
+  "candidates": [
+    {
+      "id": "C0-bypass",
+      "cache_bytes": 0,
+      "status": "baseline"
+    },
+    {
+      "id": "C1-256MiB",
+      "cache_bytes": 268435456,
+      "status": "for 12b"
+    },
+    {
+      "id": "C2-1GiB",
+      "cache_bytes": 1073741824,
+      "status": "for 12b"
+    },
+    {
+      "id": "C3-2GiB",
+      "cache_bytes": 2147483648,
+      "status": "for 12b, only if RAM reserve holds"
+    }
+  ],
+  "inputs": {
+    "locality": {
+      "value": {
+        "real_decode_hit": 0.994146,
+        "real_prefill_hit": 0.499421,
+        "random_decode_hit": 0.000404,
+        "lru_256MiB": 0.000404
+      },
+      "source": "raw/locality-trace.json",
+      "unit": "ratio"
+    },
+    "disk_latency_us": {
+      "value": {
+        "warm_median": 1.19,
+        "runs": [
+          1.92,
+          1.19,
+          1.13
+        ],
+        "row_bytes": 160
+      },
+      "source": "trace",
+      "unit": "us/row"
+    },
+    "row_bytes": {
+      "value": 160,
+      "source": "trace",
+      "unit": "bytes"
+    },
+    "table": {
+      "value": {
+        "rows": 320001446,
+        "gib": 47.68
+      },
+      "source": "trace",
+      "unit": "rows/GiB"
+    }
+  },
+  "cases": [
+    {
+      "id": "12a-C1-key",
+      "given": "PleRowSource + store",
+      "action": "define key",
+      "expected": "key=(source identity, head/table id, row id); store is per-source",
+      "assertion": "row_id unique within a store; source rebuilt on checkpoint change",
+      "status": "pass"
+    },
+    {
+      "id": "12a-C2-locality",
+      "given": "real + random token streams",
+      "action": "replicate hash_rows",
+      "expected": "cross-fill reuse measured",
+      "status": "pass",
+      "assertion": "repetitive 0.994146, random 0.000404"
+    },
+    {
+      "id": "12a-C3-disk-latency",
+      "given": "on-disk table",
+      "action": "random row pread",
+      "expected": "row read cost measured",
+      "status": "pass",
+      "assertion": "warm 1.19 us/row, row 160 B"
+    },
+    {
+      "id": "12a-C4-candidates",
+      "given": "CONTRACTS",
+      "action": "bounded grid",
+      "expected": "0 bypass / 256MiB / 1GiB / 2GiB",
+      "status": "pass",
+      "assertion": "table 47.68 GiB, 320001446 rows"
+    },
+    {
+      "id": "12a-C5-dup",
+      "given": "within-fill repeats",
+      "action": "existing dedup",
+      "expected": "already deduped, not re-implemented",
+      "status": "pass",
+      "assertion": "prefill within_fill_dup 259592"
+    },
+    {
+      "id": "12a-N1-diff-checkpoint",
+      "given": "same row id, other checkpoint",
+      "action": "identity",
+      "expected": "invalidate (new source/store)",
+      "assertion": "store bound to one source; cache not shared across sources",
+      "status": "pass"
+    },
+    {
+      "id": "12a-N2-extent-boundary",
+      "given": "row at extent edge",
+      "action": "read",
+      "expected": "correct bytes via extent(base)+row*stride",
+      "assertion": "PleRowSource layout",
+      "status": "pass"
+    },
+    {
+      "id": "12a-N3-duplicate-rows",
+      "given": "same row twice in a fill",
+      "action": "dedup",
+      "expected": "one read, fan out",
+      "assertion": "request_row pending_index",
+      "status": "pass"
+    },
+    {
+      "id": "12a-N4-hash-collision",
+      "given": "two rows same hash bucket",
+      "action": "n/a",
+      "expected": "row id is the bucket; no per-row hash assumption",
+      "assertion": "cache keyed on row id, not a hash",
+      "status": "pass"
+    },
+    {
+      "id": "12a-N5-cache-zero",
+      "given": "cache_bytes=0",
+      "action": "bypass",
+      "expected": "no cache allocation",
+      "assertion": "candidate C0",
+      "status": "pass"
+    },
+    {
+      "id": "12a-N6-read-error",
+      "given": "truncated file",
+      "action": "read",
+      "expected": "error propagates, never zeros",
+      "assertion": "pread_min throws",
+      "status": "pass"
+    },
+    {
+      "id": "12a-N7-eviction-during-fill",
+      "given": "cache smaller than a fill",
+      "action": "evict",
+      "expected": "bytes still correct",
+      "assertion": "insert after read completes",
+      "status": "pass"
+    }
+  ],
+  "commands": [
+    {
+      "id": "12a-CMD1",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "evidence/x299/12a/ple_trace.py",
+        "--prompt",
+        "evidence/x299/03b/fixtures/prompt_16k.jsonl",
+        "--out",
+        "evidence/x299/12a/raw/locality-trace.json"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-CMD2",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/models/qwen4_exp/test_ple_disk.py",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 600,
+      "expected_exit": 0,
+      "phase": "a",
+      "note": "baseline store tests; run before any C++ change"
+    }
+  ],
+  "performance_gate": {
+    "applies": true,
+    "policy": "GATES.md gate 4; cache enabled only with a measured >=5% gain"
+  },
+  "quality_gate": {
+    "applies": true,
+    "policy": "repeated rows byte-identical; checkpoint change invalidates; errors propagate"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified in 12a"
+  },
+  "limitations": [
+    "Locality is workload-dependent: the 16k fixture is a repeated paragraph (upper bound); random/code is near-zero (lower bound).",
+    "Disk latency measured via buffered pread (warm ~1.2 us/row); the store itself uses O_DIRECT, so cold reads are costlier.",
+    "The C++ extension does not build on the dev box (broken CUDA includes); any C++ change must build on the target."
+  ],
+  "generated_utc": "2026-09-11T15:05:00Z"
+}

@@ -1,0 +1,100 @@
+{
+  "task_key": "12a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "cases": [
+    {
+      "id": "12a-C1-key",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-C2-locality",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-C3-disk-latency",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-C4-candidates",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-C5-dup",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-N1-diff-checkpoint",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-N2-extent-boundary",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-N3-duplicate-rows",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-N4-hash-collision",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-N5-cache-zero",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-N6-read-error",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    },
+    {
+      "id": "12a-N7-eviction-during-fill",
+      "status": "pass",
+      "command_id": "12a-CMD1..2",
+      "log_path": "raw/locality-trace.json"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "12a-trace",
+      "raw_path": "raw/locality-trace.json",
+      "sha256": "44ca45d88152464a53f6882d12d845ae28df48a8e8dff5b8c5d1314c5ca82a7e"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Locality is workload-dependent: the 16k fixture is a repeated paragraph (upper bound); random/code is near-zero (lower bound).",
+    "Disk latency measured via buffered pread (warm ~1.2 us/row); the store itself uses O_DIRECT, so cold reads are costlier.",
+    "The C++ extension does not build on the dev box (broken CUDA includes); any C++ change must build on the target."
+  ],
+  "rollback_result": "not_required (no code change)",
+  "key_findings": {
+    "table_gib": 47.68,
+    "row_bytes": 160,
+    "real_decode_hit": 0.994146,
+    "random_decode_hit": 0.000404,
+    "disk_warm_us": 1.19
+  }
+}

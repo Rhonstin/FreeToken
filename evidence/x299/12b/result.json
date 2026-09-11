@@ -1,0 +1,98 @@
+{
+  "task_key": "12b",
+  "outcome": "no_change",
+  "outcome_reason": "PLE disk reads are a negligible per-step cost and locality is workload-dependent; a bounded RAM row cache cannot meet the performance gate and would be RAM spent for no measurable speedup.",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "12b-C1-gain-bound",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-C2-locality",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-C3-dedup",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-C4-no-enable",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-N1-diff-checkpoint",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-N2-extent",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-N3-duplicate",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-N4-collision",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-N5-zero",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-N6-read-error",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    },
+    {
+      "id": "12b-N7-evict",
+      "status": "pass",
+      "command_id": "12b-CMD1..2",
+      "log_path": "../12a/raw/locality-trace.json"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "12b-trace",
+      "raw_path": "../12a/raw/locality-trace.json",
+      "sha256": "44ca45d88152464a53f6882d12d845ae28df48a8e8dff5b8c5d1314c5ca82a7e"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Disk cold latency used an order-of-magnitude 100 us (O_DIRECT); warm measured 1.19 us.",
+    "TPOT 46 ms is the 05b/03b warm figure; a long-context run would only make the PLE share smaller.",
+    "The C++ extension cannot be built on dev (CUDA includes); a future cache would be built/tested on the target."
+  ],
+  "rollback_result": "not_required (no code change)",
+  "key_findings": {
+    "per_step_rows": 16,
+    "per_step_bytes": 2560,
+    "ple_share_batched_pct": 0.217,
+    "ple_share_unbatched_pct": 3.478,
+    "locality_repetitive": 0.994146,
+    "locality_random": 0.000404,
+    "verdict": "cache not enabled (no gain)"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "constants": {
+    "mult": [
+      23703573157769,
+      20109073645365,
+      8052911324071
+    ],
+    "num_heads": 16,
+    "sizes_head0": 20000003,
+    "row_bytes": 160,
+    "table_rows": 320001446,
+    "table_gib": 47.68
+  },
+  "real_decode": {
+    "label": "real decode (1 tok/fill)",
+    "fills": 16399,
+    "lookups": 262384,
+    "unique_total": 1536,
+    "within_fill_dup": 0,
+    "cross_fill_hits_infinite": 260848,
+    "cross_fill_hit_rate_infinite": 0.994146
+  },
+  "real_prefill": {
+    "label": "real prefill (8192 tok/fill)",
+    "fills": 3,
+    "lookups": 262384,
+    "unique_total": 1536,
+    "within_fill_dup": 259592,
+    "cross_fill_hits_infinite": 131040,
+    "cross_fill_hit_rate_infinite": 0.499421
+  },
+  "random_decode": {
+    "label": "random decode (1 tok/fill)",
+    "fills": 16382,
+    "lookups": 262112,
+    "unique_total": 262006,
+    "within_fill_dup": 0,
+    "cross_fill_hits_infinite": 106,
+    "cross_fill_hit_rate_infinite": 0.000404
+  },
+  "lru_capacity_rows": {
+    "256MiB": 1677721,
+    "1GiB": 6710886,
+    "2GiB": 13421772
+  },
+  "lru_hit_rate": {
+    "real_decode": {
+      "256MiB": 0.994146,
+      "1GiB": 0.994146,
+      "2GiB": 0.994146
+    },
+    "real_prefill": {
+      "256MiB": 0.994146,
+      "1GiB": 0.994146,
+      "2GiB": 0.994146
+    },
+    "random_decode": {
+      "256MiB": 0.000404,
+      "1GiB": 0.000404,
+      "2GiB": 0.000404
+    }
+  },
+  "disk_latency_us_per_random_row": {
+    "warm_median": 1.19,
+    "runs": [
+      1.92,
+      1.19,
+      1.13
+    ],
+    "row_bytes": 160
+  }
+}

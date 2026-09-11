@@ -1,0 +1,242 @@
+{
+  "schema_version": 2,
+  "task_key": "12b",
+  "bead_id": "FreeToken-mtp-1ll.24",
+  "derived_from_contract": "../12a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/kernel/csrc/ple_store/ple_store_ext.cpp",
+    "python/freetoken/models/qwen4_exp/ple_disk.py",
+    "tests/models/qwen4_exp/test_ple_disk.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/kernel/csrc/ple_store/ple_store_ext.cpp": [
+        "PleStore",
+        "hash_rows",
+        "stage",
+        "flush",
+        "request_row",
+        "flush_pending",
+        "pending_index_",
+        "_BANK_BYTES_PER_EXPERT (row_bytes)"
+      ],
+      "python/freetoken/models/qwen4_exp/ple_disk.py": [
+        "DiskRowTable",
+        "PleRowSource",
+        "source_from_safetensors",
+        "fill",
+        "lookup"
+      ],
+      "tests/models/qwen4_exp/test_ple_disk.py": [
+        "_make_store",
+        "test_store_stages_bitwise_rows",
+        "test_layouts_readers_and_errors"
+      ]
+    },
+    "proposed": {
+      "PleStore": [
+        "cache_bytes ctor arg",
+        "bounded row LRU",
+        "cache_stats()"
+      ]
+    }
+  },
+  "inputs": {
+    "per_step_rows": {
+      "value": 16,
+      "source": "trace heads",
+      "unit": "rows"
+    },
+    "per_step_bytes": {
+      "value": 2560,
+      "source": "rows*row_bytes",
+      "unit": "bytes"
+    },
+    "disk_latency": {
+      "value": {
+        "warm_median": 1.19,
+        "runs": [
+          1.92,
+          1.19,
+          1.13
+        ],
+        "row_bytes": 160
+      },
+      "source": "trace",
+      "unit": "us/row"
+    },
+    "tpot_ms": {
+      "value": 46.0,
+      "source": "../05b warm TPOT",
+      "unit": "ms"
+    },
+    "ple_share_batched_pct": {
+      "value": 0.217,
+      "source": "bound",
+      "unit": "%"
+    },
+    "ple_share_unbatched_pct": {
+      "value": 3.478,
+      "source": "bound",
+      "unit": "%"
+    },
+    "locality": {
+      "value": {
+        "repetitive": 0.994146,
+        "random": 0.000404
+      },
+      "source": "trace",
+      "unit": "ratio"
+    }
+  },
+  "cases": [
+    {
+      "id": "12b-C1-gain-bound",
+      "given": "per-step PLE rows + disk latency",
+      "action": "bound the cache payoff",
+      "expected": "below the >=5% gate",
+      "status": "pass",
+      "assertion": "16 rows/step (2560 B); batched PLE share ~0.22% of 46 ms TPOT"
+    },
+    {
+      "id": "12b-C2-locality",
+      "given": "trace",
+      "action": "hit rate by workload",
+      "expected": "workload-dependent",
+      "status": "pass",
+      "assertion": "repetitive 0.994146 vs random 0.000404"
+    },
+    {
+      "id": "12b-C3-dedup",
+      "given": "within-fill repeats",
+      "action": "existing dedup",
+      "expected": "prefill repeats already served from one read",
+      "status": "pass",
+      "assertion": "within_fill_dup 259592"
+    },
+    {
+      "id": "12b-C4-no-enable",
+      "given": "no gain",
+      "action": "keep cache off",
+      "expected": "code not enabled",
+      "status": "pass",
+      "assertion": "cache_bytes default 0"
+    },
+    {
+      "id": "12b-N1-diff-checkpoint",
+      "given": "other checkpoint",
+      "action": "identity",
+      "expected": "store rebuild invalidates",
+      "status": "pass",
+      "assertion": "per-source store"
+    },
+    {
+      "id": "12b-N2-extent",
+      "given": "extent edge",
+      "action": "layout",
+      "expected": "base+row*stride",
+      "status": "pass"
+    },
+    {
+      "id": "12b-N3-duplicate",
+      "given": "dup rows",
+      "action": "dedup",
+      "expected": "one read",
+      "status": "pass"
+    },
+    {
+      "id": "12b-N4-collision",
+      "given": "row id bucket",
+      "action": "key",
+      "expected": "keyed on row id",
+      "status": "pass"
+    },
+    {
+      "id": "12b-N5-zero",
+      "given": "cache_bytes=0",
+      "action": "bypass",
+      "expected": "no allocation",
+      "status": "pass"
+    },
+    {
+      "id": "12b-N6-read-error",
+      "given": "truncated file",
+      "action": "read",
+      "expected": "error propagates",
+      "status": "pass"
+    },
+    {
+      "id": "12b-N7-evict",
+      "given": "tiny cache",
+      "action": "evict",
+      "expected": "bytes correct",
+      "status": "pass"
+    }
+  ],
+  "commands": [
+    {
+      "id": "12b-CMD1",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "evidence/x299/12a/ple_trace.py",
+        "--out",
+        "evidence/x299/12a/raw/locality-trace.json"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "12b-CMD2",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/models/qwen4_exp/test_ple_disk.py",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "b"
+    }
+  ],
+  "performance_gate": {
+    "applies": true,
+    "result": "FAIL / no-change",
+    "detail": "a perfect PLE row cache saves at most ~0.22% (batched) to 3.5% (serial) of TPOT, below the >=5% gate; locality is near-zero for code/random and already deduped for repetitive prefill"
+  },
+  "quality_gate": {
+    "applies": false,
+    "reason": "cache not added"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified"
+  },
+  "decision": {
+    "outcome": "no_change",
+    "reason": "PLE disk reads are a negligible per-step cost and locality is workload-dependent; a bounded RAM row cache cannot meet the performance gate and would be RAM spent for no measurable speedup.",
+    "revisit_if": "a future workload shows sustained cross-fill n-gram replay (e.g. long verbatim loops) AND PLE disk time is a measured >5% of TPOT"
+  },
+  "limitations": [
+    "Disk cold latency used an order-of-magnitude 100 us (O_DIRECT); warm measured 1.19 us.",
+    "TPOT 46 ms is the 05b/03b warm figure; a long-context run would only make the PLE share smaller.",
+    "The C++ extension cannot be built on dev (CUDA includes); a future cache would be built/tested on the target."
+  ],
+  "generated_utc": "2026-09-11T15:12:00Z"
+}
