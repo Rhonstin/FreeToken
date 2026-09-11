@@ -101,9 +101,12 @@ budget, cache 2600, mem-ratio 0.90, greedy, 4k..128k + single-depth retrieval at
   noise of bf16, e.g. 32k p50 56.6 vs 56.2 ms, 128k p50 61.4 vs 62.1 ms.
 - Quality: needle retrieval 11/11 in every mode (4k/16k/32k at three depths, 64k/128k at
   0.5), coding check passes in all three, outputs coherent; the free-form JSON check
-  fails in all three (methodology), NLL/PPL remains blocked (no logprob API).
-- Release decision: `--kv-cache-dtype nvfp4` is **opt-in, experimental** -- capacity is
-  the win (3.2x over bf16, 1.67x over fp8) with no measured speed or retrieval cost, but
-  PPL-class quality and long-context NLL are not yet measured and MLA/DSA remain
-  unsupported (backlog 5y2.18). Keep fp8 as the default-quantized choice until a PPL
-  harness exists.
+  fails in all three (methodology). Teacher-forced PPL measured via the new
+  `POST /v1/score` endpoint (commit 40926bc; same 7,981-token English corpus, chunk
+  1024): bf16 2.9164, fp8 2.9232 (+0.23%), nvfp4 2.9419 (+0.87%); top-1 agreement
+  0.747 / 0.746 / 0.748. Both quantized modes pass the PPL <= +1% threshold.
+- Release decision: `--kv-cache-dtype nvfp4` is **opt-in** -- capacity is the win (3.2x
+  over bf16, 1.67x over fp8) with no measured speed or retrieval cost, and the PPL cost is
+  +0.87% (fp8 +0.23%), inside the <= +1% threshold. Keep the unquantized default; use fp8
+  or nvfp4 deliberately, nvfp4 when capacity matters most. MLA/DSA remain unsupported
+  (backlog 5y2.18).
