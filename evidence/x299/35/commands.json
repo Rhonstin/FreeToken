@@ -1,0 +1,44 @@
+[
+  {
+    "id": "18a-CMD1",
+    "argv": [".venv/bin/python", "-m", "pytest", "-q", "tests/kvcache", "-k", "quant or nvfp4 or fp8 or codec or reject"],
+    "cwd": "dev worktree /opt/FreeToken-mtp",
+    "target": "dev",
+    "timeout_s": 300,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/pytest-kv-quant.txt",
+    "note": "20 passed, 4 skipped, 258 deselected"
+  },
+  {
+    "id": "18a-CMD2",
+    "argv": [".venv/bin/python", "-m", "pytest", "-q", "tests/kvcache/test_cache_unit_bytes.py"],
+    "cwd": "dev worktree /opt/FreeToken-mtp",
+    "target": "dev",
+    "timeout_s": 300,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/pytest-kv-quant.txt",
+    "note": "21 passed (exact byte accounting)"
+  },
+  {
+    "id": "18a-CMD3",
+    "argv": ["/opt/freetoken-venv/bin/ft", "serve", "--model-path", "<prod>", "--moe-strategy", "offload", "--kv-cache-dtype", "<bf16|fp8|nvfp4>", "--moe-cache-size", "2600", "--num-tokens", "220032", "--kv-reserve-tokens", "220032", "--memory-ratio", "0.90", "--max-running-requests", "1"],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 900,
+    "expected_exit": 0,
+    "phase": "b",
+    "note": "comparison A: same slots"
+  },
+  {
+    "id": "18a-CMD4",
+    "argv": ["/opt/freetoken-venv/bin/ft", "serve", "--model-path", "<prod>", "--moe-strategy", "offload", "--kv-cache-dtype", "<bf16|fp8|nvfp4>", "--moe-cache-auto", "--num-tokens", "220032", "--kv-reserve-tokens", "220032", "--memory-ratio", "0.90", "--max-running-requests", "1"],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 900,
+    "expected_exit": 0,
+    "phase": "b",
+    "note": "comparison B: same VRAM"
+  }
+]

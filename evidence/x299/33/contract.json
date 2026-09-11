@@ -1,0 +1,104 @@
+{
+  "schema_version": 2,
+  "task_key": "17a",
+  "bead_id": "FreeToken-mtp-1ll.33",
+  "title": "Evaluate prompt look-up as cheaper speculation - contract and fixtures",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "dev_source_git_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "worktree_diff_sha256": "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "same checkpoint pin as 15a; full pin is task 02"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/engine/lookup.py",
+    "python/freetoken/scheduler/scheduler.py",
+    "python/freetoken/engine/config.py",
+    "python/freetoken/server/args.py",
+    "python/freetoken/engine/spec.py",
+    "tests/engine/test_lookup_draft.py"
+  ],
+  "symbols": {
+    "existing": [
+      "freetoken.engine.lookup.LookupDrafter",
+      "freetoken.engine.lookup._ReqIndex (sync/propose)",
+      "freetoken.scheduler.scheduler.Scheduler._lookup_depth",
+      "freetoken.scheduler.scheduler.Scheduler._open_spec_step",
+      "freetoken.engine.config.ServerArgs.lookup_draft",
+      "freetoken.engine.config.ServerArgs.lookup_ngram",
+      "freetoken.engine.config.ServerArgs.lookup_min_ngram",
+      "freetoken.engine.spec.verify_step",
+      "freetoken.engine.spec.finalize_spec_step",
+      "freetoken.server.args --lookup-draft / --lookup-ngram / --lookup-min-ngram"
+    ],
+    "proposed": []
+  },
+  "inputs": {
+    "lookup_draft_default": {"value": 0, "source": "config.py:ServerArgs.lookup_draft", "unit": "tokens/step", "note": "0 = draft-free speculation off (plain decode)"},
+    "lookup_ngram_default": {"value": 6, "source": "config.py:ServerArgs.lookup_ngram", "unit": "tokens", "note": "max suffix length searched"},
+    "lookup_min_ngram_default": {"value": 2, "source": "config.py:ServerArgs.lookup_min_ngram", "unit": "tokens", "note": "shortest accepted match"},
+    "mtp_draft_banks_gib": {"value": 4.856, "source": "evidence/x299/15a/contract.json", "unit": "GiB", "note": "MTP cost lookup avoids entirely"},
+    "prod_decode_tok_s": {"value": 17.53, "source": "bd memory freetoken-x299-baseline-decode", "unit": "output tok/s", "note": "plain decode, single request, prod flags"},
+    "repetitive_workload_fraction": {"value": 0.994, "source": "bd memory freetoken-x299-12-ple-cache", "unit": "hit rate", "note": "PLE locality on repetitive text; the regime where PLD can match"},
+    "prose_workload_fraction": {"value": 0.0004, "source": "bd memory freetoken-x299-12-ple-cache", "unit": "hit rate", "note": "random/code text; PLD expected to no-op"},
+    "prod_context_tokens": {"value": 220032, "source": "systemd freetoken.service drop-in", "unit": "tokens", "note": "declared max; spec depth must not change the KV budget"},
+    "gpu_vram_gib": {"value": 24, "source": "01a hardware probe", "unit": "GiB"},
+    "pcie_h2d_gb_s": {"value": 12.2, "source": "bd memory freetoken-x299-benchbw-env", "unit": "GB/s", "note": "offload expert gather; rejected drafts cost verify rows"}
+  },
+  "invariants": [
+    "Exact speculation invariant (CONTRACTS.md): proposed tokens do not enter the stream until verify_step accepts them; on partial reject the pre-step state is restored and only the committed branch is replayed.",
+    "Greedy parity: with lookup enabled the committed token IDs are identical to plain decode for the same prompt and sampling params (the verify path is the MTP exact path).",
+    "Search work is bounded: a plan call does work O(max_ngram) map lookups and O(depth) slice copy; it never scans the whole history for a match.",
+    "Proposal length and search length are capped separately: proposal <= lookup_draft, suffix match <= lookup_ngram; the two are independent knobs.",
+    "1 <= lookup_min_ngram <= lookup_ngram (LookupDrafter.__init__ asserts).",
+    "lookup_draft and mtp_depth are mutually exclusive (ServerArgs.validate raises ValueError).",
+    "No match => plan returns 0 rows; the step is byte-identical to a plain decode row."
+  ],
+  "cases": [
+    {"id": "17a-C1-no-repeat", "given": "a request history with no repeated n-gram", "action": "plan(depth=4, tip)", "expected": "returns 0; no drafted rows", "assertion": "drafter.plan(...) == 0 and take() == []", "required_hardware": null, "status": "pass"},
+    {"id": "17a-C2-repeat", "given": "history [1,2,3,4,5,6,7,1,2,3], depth 3", "action": "plan", "expected": "proposes the earlier continuation [4,5,6]", "assertion": "plan==3 and take==[4,5,6]", "required_hardware": null, "status": "pass"},
+    {"id": "17a-C3-longest-match", "given": "an earlier (1,2,3)->[4,5] and a later shorter (2,3)->[9,9]", "action": "plan", "expected": "longest suffix wins", "assertion": "take==[4,5]", "required_hardware": null, "status": "pass"},
+    {"id": "17a-C4-huge-repeat", "given": "history that repeats one suffix a very large number of times", "action": "plan", "expected": "bounded work, proposal <= depth", "assertion": "plan completes and returns len<=depth; positions map stores at most two ends per n-gram key", "required_hardware": null, "status": "design"},
+    {"id": "17a-C5-suffix-overlap", "given": "history whose suffix overlaps its own earlier occurrence, e.g. [7,8,1,2,1,2]", "action": "plan(depth=4)", "expected": "overlapping occurrence (end > base-k) is skipped; clamped proposal [1,2]", "assertion": "take==[1,2]", "required_hardware": null, "status": "pass"},
+    {"id": "17a-C6-cross-request", "given": "two requests with identical text and different uids", "action": "plan/take/drop", "expected": "index and stashed drafts are per-uid; no leakage", "assertion": "drop(uid1) leaves uid2 plans intact", "required_hardware": null, "status": "design"},
+    {"id": "17a-C7-anchor-not-indexed", "given": "overlap scheduling: sampled anchor not yet in input_ids", "action": "plan(depth=3, anchor_token)", "expected": "suffix built with anchor as tip", "assertion": "plan==3 and take==[4,5,6]", "required_hardware": null, "status": "pass"},
+    {"id": "17a-C8-min-ngram", "given": "only matches shorter than min_ngram", "action": "plan", "expected": "0 drafts", "assertion": "plan==0", "required_hardware": null, "status": "pass"},
+    {"id": "17a-C9-invalid-config", "given": "min_ngram > max_ngram", "action": "LookupDrafter(max_ngram=2, min_ngram=3)", "expected": "AssertionError at construction", "assertion": "raises AssertionError", "required_hardware": null, "status": "pass"},
+    {"id": "17a-C10-mutual-exclusion", "given": "lookup_draft > 0 and mtp_depth > 0", "action": "ServerArgs.validate", "expected": "ValueError", "assertion": "raises ValueError", "required_hardware": null, "status": "design"},
+    {"id": "17a-C11-greedy-parity", "given": "repetitive prompt on the target GPU, greedy", "action": "plain decode vs --lookup-draft > 0", "expected": "identical committed token IDs", "assertion": "token-id sequence equality", "required_hardware": "RTX3090 target", "status": "b-phase"},
+    {"id": "17a-C12-throughput", "given": "repetitive vs prose prompt on the target GPU", "action": "plain decode vs --lookup-draft in {2,4,6}", "expected": ">=5% median output tok/s gain on repetitive; no regression on prose", "assertion": "paired uninstrumented A/B, raw rows unedited", "required_hardware": "RTX3090 target", "status": "b-phase"}
+  ],
+  "commands": [
+    {"id": "17a-CMD1", "argv": [".venv/bin/python", "-m", "pytest", "-q", "tests/engine/test_lookup_draft.py"], "cwd": "dev worktree", "timeout_s": 300, "expected_exit": 0, "phase": "a", "artifact": "raw/pytest-lookup.txt", "note": "baseline before any code edit: 10 passed"},
+    {"id": "17a-CMD2", "argv": ["/opt/freetoken-venv/bin/python", "-m", "pytest", "-q", "tests/engine/test_lookup_draft.py", "tests/engine/test_spec_verify.py", "tests/engine/test_mtp_driver.py"], "cwd": "/opt/FreeToken", "target": "llmserver", "timeout_s": 600, "expected_exit": 0, "phase": "b", "note": "drafter + shared verify path"},
+    {"id": "17a-CMD3", "argv": ["/opt/freetoken-venv/bin/ft", "serve", "--moe-strategy", "offload", "--moe-cache-auto", "--lookup-draft", "<2|4|6>", "--lookup-min-ngram", "2", "--num-tokens", "220032", "--kv-cache-dtype", "nvfp4", "--memory-ratio", "0.90"], "cwd": "/opt/FreeToken", "target": "llmserver", "timeout_s": 900, "expected_exit": 0, "phase": "b", "note": "A/B server; greedy parity first, then throughput"}
+  ],
+  "performance_gate": {
+    "metric": "median output tok/s (paired, uninstrumented, single request)",
+    "direction": "maximize",
+    "threshold": ">=5% vs plain decode on a repetitive workload",
+    "null_result": "no-change ADR; lookup stays off (default)",
+    "guard": "no regression on non-repetitive prose (drafts absent => plain row)"
+  },
+  "quality_gate": {
+    "greedy": "committed token IDs identical to plain decode",
+    "stochastic": "acceptance/residual algorithm unchanged (shared spec.verify_step); fixed-logits fixture only, not token-identical across independent sampling",
+    "rejected_draft_cost": "verify rows only; expert fetches on the offload box, no VRAM"
+  },
+  "candidates": {
+    "bounded": {"lookup_draft": [0, 2, 4, 6], "lookup_min_ngram": [2, 3], "lookup_ngram": [4, 6, 8]},
+    "workloads": ["repetitive (PLE 99.4% regime)", "prose/code (PLE 0.04% regime)"],
+    "fixed": ["moe-strategy offload", "moe-cache-auto", "kv-cache-dtype nvfp4", "num-tokens 220032", "memory-ratio 0.90", "max-running-requests 1", "greedy"]
+  },
+  "rollback_recipe": "No source change required: lookup is opt-in (lookup_draft default 0). Run the server without --lookup-draft to return to plain decode. If a code path is touched, restore via git checkout of the scope_files and re-run 17a-CMD1.",
+  "limitations": [
+    "MTP is out of scope (mutually exclusive); 15b found it does not fit in 24 GiB, so lookup is the only viable draft-free route.",
+    "PLD only helps when the request repeats itself; on prose it no-ops by design, so the throughput gate is workload-conditional.",
+    "The a-phase fixtures exercise the CPU drafter and scheduler wiring only; GPU parity/throughput are b-phase (17a-C11/C12)."
+  ],
+  "generated_utc": "2026-09-11"
+}

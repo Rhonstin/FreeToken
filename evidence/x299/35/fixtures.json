@@ -1,0 +1,78 @@
+{
+  "task_key": "18a",
+  "bead_id": "FreeToken-mtp-1ll.35",
+  "note": "Byte/codec fixtures are CPU-only and exact (pinned at baseline). The throughput/VRAM matrices are GPU b-phase. given/when/then with exact assertions below.",
+  "valid": [
+    {
+      "id": "18a-F1-byte-accounting",
+      "given": "each codec bf16 / fp8 / nvfp4 on a supported pool (MHA FULL, hybrid-SWA, QSA)",
+      "when": "create the pool and read its payload_bytes/scale_bytes per token",
+      "then": "packed codes + sidecar scales match the codec table exactly",
+      "assertion": "nvfp4 = packed E2M1 + E4M3 block scales + fp32 row scales; fp8 = e4m3 + fp32 row scales; byte tests exact",
+      "existing": true
+    },
+    {
+      "id": "18a-F2-same-slots",
+      "given": "expert cache slots fixed at 2600, 16k context, same checkpoint",
+      "when": "decode with --kv-cache-dtype in {bf16, fp8, nvfp4}",
+      "then": "the only varying factor is the KV codec restore/read path",
+      "assertion": "record output tok/s and PPL per codec at identical slots; raw rows unedited",
+      "existing": false,
+      "required_hardware": "RTX3090 target"
+    },
+    {
+      "id": "18a-F3-same-vram",
+      "given": "VRAM budget fixed (memory-ratio 0.90, --moe-cache-auto, 220k)",
+      "when": "decode with --kv-cache-dtype in {bf16, fp8, nvfp4}",
+      "then": "smaller KV frees expert slots; the system effect is slots + miss + tok/s",
+      "assertion": "record resolved slots, miss rate and tok/s per codec",
+      "existing": false,
+      "required_hardware": "RTX3090 target"
+    }
+  ],
+  "invalid_negative": [
+    {
+      "id": "18a-N1-fp8-faster-only-due-slots",
+      "given": "fp8 measures faster than bf16 in comparison B (same VRAM)",
+      "when": "re-check comparison A (same slots)",
+      "then": "if the fp8 advantage disappears at equal slots, it is the extra expert residency, not the codec",
+      "assertion": "report A and B; the codec verdict is taken from A only",
+      "existing": false,
+      "required_hardware": "RTX3090 target"
+    },
+    {
+      "id": "18a-N2-low-context-slower",
+      "given": "4k context, where KV bytes are a small fraction",
+      "when": "compare codecs",
+      "then": "dequant overhead can make quant slower with no capacity benefit; do not claim a low-context win",
+      "assertion": "per-context reporting only; no pooling across contexts",
+      "existing": false,
+      "required_hardware": "RTX3090 target"
+    },
+    {
+      "id": "18a-N3-rejected-unsupported-codec",
+      "given": "DSA/MLA (pending) or DSV4 paged / BSA (no scale-read path) with a quant codec",
+      "when": "create_kv_pool / create_kvcache_pool",
+      "then": "raise loudly; never silently serve a 16-bit slab priced as packed",
+      "assertion": "DSA/MLA -> NotImplementedError; DSV4 paged and BSA -> ValueError",
+      "existing": true
+    },
+    {
+      "id": "18a-N4-nvfp4-head-dim",
+      "given": "a KV group with head_dim not divisible by 16",
+      "when": "create_kvcache_pool(kv_quant='nvfp4')",
+      "then": "reject",
+      "assertion": "ValueError mentioning head_dim divisible by 16",
+      "existing": true
+    },
+    {
+      "id": "18a-N5-bf16-220k-ooms",
+      "given": "bf16 KV at 220k (25,358 B/token ~= 5.56 GiB) alongside the expert cache",
+      "when": "serve bf16 at num-tokens 220032",
+      "then": "expected to OOM; it is a reported skip, not a zero",
+      "assertion": "OOM row recorded separately; never averaged into the mean",
+      "existing": false,
+      "required_hardware": "RTX3090 target"
+    }
+  ]
+}

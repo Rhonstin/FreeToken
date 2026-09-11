@@ -1,0 +1,36 @@
+{
+  "task_key": "18a",
+  "bead_id": "FreeToken-mtp-1ll.35",
+  "outcome": "contract_ready",
+  "tested_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4 (config_sha256 e765305d..., hf_quant_sha256 7e69ef4b...)",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "acceptance_ids": {
+    "kv_quant_epic": "freetoken-kv-quantization-epic-5y2",
+    "fp8": "5y2.1-5y2.13 (PR #354)",
+    "nvfp4": "5y2.14-5y2.16 (PR #408, stacked)",
+    "backlog": "5y2.18 (MLA storage/read)"
+  },
+  "cases": [
+    {"id": "18a-C0-byte-tests", "status": "pass", "command_id": "18a-CMD2", "log_path": "raw/pytest-kv-quant.txt"},
+    {"id": "18a-C1-same-slots", "status": "skip", "command_id": "18a-CMD3", "log_path": null, "reason": "GPU b-phase"},
+    {"id": "18a-C2-same-vram", "status": "skip", "command_id": "18a-CMD4", "log_path": null, "reason": "GPU b-phase"},
+    {"id": "18a-C3-reject-matrix", "status": "pass", "command_id": "18a-CMD1", "log_path": "raw/pytest-kv-quant.txt"},
+    {"id": "18a-C4-nvfp4-head-dim", "status": "pass", "command_id": "18a-CMD1", "log_path": "raw/pytest-kv-quant.txt"},
+    {"id": "18a-N1-fp8-attr", "status": "design", "command_id": null, "log_path": null},
+    {"id": "18a-N2-low-context", "status": "design", "command_id": null, "log_path": null},
+    {"id": "18a-N3-unsupported", "status": "pass", "command_id": "18a-CMD1", "log_path": "raw/pytest-kv-quant.txt"}
+  ],
+  "measurements": [
+    {"run_id": "18a-baseline-kv-quant-tests", "raw_path": "raw/pytest-kv-quant.txt", "result": "kvcache -k quant/nvfp4/fp8/codec/reject: 20 passed, 4 skipped; test_cache_unit_bytes.py: 21 passed"}
+  ],
+  "failures": [],
+  "limitations": [
+    "fp8 bytes/token is derived from the 07 capacity ratio, not independently measured.",
+    "bf16 at 220k is expected to OOM and must be reported as a skip, not a zero.",
+    "Only MHA/hybrid-SWA/QSA have quant scale-read paths in this tree; MLA is 5y2.18 backlog.",
+    "GPU matrices (same-slot and same-VRAM) are b-phase; no prod change made."
+  ],
+  "rollback_result": "not_applicable (no production code touched in phase a; prod keeps --kv-cache-dtype nvfp4)"
+}

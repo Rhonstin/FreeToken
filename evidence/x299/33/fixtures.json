@@ -1,0 +1,109 @@
+{
+  "task_key": "17a",
+  "bead_id": "FreeToken-mtp-1ll.33",
+  "note": "Fixtures are specified as given/when/then with exact assertions. Cases marked existing=true are already pinned by tests/engine/test_lookup_draft.py at the baseline SHA (10 passed); the b-phase adds the design ones.",
+  "valid": [
+    {
+      "id": "17a-F1-repeat",
+      "given": "LookupDrafter(max_ngram=6) and history [1,2,3,4,5,6,7,1,2,3], depth=3, tip=3",
+      "when": "plan(req, depth=3, anchor_token=3)",
+      "then": "returns 3 and take(uid,3) == [4,5,6]",
+      "assertion": "plan == 3; take == [4,5,6]",
+      "existing": true
+    },
+    {
+      "id": "17a-F2-longest-match",
+      "given": "history [1,2,3,4,5,2,3,9,9,1,2,3], depth=2",
+      "when": "plan(req, 2, tip=3)",
+      "then": "the longest suffix (1,2,3)->[4,5] wins over (2,3)->[9,9]",
+      "assertion": "take == [4,5]",
+      "existing": true
+    },
+    {
+      "id": "17a-F3-clamp",
+      "given": "history [7,8,1,2,1,2], depth=4",
+      "when": "plan(req, 4, tip=2)",
+      "then": "only [1,2] remains after the earlier occurrence",
+      "assertion": "plan == 2; take == [1,2]",
+      "existing": true
+    },
+    {
+      "id": "17a-F4-anchor-not-indexed",
+      "given": "history [1,2,3,4,5,6,7,1,2] with anchor 3 not yet in input_ids",
+      "when": "plan(req, 3, anchor_token=3)",
+      "then": "suffix built with the anchor as tip",
+      "assertion": "plan == 3; take == [4,5,6]",
+      "existing": true
+    }
+  ],
+  "invalid_negative": [
+    {
+      "id": "17a-N1-no-repeat",
+      "given": "history [1,2,3,4,5,6,7,8], depth=4",
+      "when": "plan(req, 4, tip=8)",
+      "then": "no earlier match => zero drafts, the step stays a plain decode row",
+      "assertion": "plan == 0; take == []",
+      "existing": true
+    },
+    {
+      "id": "17a-N2-huge-repeat",
+      "given": "a single suffix repeated N times in the history (large N)",
+      "when": "plan(req, depth, tip)",
+      "then": "work is bounded by max_ngram/depth, not by N; the positions map keeps at most two ends per n-gram key",
+      "assertion": "plan returns len <= depth; every positions value has len<=2; plan does not iterate over all N occurrences",
+      "existing": false,
+      "design_assertion": "inspect _ReqIndex.positions: values are (end, prev|None); propose only looks up the single key and max over <=2 ends"
+    },
+    {
+      "id": "17a-N3-suffix-overlap",
+      "given": "history whose suffix overlaps its own earlier occurrence, e.g. [1,2,1,2,1,2]",
+      "when": "plan(req, depth=4, tip=2)",
+      "then": "an occurrence at or past base-k is not treated as the earlier match; no self-overlap proposal beyond the available tail",
+      "assertion": "the chosen end satisfies end <= base - k; proposal never points into the current suffix's own span",
+      "existing": true
+    },
+    {
+      "id": "17a-N4-cross-request-same-text",
+      "given": "two requests, different uids, identical input_ids and identical anchor",
+      "when": "plan both, then drop(uid1)",
+      "then": "each request indexes and stashes independently; dropping one leaves the other's plan intact",
+      "assertion": "plan(uid2) unchanged after drop(uid1); _index and _planned keyed by uid",
+      "existing": false,
+      "design_assertion": "LookupDrafter._index / _planned are dicts keyed by req.uid; drop pops only that uid"
+    },
+    {
+      "id": "17a-N5-min-ngram",
+      "given": "matches only shorter than min_ngram (e.g. max_ngram=4, min_ngram=3, pair repeat only)",
+      "when": "plan(req, 4, tip)",
+      "then": "weak matches are rejected",
+      "assertion": "plan == 0",
+      "existing": true
+    },
+    {
+      "id": "17a-N6-invalid-config",
+      "given": "min_ngram > max_ngram",
+      "when": "LookupDrafter(max_ngram=2, min_ngram=3)",
+      "then": "construction fails loudly, not a silently broken drafter",
+      "assertion": "AssertionError",
+      "existing": true
+    },
+    {
+      "id": "17a-N7-mutual-exclusion",
+      "given": "lookup_draft > 0 and mtp_depth > 0 in the same config",
+      "when": "ServerArgs.validate",
+      "then": "one drafter per run",
+      "assertion": "ValueError",
+      "existing": false,
+      "design_assertion": "config.py:121 guards lookup_draft and mtp_depth"
+    },
+    {
+      "id": "17a-N8-prose-no-op",
+      "given": "non-repetitive prose prompt on the target GPU, greedy",
+      "when": "serve --lookup-draft 4 and decode",
+      "then": "no drafts on most steps; output token IDs identical to plain decode; no throughput regression beyond noise",
+      "assertion": "token-id equality; |delta tok/s| within run noise",
+      "existing": false,
+      "required_hardware": "RTX3090 target"
+    }
+  ]
+}

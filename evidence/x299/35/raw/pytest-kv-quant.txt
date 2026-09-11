@@ -1,0 +1,11 @@
+### -k quant/nvfp4/fp8/codec/reject (tests/kvcache)
+....................ss                                                   [100%]
+20 passed, 4 skipped, 258 deselected in 2.41s
+
+### tests/kvcache/test_cache_unit_bytes.py
+.....................                                                    [100%]
+21 passed in 2.36s
+
+### tests/kvcache/test_qsa_pool_fp8.py
+
+1 skipped in 2.44s

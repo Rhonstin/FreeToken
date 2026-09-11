@@ -1,0 +1,114 @@
+{
+  "schema_version": 2,
+  "task_key": "18a",
+  "bead_id": "FreeToken-mtp-1ll.35",
+  "title": "Joint tuning of KV quantization and expert residency - contract and fixtures",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "dev_source_git_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "worktree_diff_sha256": "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "same checkpoint for every comparison (plan contract)"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "acceptance_ids": {
+    "kv_quant_epic": "freetoken-kv-quantization-epic-5y2",
+    "fp8": "tasks 5y2.1-5y2.13 (PR #354)",
+    "nvfp4": "tasks 5y2.14-5y2.16 (PR #408, stacked)",
+    "mla_backlog": "5y2.18",
+    "codec_gate_comments": ["python/freetoken/kvcache/__init__.py:79", "python/freetoken/kvcache/__init__.py:174"],
+    "x299": ["07a KV/expert frontier", "07b auto/right-size", "45 prod auto@220k"]
+  },
+  "scope_files": [
+    "python/freetoken/kvcache/__init__.py",
+    "python/freetoken/kvcache/base.py",
+    "python/freetoken/kvcache/mha_pool.py",
+    "python/freetoken/kvcache/hybrid_swa_pool.py",
+    "python/freetoken/kvcache/qsa_pool.py",
+    "python/freetoken/engine/engine.py",
+    "python/freetoken/moe/bench_profile.py",
+    "tests/kvcache/test_cache_unit_bytes.py",
+    "tests/kvcache/test_qsa_pool_fp8.py"
+  ],
+  "symbols": {
+    "existing": [
+      "freetoken.kvcache.create_kvcache_pool(kv_quant=...)",
+      "freetoken.kvcache._reject_unsupported_quant",
+      "freetoken.kvcache._quant_storage_pending",
+      "freetoken.kvcache.base.FP8_KV_SCALE_BYTES",
+      "freetoken.kvcache.base KV_QUANT codec table",
+      "freetoken.engine.engine cache budget / --moe-cache-auto resolution",
+      "freetoken.moe.bench_profile fingerprint/matcher"
+    ],
+    "proposed": []
+  },
+  "inputs": {
+    "kv_bytes_per_token_nvfp4": {"value": 7877, "source": "07a frontier", "unit": "bytes/token"},
+    "kv_bytes_per_token_bf16": {"value": 25358, "source": "07a frontier", "unit": "bytes/token"},
+    "kv_bytes_per_token_fp8": {"value": 15183, "source": "derived: 25358 / 1.67 capacity ratio (llmserver-prod memory)", "unit": "bytes/token", "note": "derived, not independently measured; treat as approximate until phase b"},
+    "expert_slot_bytes": {"value": 2764824, "source": "07a frontier", "unit": "bytes/slot"},
+    "prod_cache_slots": {"value": 2600, "source": "systemd drop-in", "unit": "slots"},
+    "auto_cache_slots_220k": {"value": 3447, "source": "07b/220k-auto", "unit": "slots"},
+    "prod_kv_220k_nvfp4_gib": {"value": 1.61, "source": "llmserver-prod memory", "unit": "GiB"},
+    "memory_ratio": {"value": 0.90, "source": "systemd drop-in", "unit": "fraction"},
+    "ppl_nvfp4_vs_bf16_pct": {"value": 0.87, "source": "llmserver-prod memory", "unit": "percent", "note": "KV codec quality delta"},
+    "ppl_fp8_vs_bf16_pct": {"value": 0.23, "source": "llmserver-prod memory", "unit": "percent"},
+    "prod_decode_tok_s": {"value": 17.53, "source": "bd memory freetoken-x299-baseline-decode", "unit": "output tok/s"},
+    "auto_decode_tok_s_16k": {"value": 21.01, "source": "220k-auto memory", "unit": "output tok/s"},
+    "supported_pools_quant": {"value": ["MHA (FULL)", "HybridSWA", "QSA"], "source": "kvcache/__init__.py:126-155,174-188", "unit": "pool family", "note": "fp8+nvfp4 scale-read paths verified 5y2.4-5y2.9, 5y2.15"},
+    "unsupported_pools_quant": {"value": {"DSA/MLA": "NotImplementedError", "DSV4 paged": "ValueError", "BSA": "ValueError"}, "source": "kvcache/__init__.py:79-97,114,230", "unit": "pool family"},
+    "nvfp4_head_dim_constraint": {"value": 16, "source": "kvcache/__init__.py:188", "unit": "divisor"}
+  },
+  "invariants": [
+    "Same checkpoint for every comparison (byte-identical config/HF quant digests).",
+    "Two comparisons only: (A) same expert slots -> isolates the KV codec restore/read effect; (B) same VRAM budget -> captures the system tradeoff (smaller KV frees slots -> fewer expert misses). A codec win must be attributed by A, not inferred from B.",
+    "Byte/scale accounting is exact: packed codes + E4M3 block scales + fp32 row scales per the codec table; page/index maps and counters exact.",
+    "Unsupported codecs fail loudly at pool construction (ValueError/NotImplementedError); never silently serve a 16-bit slab priced as packed.",
+    "nvfp4 requires paged FULL / hybrid-SWA / QSA groups with head_dim % 16 == 0.",
+    "No cache size from a negative remaining budget (memory contract); RAM reserve respected.",
+    "Null measurement is not zero: OOM/error rows are reported separately, never averaged in."
+  ],
+  "cases": [
+    {"id": "18a-C0-byte-tests", "given": "each codec (bf16/fp8/nvfp4) and the supported pools", "action": "unit byte/size assertions", "expected": "exact payload+scale bytes per token", "assertion": "existing kvcache byte tests pass", "required_hardware": null, "status": "pass"},
+    {"id": "18a-C1-same-slots", "given": "fixed expert cache slots (2600), 16k context", "action": "vary --kv-cache-dtype in {bf16, fp8, nvfp4}", "expected": "decode tok/s and PPL at identical slots -> isolates codec restore", "assertion": "paired A/B, raw rows unedited", "required_hardware": "RTX3090 target", "status": "b-phase"},
+    {"id": "18a-C2-same-vram", "given": "fixed VRAM budget (memory-ratio 0.90, --moe-cache-auto, 220k)", "action": "vary --kv-cache-dtype in {bf16, fp8, nvfp4}", "expected": "different slot counts and miss rates -> captures system tradeoff", "assertion": "record slots, miss, tok/s per codec", "required_hardware": "RTX3090 target", "status": "b-phase"},
+    {"id": "18a-C3-reject-matrix", "given": "unsupported pool x codec pairs", "action": "create_kv_pool", "expected": "ValueError / NotImplementedError, not a silent downgrade", "assertion": "exact exception type and message", "required_hardware": null, "status": "pass"},
+    {"id": "18a-C4-nvfp4-head-dim", "given": "a group with head_dim not divisible by 16", "action": "create_kvcache_pool(kv_quant='nvfp4')", "expected": "ValueError", "assertion": "exact exception", "required_hardware": null, "status": "pass"},
+    {"id": "18a-N1-fp8-attr", "given": "fp8 appears faster than bf16 at high context", "action": "re-check comparison A (same slots)", "expected": "if the gain vanishes at same slots it is residency, not the codec", "assertion": "report both A and B; never attribute a B gain to the codec", "required_hardware": "RTX3090 target", "status": "design"},
+    {"id": "18a-N2-low-context", "given": "4k context, KV saving negligible", "action": "compare codecs", "expected": "quant overhead may make decode slower; no adoption claim at low context from a high-context win", "assertion": "per-context reporting, no cross-context pooling", "required_hardware": "RTX3090 target", "status": "design"},
+    {"id": "18a-N3-unsupported", "given": "DSA/MLA or DSV4/BSA pool with a quant codec", "action": "create pool", "expected": "loud rejection", "assertion": "ValueError/NotImplementedError", "required_hardware": null, "status": "pass"}
+  ],
+  "commands": [
+    {"id": "18a-CMD1", "argv": [".venv/bin/python", "-m", "pytest", "-q", "tests/kvcache", "-k", "quant or nvfp4 or fp8 or codec or reject"], "cwd": "dev worktree", "timeout_s": 300, "expected_exit": 0, "phase": "a", "artifact": "raw/pytest-kv-quant.txt", "note": "baseline before any code edit: 20 passed, 4 skipped"},
+    {"id": "18a-CMD2", "argv": [".venv/bin/python", "-m", "pytest", "-q", "tests/kvcache/test_cache_unit_bytes.py"], "cwd": "dev worktree", "timeout_s": 300, "expected_exit": 0, "phase": "a", "artifact": "raw/pytest-kv-quant.txt", "note": "exact byte accounting: 21 passed"},
+    {"id": "18a-CMD3", "argv": ["/opt/freetoken-venv/bin/ft", "serve", "--moe-strategy", "offload", "--kv-cache-dtype", "<bf16|fp8|nvfp4>", "--moe-cache-size", "2600", "--num-tokens", "220032", "--memory-ratio", "0.90"], "cwd": "/opt/FreeToken", "target": "llmserver", "timeout_s": 900, "expected_exit": 0, "phase": "b", "note": "comparison A: same slots"},
+    {"id": "18a-CMD4", "argv": ["/opt/freetoken-venv/bin/ft", "serve", "--moe-strategy", "offload", "--kv-cache-dtype", "<bf16|fp8|nvfp4>", "--moe-cache-auto", "--num-tokens", "220032", "--memory-ratio", "0.90"], "cwd": "/opt/FreeToken", "target": "llmserver", "timeout_s": 900, "expected_exit": 0, "phase": "b", "note": "comparison B: same VRAM"}
+  ],
+  "performance_gate": {
+    "metric": "median output tok/s (paired, uninstrumented) and expert miss rate",
+    "direction": "maximize",
+    "threshold": ">=5% vs prod (nvfp4, manual 2600) at 16k/64k while keeping 220k, or an equal-throughput capacity gain with no miss regression",
+    "null_result": "no-change ADR; prod keeps nvfp4",
+    "guard": "byte tests exact; no silent dtype downgrade; per-context reporting"
+  },
+  "quality_gate": {
+    "byte_accounting": "exact (codec storage tests)",
+    "ppl": "record codec delta vs bf16 (nvfp4 +0.87%, fp8 +0.23% per prod measurement); do not regress beyond the KV epic gate",
+    "attribution": "same-slot comparison decides codec quality/speed; same-VRAM comparison only decides the system tradeoff"
+  },
+  "candidates": {
+    "bounded": {"kv_cache_dtype": ["bf16", "fp8", "nvfp4"], "residency": ["manual 2600 (fixed slots)", "auto (retuned)"], "context": ["4k", "16k", "64k", "220k"]},
+    "fixed": ["checkpoint", "moe-strategy offload", "memory-ratio 0.90", "num-tokens 220032", "max-running-requests 1", "greedy"]
+  },
+  "rollback_recipe": "Prod keeps --kv-cache-dtype nvfp4; restore by reverting any pool/codec source edit (git checkout scope_files) and by setting the systemd drop-in back to nvfp4. Byte tests (18a-CMD1/2) must pass before and after.",
+  "limitations": [
+    "fp8 bytes/token is derived from the 07 capacity ratio, not independently measured; phase b should confirm.",
+    "bf16 KV at 220k needs 5.56 GiB and may not fit alongside the expert cache; bf16 rows at 220k are expected to OOM and are reported, not averaged.",
+    "Only MHA/hybrid-SWA/QSA have quant scale-read paths in this tree; MLA is 5y2.18 backlog.",
+    "Heap: --moe-cache-auto resolution is shared with task 07/45; this task must not relitigate the 220k-vs-32k tradeoff."
+  ],
+  "generated_utc": "2026-09-11"
+}

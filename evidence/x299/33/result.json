@@ -1,0 +1,33 @@
+{
+  "task_key": "17a",
+  "bead_id": "FreeToken-mtp-1ll.33",
+  "outcome": "contract_ready",
+  "tested_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4 (config_sha256 e765305d..., hf_quant_sha256 7e69ef4b...)",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "cases": [
+    {"id": "17a-C1-no-repeat", "status": "pass", "command_id": "17a-CMD1", "log_path": "raw/pytest-lookup.txt"},
+    {"id": "17a-C2-repeat", "status": "pass", "command_id": "17a-CMD1", "log_path": "raw/pytest-lookup.txt"},
+    {"id": "17a-C3-longest-match", "status": "pass", "command_id": "17a-CMD1", "log_path": "raw/pytest-lookup.txt"},
+    {"id": "17a-C4-huge-repeat", "status": "design", "command_id": null, "log_path": null},
+    {"id": "17a-C5-suffix-overlap", "status": "pass", "command_id": "17a-CMD1", "log_path": "raw/pytest-lookup.txt"},
+    {"id": "17a-C6-cross-request", "status": "design", "command_id": null, "log_path": null},
+    {"id": "17a-C7-anchor-not-indexed", "status": "pass", "command_id": "17a-CMD1", "log_path": "raw/pytest-lookup.txt"},
+    {"id": "17a-C8-min-ngram", "status": "pass", "command_id": "17a-CMD1", "log_path": "raw/pytest-lookup.txt"},
+    {"id": "17a-C9-invalid-config", "status": "pass", "command_id": "17a-CMD1", "log_path": "raw/pytest-lookup.txt"},
+    {"id": "17a-C10-mutual-exclusion", "status": "design", "command_id": null, "log_path": null},
+    {"id": "17a-C11-greedy-parity", "status": "skip", "command_id": "17a-CMD3", "log_path": null, "reason": "GPU b-phase; hardware present at llmserver"},
+    {"id": "17a-C12-throughput", "status": "skip", "command_id": "17a-CMD3", "log_path": null, "reason": "GPU b-phase; hardware present at llmserver"}
+  ],
+  "measurements": [
+    {"run_id": "17a-baseline-lookup-tests", "raw_path": "raw/pytest-lookup.txt", "result": "10 passed in 2.29s"}
+  ],
+  "failures": [],
+  "limitations": [
+    "The a-phase pins the CPU drafter and scheduler wiring; GPU greedy parity and throughput are b-phase (17a-C11/C12).",
+    "Design-only fixtures (huge repeat, cross-request, mutual exclusion, prose no-op) are specified with exact assertions but not yet coded; the b-phase adds them.",
+    "PLD helps only self-repetitive requests; the gate is workload-conditional."
+  ],
+  "rollback_result": "not_applicable (no production code touched in phase a; lookup is opt-in via --lookup-draft, default 0)"
+}
