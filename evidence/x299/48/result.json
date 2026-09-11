@@ -1,0 +1,42 @@
+{
+  "task_key": "48",
+  "bead_id": "FreeToken-mtp-1ll.48",
+  "title": "Decode-path quality campaign: offload vs hybrid",
+  "outcome": "implemented",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "protocol": {
+    "dataset": "GSM8K test, first 40 rows (HF datasets-server), fixed jsonl",
+    "sampling": "greedy (temperature 0, top_p 1, top_k -1), reasoning_effort=low, max_tokens 1536",
+    "servers": "offload vs hybrid --moe-hybrid-max-fetch 1, both --moe-cache-auto --max-running-requests 1, kv nvfp4 220032, memory-ratio 0.90",
+    "grading": "final numeric answer (#### <n>), exact match vs gold",
+    "paired": true
+  },
+  "results": {
+    "offload": {"correct": 39, "n": 40, "accuracy": 0.975},
+    "hybrid": {"correct": 39, "n": 40, "accuracy": 0.975},
+    "delta_accuracy": 0.0,
+    "discordant_pairs": {"offload_only": [], "hybrid_only": []},
+    "mcnemar_p_value": 1.0,
+    "same_predicted_answer": "40/40",
+    "shared_wrong_item": {"id": 12, "gold": "13", "pred": "12"},
+    "content_differs": "28/40 (CoT trajectories differ; final answers agree)",
+    "speed": {"offload_tok_s": 13.78, "hybrid_tok_s": 19.37, "gain_pct": 40.6,
+              "offload_s_per_item": 22.4, "hybrid_s_per_item": 16.5,
+              "completion_tokens_offload": 12367, "completion_tokens_hybrid": 12812}
+  },
+  "decision": {
+    "quality_gate": "PASS (no regression detected: identical accuracy, 0 discordant pairs, identical final answers)",
+    "adopt_hybrid_default": "permitted by this gate, but NOT switched in this task",
+    "reason_to_wait": "40-item easy greedy subset at effort low; the residual risk is long-CoT divergence on hard reasoning, and hybrid perf was not measured at the adopted 220k/auto/mr1 shape",
+    "recommended_next": "prod-shape hybrid run (16k/64k/220k + full prefill, auto@mr1) and optionally a harder set (AIME25 cached) before switching the default"
+  },
+  "evidence": ["raw/gsm8k-eval.jsonl", "raw/gsm8k.jsonl", "raw/run-48.log", "raw/serve-hybrid.log", "raw/serve-offload.log"],
+  "limitations": [
+    "40 items, greedy, reasoning_effort=low: limited power and does not exercise long-CoT chaos.",
+    "CoT text differs on 28/40 items even though answers match; greedys are not bit-identical between offload and hybrid.",
+    "Offload baseline here (13.78 tok/s) is at short context; the +40% is this workload, not the 220k decode.",
+    "AIME25 is cached on the host for a stronger follow-up."
+  ],
+  "generated_utc": "2026-09-11"
+}

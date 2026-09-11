@@ -1,0 +1,5 @@
+[
+  {"id": "48-CMD0", "argv": ["/opt/freetoken-venv/bin/python", "evidence/x299/48/fetch_gsm8k.py", "40", "evidence/x299/48/raw/gsm8k.jsonl"], "cwd": "/opt/FreeToken", "target": "llmserver", "timeout_s": 120, "expected_exit": 0, "artifact": "raw/gsm8k.jsonl", "note": "fixed GSM8K test subset"},
+  {"id": "48-CMD1", "argv": ["/opt/freetoken-venv/bin/python", "evidence/x299/48/gsm8k_eval.py", "--origin", "http://127.0.0.1:2096", "--data", "evidence/x299/48/raw/gsm8k.jsonl", "--tag", "gsm8k-offload", "--max-tokens", "1536", "--effort", "low"], "cwd": "/opt/FreeToken", "target": "llmserver", "timeout_s": 3600, "expected_exit": 0, "artifact": "raw/gsm8k-eval.jsonl", "note": "offload 39/40"},
+  {"id": "48-CMD2", "argv": ["/opt/freetoken-venv/bin/python", "evidence/x299/48/gsm8k_eval.py", "--origin", "http://127.0.0.1:2097", "--data", "evidence/x299/48/raw/gsm8k.jsonl", "--tag", "gsm8k-hybrid", "--max-tokens", "1536", "--effort", "low"], "cwd": "/opt/FreeToken", "target": "llmserver", "timeout_s": 3600, "expected_exit": 0, "artifact": "raw/gsm8k-eval.jsonl", "note": "hybrid fetch1 39/40, +40.6% tok/s"}
+]
