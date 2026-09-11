@@ -1,0 +1,113 @@
+{
+  "task_key": "06a",
+  "outcome": "contract_ready",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "cases": [
+    {
+      "id": "06a-C1-physical-reps",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-C2-resolve",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-C3-isa-flags",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-C4-compiled-tiers",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-C5-thread-grid",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-C6-baseline-cpumoe",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-N1-smt-siblings",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-N2-uneven-cpuset",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-N3-request-gt-allowed",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-N4-no-avx512",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-N5-avx512-throttle",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-N6-ple-steals-cores",
+      "status": "pass",
+      "command_id": "06a-CMD1..4",
+      "log_path": "raw/cpu-baseline.txt"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "06a-cpu-baseline",
+      "raw_path": "raw/cpu-baseline.txt",
+      "sha256": "a88b66cc6ad45cac1a8b768fa922bdf429f7c0dbd2e0d483319f6b20623ee4ff"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Effective clock under sustained AVX-512 is sampled in 06b (idle shows 4.0 GHz, governor powersave).",
+    "PLE disk IO worker thread count is not yet exposed; its core usage is measured, not tuned, in 06b.",
+    "SMT candidates are secondary and may be rejected as unstable."
+  ],
+  "rollback_result": "not_required (no code change)",
+  "key_findings": {
+    "physical_cores": 6,
+    "thread_grid": [
+      1,
+      2,
+      4,
+      5,
+      6
+    ],
+    "smt_grid": [
+      8,
+      12
+    ],
+    "isa": {
+      "avx2": true,
+      "avx512f": true,
+      "avx512bf16": false
+    },
+    "cpu_moe_baseline_gbs": 30.88
+  }
+}

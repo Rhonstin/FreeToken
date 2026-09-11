@@ -1,0 +1,291 @@
+{
+  "schema_version": 2,
+  "task_key": "06b",
+  "bead_id": "FreeToken-mtp-1ll.12",
+  "derived_from_contract": "../06a/contract.json",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/moe/cpu_executor.py",
+    "python/freetoken/kernel/csrc/cpu_moe/cpu_moe_ext.cpp",
+    "python/freetoken/moe/benchbw.py",
+    "tests/moe/test_cpu_moe.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/moe/cpu_executor.py": [
+        "physical_core_cpus",
+        "resolve_threads_and_affinity",
+        "CpuMoeExecutor",
+        "compiled_extension_supports"
+      ],
+      "python/freetoken/kernel/csrc/cpu_moe/cpu_moe_ext.cpp": [
+        "dot_scalar",
+        "dot_avx2fma",
+        "dot_avx512f",
+        "dot_avx512bf16",
+        "FREETOKEN_CPU_MOE_ISA"
+      ],
+      "python/freetoken/moe/benchbw.py": [
+        "_ISA_TIERS",
+        "_forced_isa",
+        "--isa",
+        "--cpu-threads",
+        "isa_sweep"
+      ],
+      "tests/moe/test_cpu_moe.py": [
+        "test_cpu_decode_matches_gpu_decode_kernel",
+        "test_cpu_decode_nvfp4_matches_dequant_then_gpu",
+        "test_cpu_moe_decode_cuda_graph_replay"
+      ]
+    },
+    "proposed": []
+  },
+  "inputs": {
+    "isa_microbench_gbs": {
+      "value": {
+        "avx512f": 35.98,
+        "scalar": 5.69,
+        "avx2": 22.88
+      },
+      "source": "raw/benchbw-isa.json",
+      "unit": "GB/s"
+    },
+    "thread_full_model_tok_s": {
+      "value": {
+        "t2": 14.1,
+        "t4": 22.97,
+        "t6": 26.19,
+        "t8smt": 28.48,
+        "t6-avx2": 21.87
+      },
+      "source": "raw/threads.jsonl",
+      "unit": "tok/s"
+    },
+    "thread_medians": {
+      "value": {
+        "t6": 26.42,
+        "t8": 27.24
+      },
+      "source": "threads + confirm",
+      "unit": "tok/s"
+    },
+    "isa_full_model_gain_pct": {
+      "value": 19.8,
+      "source": "t6 vs t6-avx2",
+      "unit": "%"
+    },
+    "max_cur_freq_khz": {
+      "value": {
+        "t6": 4003654,
+        "t4": 4000993,
+        "t6-avx2": 4056065,
+        "t8smt": 4002782,
+        "t2": 4002176
+      },
+      "source": "scaling_cur_freq samples",
+      "unit": "kHz"
+    }
+  },
+  "invariants": [
+    "avx512 is already the auto tier and is faster than avx2 both in microbench and full model.",
+    "No all-core frequency drop under sustained load (max ~4.0 GHz, intel_pstate).",
+    "SMT (8 threads) shows no stable gain over 6 physical threads across ABBA repeats -> not adopted.",
+    "Defaults already match the measured optimum: explicit --moe-cpu-threads is honored but no code default change is justified.",
+    "Unsupported ISA tiers clamp down; scalar/avx2 measured as controls."
+  ],
+  "cases": [
+    {
+      "id": "06b-C1-isa-microbench",
+      "given": "benchbw --isa all",
+      "action": "sweep tiers",
+      "expected": "avx512 > avx2 > scalar",
+      "status": "pass",
+      "assertion": "avx512f 35.98 / avx2 22.88 / scalar 5.69 GB/s"
+    },
+    {
+      "id": "06b-C2-isa-full-model",
+      "given": "hybrid f1 4k, 6 threads",
+      "action": "avx512 vs avx2",
+      "expected": "avx512 faster",
+      "status": "pass",
+      "assertion": "26.19 vs 21.87 tok/s (+19.8%)"
+    },
+    {
+      "id": "06b-C3-thread-scaling",
+      "given": "hybrid f1 4k",
+      "action": "threads 2/4/6",
+      "expected": "scaling with knee",
+      "status": "pass",
+      "assertion": "t2 14.1 / t4 22.97 / t6 26.42 tok/s"
+    },
+    {
+      "id": "06b-C4-smt",
+      "given": "threads 8 (SMT)",
+      "action": "ABBA vs 6",
+      "expected": "stable gain required to change default",
+      "status": "pass",
+      "assertion": "t6 median 26.42 vs t8 median 27.24 -> within noise"
+    },
+    {
+      "id": "06b-C5-clock",
+      "given": "sustained load",
+      "action": "sample scaling_cur_freq",
+      "expected": "no all-core throttle",
+      "status": "pass",
+      "assertion": "max 4056065 kHz across runs (~4.0 GHz)"
+    },
+    {
+      "id": "06b-C6-recommendation",
+      "given": "measured",
+      "action": "decide default",
+      "expected": "keep defaults unless stable gain",
+      "status": "pass",
+      "assertion": "auto=avx512 + physical-core threads unchanged"
+    },
+    {
+      "id": "06b-N1-smt-siblings",
+      "given": "t8 SMT",
+      "action": "measure",
+      "expected": "not default",
+      "status": "pass",
+      "assertion": "gain unstable -> not adopted"
+    },
+    {
+      "id": "06b-N2-uneven-cpuset",
+      "given": "restricted affinity",
+      "action": "not injected",
+      "expected": "restrict to affinity",
+      "status": "skip",
+      "assertion": "code path exists; not exercised"
+    },
+    {
+      "id": "06b-N3-request-gt-allowed",
+      "given": "oversubscribe",
+      "action": "not injected",
+      "expected": "never default",
+      "status": "skip",
+      "assertion": "not exercised"
+    },
+    {
+      "id": "06b-N4-no-avx512",
+      "given": "tier sweep",
+      "action": "avx2/scalar ran",
+      "expected": "clamps, never avx512 without flag",
+      "status": "pass",
+      "assertion": "scalar/avx2 measured; avx512bf16 clamped"
+    },
+    {
+      "id": "06b-N5-avx512-throttle",
+      "given": "sustained avx512",
+      "action": "clock",
+      "expected": "no drop",
+      "status": "pass",
+      "assertion": "max 4056065 kHz"
+    },
+    {
+      "id": "06b-N6-ple-steals-cores",
+      "given": "PLE disk IO",
+      "action": "not isolated",
+      "expected": "leave headroom",
+      "status": "skip",
+      "assertion": "not isolated in this run"
+    }
+  ],
+  "commands": [
+    {
+      "id": "06b-CMD1",
+      "argv": [
+        "env",
+        "CUDA_HOME=...nvidia/cu13",
+        "/opt/freetoken-venv/bin/ft",
+        "bench",
+        "bw",
+        "--dtype",
+        "nvfp4",
+        "--isa",
+        "all",
+        "--cpu-threads",
+        "6",
+        "-o",
+        "evidence/x299/06b/raw/benchbw-isa.json"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "06b-CMD2",
+      "argv": [
+        "/opt/freetoken-venv/bin/ft",
+        "serve",
+        "--moe-strategy",
+        "hybrid",
+        "--moe-hybrid-max-fetch",
+        "1",
+        "--moe-cpu-threads",
+        "<N>",
+        "--kv-cache-dtype",
+        "nvfp4",
+        "... fixed knobs ..."
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1500,
+      "expected_exit": 0,
+      "phase": "b"
+    },
+    {
+      "id": "06b-CMD3",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "evidence/x299/05b/context_probe.py",
+        "--prompt-dir",
+        "evidence/x299/03b/fixtures",
+        "--contexts",
+        "4k",
+        "--decode",
+        "128"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 600,
+      "expected_exit": 0,
+      "phase": "b"
+    }
+  ],
+  "performance_gate": {
+    "applies": true,
+    "result": "no change proposed",
+    "detail": "no candidate beat the default beyond noise, so the >=5% gate is not met"
+  },
+  "quality_gate": {
+    "applies": false,
+    "reason": "no code/model change"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified"
+  },
+  "recommendation": {
+    "auto_threads": "keep requested=0 -> one thread per physical core (6 on this i7)",
+    "isa": "keep auto avx512 (already default); do not force avx2",
+    "smt": "not recommended (no stable gain)"
+  },
+  "limitations": [
+    "Clock sampler records min/max across CPUs, not per-core; idle cores at 1.2 GHz dominate the min; max ~4.0 GHz is the busy-core ceiling.",
+    "SMT gain is small and noisy (±3%); a longer sustained run could revisit it.",
+    "PLE disk IO worker cores were not isolated."
+  ],
+  "generated_utc": "2026-09-11T13:12:00Z"
+}

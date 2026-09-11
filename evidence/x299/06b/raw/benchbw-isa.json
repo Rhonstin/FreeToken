@@ -1,0 +1,44 @@
+{
+  "version": 4,
+  "timestamp": "2026-09-11T12:45:36+00:00",
+  "epoch": 1789130736,
+  "host": "llmserver",
+  "gpu": {
+    "index": 0,
+    "name": "NVIDIA GeForce RTX 3090",
+    "uuid": "GPU-fd98efd2-8559-aa03-d51e-99d494ae8061"
+  },
+  "cpu": {
+    "physical_cores": 6,
+    "threads_used": 6
+  },
+  "threshold": 2.0,
+  "ceilings": {
+    "cpu_stream_read_gbs": 44.03,
+    "pcie_linear_h2d_gbs": 12.4,
+    "pcie_linear_d2h_gbs": 13.2
+  },
+  "dtypes": {
+    "nvfp4": "hybrid"
+  },
+  "dtype_kernels": {
+    "nvfp4": {
+      "expert_bytes": 7974912,
+      "synth_experts": 128,
+      "cpu_moe_gbs": 35.47,
+      "cpu_moe_isa": "avx512f",
+      "isa_sweep": {
+        "avx512f": 35.98,
+        "scalar": 5.69,
+        "avx2": 22.88
+      },
+      "pcie_gather_gbs": 12.4,
+      "cpu_moe_overlap_gbs": 30.43,
+      "pcie_gather_overlap_gbs": 12.23,
+      "ratio": 2.86,
+      "recommended": "hybrid",
+      "note": "isa tier labels are nominal: this W4A8 kernel rides AVX-VNNI regardless of the forced tier"
+    }
+  },
+  "workloads": {}
+}

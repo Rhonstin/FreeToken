@@ -1,0 +1,42 @@
+### affinity + physical reps
+pid 1282491's current affinity list: 0-11
+affinity [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+physical_reps [0, 1, 2, 3, 4, 5]
+requested 0 -> (6, [0, 1, 2, 3, 4, 5])
+requested 1 -> (1, [0])
+requested 2 -> (2, [0, 1])
+requested 4 -> (4, [0, 1, 2, 3])
+requested 5 -> (5, [0, 1, 2, 3, 4])
+requested 6 -> (6, [0, 1, 2, 3, 4, 5])
+requested 8 -> (8, [0, 1, 2, 3, 4, 5, 6, 7])
+requested 12 -> (12, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+### threads_per_core/siblings
+cpu0 siblings=0,6
+cpu1 siblings=1,7
+cpu2 siblings=2,8
+cpu3 siblings=3,9
+cpu4 siblings=4,10
+cpu5 siblings=5,11
+cpu6 siblings=0,6
+cpu7 siblings=1,7
+cpu8 siblings=2,8
+cpu9 siblings=3,9
+cpu10 siblings=4,10
+cpu11 siblings=5,11
+### scaling driver+cur/max freq
+intel_pstate
+powersave
+/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq:4000073
+/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq:4000000
+/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq:4000000
+### ISA tiers compiled
+112:__attribute__((target("avx512f")))
+144:__attribute__((target("avx512bf16,avx512f")))
+152:__attribute__((target("avx512bf16,avx512f")))
+178:__attribute__((target("avx2,fma")))
+187:__attribute__((target("avx2,fma")))
+322:__attribute__((target("avx2,fma")))
+332:__attribute__((target("avx512f")))
+344:__attribute__((target("avx512f")))
+377:__attribute__((target("avx2,fma")))
+387:__attribute__((target("avx2,fma")))

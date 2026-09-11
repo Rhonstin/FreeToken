@@ -1,0 +1,81 @@
+[
+  {
+    "id": "06a-CMD1",
+    "argv": [
+      "/opt/freetoken-venv/bin/python",
+      "-c",
+      "from freetoken.moe.cpu_executor import physical_core_cpus, resolve_threads_and_affinity"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 60,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/cpu-baseline.txt"
+  },
+  {
+    "id": "06a-CMD2",
+    "argv": [
+      "env",
+      "CUDA_HOME=...nvidia/cu13",
+      "/opt/freetoken-venv/bin/ft",
+      "bench",
+      "bw",
+      "--dtype",
+      "nvfp4",
+      "--isa",
+      "all",
+      "--cpu-threads",
+      "6",
+      "-o",
+      "evidence/x299/06b/raw/benchbw-isa.json"
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 900,
+    "expected_exit": 0,
+    "phase": "b",
+    "note": "ISA sweep over the same banks; excludes GPU-mismatch via CUDA_HOME"
+  },
+  {
+    "id": "06a-CMD3",
+    "argv": [
+      "env",
+      "CUDA_HOME=...",
+      "/opt/freetoken-venv/bin/ft",
+      "serve",
+      "--model",
+      "$FT_MODEL",
+      "--moe-strategy",
+      "hybrid",
+      "--moe-hybrid-max-fetch",
+      "1",
+      "--moe-cpu-threads",
+      "<N>",
+      "... fixed knobs ..."
+    ],
+    "cwd": "/opt/FreeToken",
+    "target": "llmserver",
+    "timeout_s": 1500,
+    "expected_exit": 0,
+    "phase": "b",
+    "note": "full-model TPOT at thread grid; explicit setting wins over auto"
+  },
+  {
+    "id": "06a-CMD4",
+    "argv": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/moe/test_cpu_moe.py",
+      "-m",
+      "not slow"
+    ],
+    "cwd": "dev worktree",
+    "timeout_s": 900,
+    "expected_exit": 0,
+    "phase": "b",
+    "note": "CPU MoE correctness must stay green across thread counts"
+  }
+]

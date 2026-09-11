@@ -1,0 +1,126 @@
+{
+  "task_key": "06b",
+  "outcome": "no_change",
+  "outcome_reason": "Defaults (auto avx512, physical-core threads) already match the measured optimum; SMT gain is within noise.",
+  "tested_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "cases": [
+    {
+      "id": "06b-C1-isa-microbench",
+      "status": "pass",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-C2-isa-full-model",
+      "status": "pass",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-C3-thread-scaling",
+      "status": "pass",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-C4-smt",
+      "status": "pass",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-C5-clock",
+      "status": "pass",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-C6-recommendation",
+      "status": "pass",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-N1-smt-siblings",
+      "status": "pass",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-N2-uneven-cpuset",
+      "status": "skip",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-N3-request-gt-allowed",
+      "status": "skip",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-N4-no-avx512",
+      "status": "pass",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-N5-avx512-throttle",
+      "status": "pass",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    },
+    {
+      "id": "06b-N6-ple-steals-cores",
+      "status": "skip",
+      "command_id": "06b-CMD1..3",
+      "log_path": "raw/threads.jsonl"
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "06b-benchbw-isa",
+      "raw_path": "raw/benchbw-isa.json",
+      "sha256": "9e1cd8f5671bf3953f8508753913aadeba669cc42d1659760091d1c639953c6b"
+    },
+    {
+      "run_id": "06b-threads",
+      "raw_path": "raw/threads.jsonl",
+      "sha256": "3deca9a6e320d8a51dbfb907a6d700f60eac957d72c762f597663f20f39d6a74"
+    },
+    {
+      "run_id": "06b-threads-confirm",
+      "raw_path": "raw/threads-confirm.jsonl",
+      "sha256": "005ec771203d46def16363ded56b79aefe31f1f58186e63135bca4a960244ff3"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Clock sampler records min/max across CPUs, not per-core; idle cores at 1.2 GHz dominate the min; max ~4.0 GHz is the busy-core ceiling.",
+    "SMT gain is small and noisy (±3%); a longer sustained run could revisit it.",
+    "PLE disk IO worker cores were not isolated."
+  ],
+  "rollback_result": "not_required (no change)",
+  "key_findings": {
+    "isa_microbench_gbs": {
+      "avx512f": 35.98,
+      "scalar": 5.69,
+      "avx2": 22.88
+    },
+    "isa_full_model_gain_pct_avx512_over_avx2": 19.8,
+    "thread_full_model_tok_s": {
+      "t2": 14.1,
+      "t4": 22.97,
+      "t6": 26.19,
+      "t8smt": 28.48,
+      "t6-avx2": 21.87
+    },
+    "thread_medians_t6_t8": {
+      "t6": 26.42,
+      "t8": 27.24
+    },
+    "max_cur_freq_khz": 4056065,
+    "recommendation": "keep auto (avx512, 6 physical threads)"
+  }
+}

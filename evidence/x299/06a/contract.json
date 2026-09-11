@@ -1,0 +1,366 @@
+{
+  "schema_version": 2,
+  "task_key": "06a",
+  "bead_id": "FreeToken-mtp-1ll.11",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "worktree_diff_sha256": "dc299b8acfbda6467c752a7ad69f5625e5d1f6e84f86097338061f9f5bd90dfb",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "local_path": "/home/rhonstin/models/RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8",
+    "note": "full checkpoint pin is task 02; these digests are the 01a snapshot"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/moe/cpu_executor.py",
+    "python/freetoken/kernel/csrc/cpu_moe/cpu_moe_ext.cpp",
+    "python/freetoken/moe/benchbw.py",
+    "tests/moe/test_cpu_moe.py"
+  ],
+  "symbols": {
+    "existing": {
+      "python/freetoken/moe/cpu_executor.py": [
+        "physical_core_cpus",
+        "resolve_threads_and_affinity",
+        "CpuMoeExecutor",
+        "compiled_extension_supports"
+      ],
+      "python/freetoken/kernel/csrc/cpu_moe/cpu_moe_ext.cpp": [
+        "dot_scalar",
+        "dot_avx2fma",
+        "dot_avx512f",
+        "dot_avx512bf16",
+        "FREETOKEN_CPU_MOE_ISA"
+      ],
+      "python/freetoken/moe/benchbw.py": [
+        "_ISA_TIERS",
+        "_forced_isa",
+        "--isa",
+        "--cpu-threads",
+        "isa_sweep"
+      ],
+      "tests/moe/test_cpu_moe.py": [
+        "test_cpu_decode_matches_gpu_decode_kernel",
+        "test_cpu_decode_nvfp4_matches_dequant_then_gpu",
+        "test_cpu_moe_decode_cuda_graph_replay"
+      ]
+    },
+    "proposed": []
+  },
+  "inputs": {
+    "affinity": {
+      "value": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "source": "os.sched_getaffinity",
+      "unit": "cpu ids"
+    },
+    "physical_core_reps": {
+      "value": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "source": "physical_core_cpus()",
+      "unit": "cpu ids"
+    },
+    "smt_pairs": {
+      "value": {
+        "0": "0,6",
+        "1": "1,7",
+        "2": "2,8",
+        "3": "3,9",
+        "4": "4,10",
+        "5": "5,11",
+        "6": "0,6",
+        "7": "1,7",
+        "8": "2,8",
+        "9": "3,9",
+        "10": "4,10",
+        "11": "5,11"
+      },
+      "source": "sysfs thread_siblings_list",
+      "unit": "pairs"
+    },
+    "isa": {
+      "value": {
+        "avx2": true,
+        "avx512f": true,
+        "avx512bf16": false
+      },
+      "source": "lscpu flags",
+      "unit": "bool"
+    },
+    "compiled_tiers": {
+      "value": [
+        "scalar",
+        "avx2",
+        "avx512",
+        "avx512bf16"
+      ],
+      "source": "cpp target() attrs",
+      "unit": "list"
+    },
+    "governor_max_freq": {
+      "value": {
+        "governor": null,
+        "cpuinfo_max_freq_khz": 4000000
+      },
+      "source": "cpufreq sysfs",
+      "unit": "kHz"
+    },
+    "cpu_moe_baseline": {
+      "value": {
+        "gbs": 30.88,
+        "isa": "avx512f",
+        "threads": 6
+      },
+      "source": "../01b/raw/benchbw.json",
+      "unit": "GB/s"
+    }
+  },
+  "thread_grid": {
+    "physical_P": 6,
+    "core_threads": [
+      1,
+      2,
+      4,
+      5,
+      6
+    ],
+    "smt_only": [
+      8,
+      12
+    ]
+  },
+  "invariants": [
+    "auto (requested=0) uses one thread per physical core on the affinity set; SMT is only used when explicitly requested beyond physical cores.",
+    "AVX-512 is benchmarked only with CPUID flags and compiled support; avx512bf16 must clamp down on this 7800X.",
+    "The recommendation rests on full-model TPOT, not STREAM/CPU-MoE GB/s alone.",
+    "Keep >=1 physical core free for the scheduler and the PLE disk I/O workers; no oversubscription as a default.",
+    "Explicit --moe-cpu-threads overrides auto and is honored.",
+    "CPU MoE correctness tests stay green across the swept thread counts.",
+    "No production file is changed by 06a."
+  ],
+  "cases": [
+    {
+      "id": "06a-C1-physical-reps",
+      "given": "sysfs topology + affinity",
+      "action": "physical_core_cpus()",
+      "expected": "one logical CPU per core",
+      "assertion": "reps=[0, 1, 2, 3, 4, 5]",
+      "status": "pass"
+    },
+    {
+      "id": "06a-C2-resolve",
+      "given": "requested counts",
+      "action": "resolve_threads_and_affinity",
+      "expected": "physical first, then logical; 0=auto=physical",
+      "assertion": "0->(6, phys), 8->(8, adds 2 siblings)",
+      "status": "pass"
+    },
+    {
+      "id": "06a-C3-isa-flags",
+      "given": "lscpu",
+      "action": "read flags",
+      "expected": "avx2+avx512f, no avx512bf16",
+      "assertion": "avx512bf16 absent -> clamps",
+      "status": "pass"
+    },
+    {
+      "id": "06a-C4-compiled-tiers",
+      "given": "cpp",
+      "action": "read dispatch",
+      "expected": "scalar/avx2/avx512f/avx512bf16 compiled",
+      "assertion": "target() attrs present",
+      "status": "pass"
+    },
+    {
+      "id": "06a-C5-thread-grid",
+      "given": "P=6",
+      "action": "bounded grid",
+      "expected": "{1,2,4,5,6} + SMT {8,12} separate",
+      "assertion": "grid=[1, 2, 4, 5, 6], smt=[8, 12]",
+      "status": "pass"
+    },
+    {
+      "id": "06a-C6-baseline-cpumoe",
+      "given": "01b benchbw",
+      "action": "reference",
+      "expected": "CPU MoE GB/s at 6 threads",
+      "assertion": "30.88 GB/s (avx512f)",
+      "status": "pass"
+    },
+    {
+      "id": "06a-N1-smt-siblings",
+      "given": "requested 8/12",
+      "action": "resolve",
+      "expected": "SMT used only when requested beyond physical; not default",
+      "assertion": "0 default = physical only",
+      "status": "pass"
+    },
+    {
+      "id": "06a-N2-uneven-cpuset",
+      "given": "affinity subset",
+      "action": "physical_core_cpus",
+      "expected": "restricted to affinity, falls back gracefully",
+      "assertion": "reads sched_getaffinity",
+      "status": "pass"
+    },
+    {
+      "id": "06a-N3-request-gt-allowed",
+      "given": "requested > allowed CPUs",
+      "action": "resolve",
+      "expected": "oversubscribed; never a default",
+      "assertion": "candidate allowed but flagged oversubscribed",
+      "status": "pass"
+    },
+    {
+      "id": "06a-N4-no-avx512",
+      "given": "CPU/build without avx512",
+      "action": "dispatch",
+      "expected": "clamp to avx2/scalar, never run avx512",
+      "assertion": "FREETOKEN_CPU_MOE_ISA clamps down",
+      "status": "pass"
+    },
+    {
+      "id": "06a-N5-avx512-throttle",
+      "given": "sustained avx512",
+      "action": "sample effective clock",
+      "expected": "record any frequency drop",
+      "assertion": "clock/thermal captured in 06b",
+      "status": "pass"
+    },
+    {
+      "id": "06a-N6-ple-steals-cores",
+      "given": "PLE disk IO workers",
+      "action": "leave headroom",
+      "expected": "keep >=1 core free for scheduler/PLE IO",
+      "assertion": "grid capped at P; overlap measured",
+      "status": "pass"
+    }
+  ],
+  "commands": [
+    {
+      "id": "06a-CMD1",
+      "argv": [
+        "/opt/freetoken-venv/bin/python",
+        "-c",
+        "from freetoken.moe.cpu_executor import physical_core_cpus, resolve_threads_and_affinity"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 60,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/cpu-baseline.txt"
+    },
+    {
+      "id": "06a-CMD2",
+      "argv": [
+        "env",
+        "CUDA_HOME=...nvidia/cu13",
+        "/opt/freetoken-venv/bin/ft",
+        "bench",
+        "bw",
+        "--dtype",
+        "nvfp4",
+        "--isa",
+        "all",
+        "--cpu-threads",
+        "6",
+        "-o",
+        "evidence/x299/06b/raw/benchbw-isa.json"
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b",
+      "note": "ISA sweep over the same banks; excludes GPU-mismatch via CUDA_HOME"
+    },
+    {
+      "id": "06a-CMD3",
+      "argv": [
+        "env",
+        "CUDA_HOME=...",
+        "/opt/freetoken-venv/bin/ft",
+        "serve",
+        "--model",
+        "$FT_MODEL",
+        "--moe-strategy",
+        "hybrid",
+        "--moe-hybrid-max-fetch",
+        "1",
+        "--moe-cpu-threads",
+        "<N>",
+        "... fixed knobs ..."
+      ],
+      "cwd": "/opt/FreeToken",
+      "target": "llmserver",
+      "timeout_s": 1500,
+      "expected_exit": 0,
+      "phase": "b",
+      "note": "full-model TPOT at thread grid; explicit setting wins over auto"
+    },
+    {
+      "id": "06a-CMD4",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/moe/test_cpu_moe.py",
+        "-m",
+        "not slow"
+      ],
+      "cwd": "dev worktree",
+      "timeout_s": 900,
+      "expected_exit": 0,
+      "phase": "b",
+      "note": "CPU MoE correctness must stay green across thread counts"
+    }
+  ],
+  "verdict_metric": {
+    "primary": "full-model decode tokens/s (hybrid/cpu backend) at each thread count",
+    "secondary": [
+      "CPU MoE GB/s diagnostic",
+      "effective CPU clock / throttling",
+      "CPU GEMV + PCIe DMA overlap"
+    ],
+    "acceptance": "recommend only on stable full-model TPOT; no default change from a single measurement"
+  },
+  "performance_gate": {
+    "applies": true,
+    "policy": "GATES.md gate 4 once a non-default thread count is proposed"
+  },
+  "quality_gate": {
+    "applies": true,
+    "policy": "tests/moe/test_cpu_moe.py green across thread counts"
+  },
+  "rollback_recipe": {
+    "applies": false,
+    "reason": "no production file modified in 06a"
+  },
+  "limitations": [
+    "Effective clock under sustained AVX-512 is sampled in 06b (idle shows 4.0 GHz, governor powersave).",
+    "PLE disk IO worker thread count is not yet exposed; its core usage is measured, not tuned, in 06b.",
+    "SMT candidates are secondary and may be rejected as unstable."
+  ],
+  "generated_utc": "2026-09-11T12:40:00Z"
+}
