@@ -1,0 +1,83 @@
+{
+  "task_key": "09a",
+  "bead_id": "FreeToken-mtp-1ll.17",
+  "outcome": "contract_ready",
+  "tested_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "cases": [
+    {
+      "id": "09a-C1-sweep",
+      "status": "pass",
+      "command_id": "09a-CMD1",
+      "log_path": "raw/pytest.txt"
+    },
+    {
+      "id": "09a-C2-model",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "09a-C3-adaptive",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "09a-N1-zero-misses",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "09a-N2-all-hits",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "09a-N3-cpu-unavailable",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "09a-N4-noisy",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "09a-N5-missing-metrics",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "09a-N6-oscillates",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "09a-N7-short-request",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "09a-baseline",
+      "raw_path": "raw/pytest.txt",
+      "result": "14 passed, 2 skipped in 2.54s"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Requires target GPU for the A/B; CPU worker presence for hybrid.",
+    "The fetch sweep (05b) already found fetch1/fetch2 close; an adaptive policy may not beat static."
+  ],
+  "rollback_result": "not_applicable (phase a: no production code changed)"
+}

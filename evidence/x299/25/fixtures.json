@@ -1,0 +1,71 @@
+{
+  "task_key": "13a",
+  "bead_id": "FreeToken-mtp-1ll.25",
+  "note": "given/when/then with exact assertions; existing=true pinned by the baseline tests.",
+  "valid": [
+    {
+      "id": "13a-F1-rows",
+      "given": "16 rows/step",
+      "when": "fill",
+      "then": "complete bytes then publish",
+      "assertion": "flag ordered"
+    },
+    {
+      "id": "13a-F2-share",
+      "given": "steady decode",
+      "when": "measure",
+      "then": "<5% TPOT",
+      "assertion": "12.0 <=0.5%"
+    }
+  ],
+  "invalid_negative": [
+    {
+      "id": "13a-N1-late-io",
+      "given": "late I/O",
+      "when": "fill",
+      "then": "ordered",
+      "assertion": "ordered",
+      "existing": false
+    },
+    {
+      "id": "13a-N2-exception",
+      "given": "exception before signal",
+      "when": "fill",
+      "then": "no publish",
+      "assertion": "no publish",
+      "existing": false
+    },
+    {
+      "id": "13a-N3-partial-reject",
+      "given": "partial reject",
+      "when": "fill",
+      "then": "clean",
+      "assertion": "clean",
+      "existing": false
+    },
+    {
+      "id": "13a-N4-cancel",
+      "given": "cancel",
+      "when": "fill",
+      "then": "clean",
+      "assertion": "clean",
+      "existing": false
+    },
+    {
+      "id": "13a-N5-graph-recapture",
+      "given": "recapture",
+      "when": "fill",
+      "then": "re-probe",
+      "assertion": "re-probe",
+      "existing": false
+    },
+    {
+      "id": "13a-N6-wraparound",
+      "given": "wraparound",
+      "when": "fill",
+      "then": "bounded",
+      "assertion": "bounded",
+      "existing": false
+    }
+  ]
+}

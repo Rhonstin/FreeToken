@@ -1,0 +1,63 @@
+{
+  "task_key": "19a",
+  "bead_id": "FreeToken-mtp-1ll.37",
+  "note": "given/when/then with exact assertions; existing=true pinned by the baseline tests.",
+  "valid": [
+    {
+      "id": "19a-F1-new-req",
+      "given": "decode in flight",
+      "when": "admit prefill",
+      "then": "decode parity",
+      "assertion": "token equality"
+    },
+    {
+      "id": "19a-F2-abort",
+      "given": "mid-prefill",
+      "when": "abort",
+      "then": "pages freed",
+      "assertion": "no leak"
+    }
+  ],
+  "invalid_negative": [
+    {
+      "id": "19a-N1-new-req",
+      "given": "new req during decode",
+      "when": "schedule",
+      "then": "decode intact",
+      "assertion": "decode intact",
+      "existing": true
+    },
+    {
+      "id": "19a-N2-abort",
+      "given": "abort prefill",
+      "when": "abort",
+      "then": "freed",
+      "assertion": "freed",
+      "existing": true
+    },
+    {
+      "id": "19a-N3-chunk-boundary",
+      "given": "boundary",
+      "when": "prefill",
+      "then": "exact",
+      "assertion": "exact",
+      "existing": true
+    },
+    {
+      "id": "19a-N4-stale-prefix",
+      "given": "stale prefix",
+      "when": "cache",
+      "then": "invalidate",
+      "assertion": "invalidate",
+      "existing": true
+    },
+    {
+      "id": "19a-N5-edited-middle",
+      "given": "edited middle",
+      "when": "cache",
+      "then": "re-prefill",
+      "assertion": "re-prefill",
+      "existing": false
+    }
+  ]
+}

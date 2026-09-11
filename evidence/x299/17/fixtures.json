@@ -1,0 +1,79 @@
+{
+  "task_key": "09a",
+  "bead_id": "FreeToken-mtp-1ll.17",
+  "note": "given/when/then with exact assertions; existing=true pinned by the baseline tests.",
+  "valid": [
+    {
+      "id": "09a-F1-sweep",
+      "given": "fixed prompt",
+      "when": "fetch 0/1/2",
+      "then": "fetch1 best",
+      "assertion": "tok/s ordering"
+    },
+    {
+      "id": "09a-F2-model",
+      "given": "miss count + overlap",
+      "when": "cost model",
+      "then": "max(...) ordering",
+      "assertion": "predicted==measured ordering"
+    }
+  ],
+  "invalid_negative": [
+    {
+      "id": "09a-N1-zero-misses",
+      "given": "no misses",
+      "when": "no change",
+      "then": "action holds",
+      "assertion": "action holds",
+      "existing": false
+    },
+    {
+      "id": "09a-N2-all-hits",
+      "given": "all hits",
+      "when": "no change",
+      "then": "no oscillation",
+      "assertion": "no oscillation",
+      "existing": false
+    },
+    {
+      "id": "09a-N3-cpu-unavailable",
+      "given": "no CPU worker",
+      "when": "offload fallback",
+      "then": "deterministic",
+      "assertion": "deterministic",
+      "existing": false
+    },
+    {
+      "id": "09a-N4-noisy",
+      "given": "noisy samples",
+      "when": "hold",
+      "then": "no change",
+      "assertion": "no change",
+      "existing": false
+    },
+    {
+      "id": "09a-N5-missing-metrics",
+      "given": "None metrics",
+      "when": "no guess",
+      "then": "no change",
+      "assertion": "no change",
+      "existing": false
+    },
+    {
+      "id": "09a-N6-oscillates",
+      "given": "alt accept/reject",
+      "when": "hysteresis",
+      "then": "<=1 change/window",
+      "assertion": "<=1 change/window",
+      "existing": false
+    },
+    {
+      "id": "09a-N7-short-request",
+      "given": "very short req",
+      "when": "no observation",
+      "then": "default",
+      "assertion": "default",
+      "existing": false
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "19a-CMD1",
+    "argv": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/scheduler/test_scheduler_chunked_prefill.py",
+      "tests/moe/test_prefill_hit_d2d.py"
+    ],
+    "cwd": "dev worktree /opt/FreeToken-mtp",
+    "target": "dev",
+    "timeout_s": 300,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/pytest.txt",
+    "note": "baseline before any code edit"
+  }
+]

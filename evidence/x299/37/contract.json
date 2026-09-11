@@ -1,0 +1,177 @@
+{
+  "schema_version": 2,
+  "task_key": "19a",
+  "bead_id": "FreeToken-mtp-1ll.37",
+  "title": "Prefill and multi-turn latency without hurting decode - contract and fixtures",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "dev_source_git_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "worktree_diff_sha256": "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/scheduler/scheduler.py",
+    "python/freetoken/moe/offload_cache.py",
+    "python/freetoken/kvcache/hybrid_radix_cache.py",
+    "tests/scheduler/test_scheduler_chunked_prefill.py",
+    "tests/moe/test_prefill_hit_d2d.py"
+  ],
+  "symbols": {
+    "existing": [
+      "scheduler.PrefillManager + chunked prefill (existing)",
+      "offload_cache.OffloadMoeCache.prefill_overlap (existing)",
+      "kvcache.hybrid_radix_cache (existing)"
+    ],
+    "proposed": []
+  },
+  "inputs": {
+    "ttft_ms_73tok": {
+      "value": 5570,
+      "source": "03a baseline",
+      "unit": "ms"
+    },
+    "decode_tok_s_prod": {
+      "value": 21.88,
+      "source": "45 adopted",
+      "unit": "tok/s"
+    },
+    "chunk_default": {
+      "value": "max_extend_tokens",
+      "source": "args",
+      "unit": "tokens"
+    }
+  },
+  "invariants": [
+    "Decode tokens/s is not regressed by prefill scheduling changes (paired).",
+    "A new request during decode must not corrupt the decode batch or KV ownership.",
+    "Abort mid-prefill frees KV/pages; chunk boundaries keep prefix consistency.",
+    "Stale prefix invalidation and a mid-conversation edit force a re-prefill, not silent reuse."
+  ],
+  "cases": [
+    {
+      "id": "19a-C1-ttft",
+      "given": "73-token prompt",
+      "action": "measure TTFT",
+      "expected": "document baseline",
+      "assertion": "03a 5.57 s",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "03a"
+    },
+    {
+      "id": "19a-C2-decode",
+      "given": "concurrent prefill during decode",
+      "action": "paired A/B",
+      "expected": "prefill without decode regression",
+      "assertion": "paired A/B",
+      "required_hardware": "RTX3090",
+      "status": "b-phase",
+      "ref": null
+    },
+    {
+      "id": "19a-C3-multiturn",
+      "given": "multi-turn with radix prefix",
+      "action": "measure TTFT across turns",
+      "expected": "prefill win",
+      "assertion": "TTFT drop",
+      "required_hardware": "RTX3090",
+      "status": "b-phase",
+      "ref": null
+    },
+    {
+      "id": "19a-N1-new-req",
+      "given": "new request during decode",
+      "action": "schedule",
+      "expected": "decode intact",
+      "assertion": "token parity",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "chunked_prefill"
+    },
+    {
+      "id": "19a-N2-abort",
+      "given": "abort prefill",
+      "action": "abort",
+      "expected": "pages freed",
+      "assertion": "no leak",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "chunked_prefill"
+    },
+    {
+      "id": "19a-N3-chunk-boundary",
+      "given": "chunk boundary",
+      "action": "prefill",
+      "expected": "consistent",
+      "assertion": "exact",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "chunked_prefill"
+    },
+    {
+      "id": "19a-N4-stale-prefix",
+      "given": "stale prefix",
+      "action": "cache",
+      "expected": "invalidate",
+      "assertion": "re-prefill",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "prefill_hit_d2d"
+    },
+    {
+      "id": "19a-N5-edited-middle",
+      "given": "resumed conversation edited middle",
+      "action": "cache",
+      "expected": "re-prefill",
+      "assertion": "no silent reuse",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    }
+  ],
+  "commands": [
+    {
+      "id": "19a-CMD1",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/scheduler/test_scheduler_chunked_prefill.py",
+        "tests/moe/test_prefill_hit_d2d.py"
+      ],
+      "cwd": "dev worktree /opt/FreeToken-mtp",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/pytest.txt"
+    }
+  ],
+  "performance_gate": {
+    "metric": "median decode tok/s or TTFT",
+    "direction": "maximize",
+    "threshold": ">=5% or no-change ADR"
+  },
+  "quality_gate": {
+    "note": "decode token parity; no KV corruption on new-req/abort; stale prefix invalidated"
+  },
+  "candidates": {
+    "scheduling": [
+      "current",
+      "chunk size / priority variants"
+    ],
+    "prefix": [
+      "radix hit",
+      "re-prefill"
+    ]
+  },
+  "rollback_recipe": "Scheduling changes are config-gated (chunk size/priority); revert scheduler.py from backup and re-run the two test files.",
+  "limitations": [
+    "TTFT is dominated by the first prefill; concurrency is net-negative on this box (x299-concurrency memory).",
+    "Avoid changing decode batches to gain TTFT."
+  ],
+  "generated_utc": "2026-09-11"
+}

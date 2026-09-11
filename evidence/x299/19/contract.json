@@ -1,0 +1,177 @@
+{
+  "schema_version": 2,
+  "task_key": "10a",
+  "bead_id": "FreeToken-mtp-1ll.19",
+  "title": "Improve cache admission from routing traces only - contract and fixtures",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "dev_source_git_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "worktree_diff_sha256": "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/moe/offload_cache.py",
+    "python/freetoken/moe/offload_kernels.py",
+    "tests/moe/test_offload.py"
+  ],
+  "symbols": {
+    "existing": [
+      "offload_cache.OffloadMoeCache.cache_policy / cache_policy_id (existing)",
+      "offload_cache LRU eviction (existing default)",
+      "proposed: frequency+recency admission or per-layer quotas (not built)"
+    ],
+    "proposed": []
+  },
+  "inputs": {
+    "cache_policy_default": {
+      "value": "lru",
+      "source": "offload_cache.py:109",
+      "unit": "policy id"
+    },
+    "locality_repetitive": {
+      "value": 0.994,
+      "source": "12 PLE locality",
+      "unit": "hit fraction"
+    },
+    "locality_random_code": {
+      "value": 0.0004,
+      "source": "12 PLE locality",
+      "unit": "hit fraction"
+    },
+    "expert_slot_bytes": {
+      "value": 2764824,
+      "source": "07a",
+      "unit": "bytes/slot"
+    }
+  },
+  "invariants": [
+    "The admission policy is a pure function over observed expert ids, independent of weight math.",
+    "Capacity is fixed; reject/evict/hit counters are exact.",
+    "Eviction preserves in-flight/pinned ownership ordering (existing invariants); default LRU remains the fallback.",
+    "Router and top-k are not changed; no expert needed by the step is skipped."
+  ],
+  "cases": [
+    {
+      "id": "10a-C1-replay",
+      "given": "recorded per-layer expert traces, same slots/bytes",
+      "action": "offline replay LRU vs F+R",
+      "expected": "compare hits AND exposed PCIe time",
+      "assertion": "hits alone do not decide",
+      "required_hardware": null,
+      "status": "b-phase",
+      "ref": null
+    },
+    {
+      "id": "10a-C2-live",
+      "given": "unseen prompts",
+      "action": "paired A/B",
+      "expected": "less exposed PCIe time vs LRU or no-change",
+      "assertion": "paired A/B",
+      "required_hardware": "RTX3090",
+      "status": "b-phase",
+      "ref": null
+    },
+    {
+      "id": "10a-N1-unique",
+      "given": "all unique experts",
+      "action": "replay",
+      "expected": "no gain, LRU kept",
+      "assertion": "no regression",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "10a-N2-alternating",
+      "given": "alternating layer working sets",
+      "action": "replay",
+      "expected": "no thrash beyond LRU",
+      "assertion": "counters bounded",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "10a-N3-pinned-victim",
+      "given": "eviction candidate is in-flight",
+      "action": "admit",
+      "expected": "skip pinned, pick next",
+      "assertion": "ownership preserved",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "test_offload"
+    },
+    {
+      "id": "10a-N4-reset",
+      "given": "reset/rebuild",
+      "action": "reset",
+      "expected": "no stale expert weights",
+      "assertion": "post-reset state clean",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "test_offload"
+    },
+    {
+      "id": "10a-N5-thrash",
+      "given": "adversarial thrashing",
+      "action": "replay",
+      "expected": "degenerates to LRU",
+      "assertion": "no worse than LRU",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "10a-C3-unsupported-trace",
+      "given": "unsupported trace",
+      "action": "admit",
+      "expected": "default LRU",
+      "assertion": "no crash",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    }
+  ],
+  "commands": [
+    {
+      "id": "10a-CMD1",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/moe/test_offload.py"
+      ],
+      "cwd": "dev worktree /opt/FreeToken-mtp",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/pytest.txt"
+    }
+  ],
+  "performance_gate": {
+    "metric": "median decode tok/s or TTFT",
+    "direction": "maximize",
+    "threshold": ">=5% or no-change ADR"
+  },
+  "quality_gate": {
+    "note": "no stale weights after evict/reset; LRU default and deterministic fallback retained"
+  },
+  "candidates": {
+    "policy": [
+      "lru (baseline)",
+      "frequency+recency",
+      "layer quotas"
+    ],
+    "capacity": "fixed"
+  },
+  "rollback_recipe": "cache_policy stays 'lru'; a new policy is opt-in. Revert via git checkout of offload_cache.py and retest test_offload.py.",
+  "limitations": [
+    "Needs a per-layer routing trace (not yet collected); replay is CPU-only and can run on dev.",
+    "H2D is byte-saturated (04b), so better admission helps only if it reduces exposed bytes."
+  ],
+  "generated_utc": "2026-09-11"
+}

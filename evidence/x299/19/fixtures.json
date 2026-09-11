@@ -1,0 +1,63 @@
+{
+  "task_key": "10a",
+  "bead_id": "FreeToken-mtp-1ll.19",
+  "note": "given/when/then with exact assertions; existing=true pinned by the baseline tests.",
+  "valid": [
+    {
+      "id": "10a-F1-replay",
+      "given": "trace + fixed slots",
+      "when": "offline replay",
+      "then": "counters exact",
+      "assertion": "reject/evict/hit exact"
+    },
+    {
+      "id": "10a-F2-lru-fallback",
+      "given": "unsupported trace",
+      "when": "admit",
+      "then": "LRU",
+      "assertion": "no crash"
+    }
+  ],
+  "invalid_negative": [
+    {
+      "id": "10a-N1-unique",
+      "given": "all unique",
+      "when": "replay",
+      "then": "LRU kept",
+      "assertion": "LRU kept",
+      "existing": false
+    },
+    {
+      "id": "10a-N2-alternating",
+      "given": "alternating sets",
+      "when": "replay",
+      "then": "no thrash",
+      "assertion": "no thrash",
+      "existing": false
+    },
+    {
+      "id": "10a-N3-pinned",
+      "given": "pinned victim",
+      "when": "admit",
+      "then": "skip pinned",
+      "assertion": "skip pinned",
+      "existing": true
+    },
+    {
+      "id": "10a-N4-reset",
+      "given": "reset",
+      "when": "reset",
+      "then": "no stale",
+      "assertion": "no stale",
+      "existing": true
+    },
+    {
+      "id": "10a-N5-thrash",
+      "given": "adversarial",
+      "when": "replay",
+      "then": "no worse than LRU",
+      "assertion": "no worse than LRU",
+      "existing": false
+    }
+  ]
+}

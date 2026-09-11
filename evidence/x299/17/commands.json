@@ -1,0 +1,20 @@
+[
+  {
+    "id": "09a-CMD1",
+    "argv": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/moe/test_hybrid_fetch.py",
+      "tests/moe/test_bench_profile.py"
+    ],
+    "cwd": "dev worktree /opt/FreeToken-mtp",
+    "target": "dev",
+    "timeout_s": 300,
+    "expected_exit": 0,
+    "phase": "a",
+    "artifact": "raw/pytest.txt",
+    "note": "baseline before any code edit"
+  }
+]

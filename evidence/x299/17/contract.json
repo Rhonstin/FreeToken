@@ -1,0 +1,215 @@
+{
+  "schema_version": 2,
+  "task_key": "09a",
+  "bead_id": "FreeToken-mtp-1ll.17",
+  "title": "Calibrate the hybrid split by real expert time - contract and fixtures",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "dev_source_git_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "worktree_diff_sha256": "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/moe/bench_profile.py",
+    "python/freetoken/moe/offload_cache.py",
+    "python/freetoken/moe/offload_kernels.py",
+    "python/freetoken/engine/config.py",
+    "tests/moe/test_hybrid_fetch.py",
+    "tests/moe/test_bench_profile.py"
+  ],
+  "symbols": {
+    "existing": [
+      "bench_profile.load_hybrid_fetch_fraction (existing)",
+      "offload_cache.OffloadMoeCache.hybrid_max_fetch / hybrid_fetch_fraction (existing)",
+      "engine config --moe-hybrid-max-fetch (existing)",
+      "proposed: bounded adaptive max-fetch with hysteresis (not built)"
+    ],
+    "proposed": []
+  },
+  "inputs": {
+    "hybrid_max_fetch_default": {
+      "value": 1,
+      "source": "offload_cache.py:137",
+      "unit": "tokens/step"
+    },
+    "hybrid_fetch_fraction": {
+      "value": 0.3192,
+      "source": "01b benchbw overlap",
+      "unit": "fraction"
+    },
+    "measured_fetch_sweep": {
+      "value": "fetch0 14.04 / fetch1 24.32 / fetch2 26.12 tok/s @4k",
+      "source": "05b",
+      "unit": "tok/s"
+    },
+    "min_observations": {
+      "value": 32,
+      "source": "plan 09a contract",
+      "unit": "steps"
+    },
+    "hold_steps": {
+      "value": 32,
+      "source": "plan 09a contract",
+      "unit": "steps"
+    }
+  },
+  "invariants": [
+    "Actions are discrete and bounded (fetch in {0,1,2} or fraction in a fixed set); no per-layer synchronous readback.",
+    "Calibration uses >=32 observations and holds the chosen action for >=32 steps (hysteresis) before changing.",
+    "Deterministic fallback: on missing/invalid metrics, keep the static best (fetch=1) and never oscillate.",
+    "Cost model is max(T_gpu + exposed_transfer, T_cpu) + coordination, not an ideal bandwidth ratio.",
+    "No graph-invalid allocation from a mid-graph fetch change."
+  ],
+  "cases": [
+    {
+      "id": "09a-C1-sweep",
+      "given": "fetch in {0,1,2} on a fixed prompt",
+      "action": "measure decode tok/s",
+      "expected": "fetch1 best",
+      "assertion": "fetch1 > fetch0 and >= fetch2 within noise",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "05b"
+    },
+    {
+      "id": "09a-C2-model",
+      "given": "cost model vs observed",
+      "action": "compare",
+      "expected": "max(...) predicts ordering",
+      "assertion": "predicted ordering matches measured ordering",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "09a-C3-adaptive",
+      "given": "bounded adaptive fetch on unseen prompts",
+      "action": "A/B vs static best",
+      "expected": "benefit beyond noise or ADR",
+      "assertion": "paired A/B",
+      "required_hardware": "RTX3090",
+      "status": "b-phase",
+      "ref": null
+    },
+    {
+      "id": "09a-N1-zero-misses",
+      "given": "zero misses in window",
+      "action": "calibrate",
+      "expected": "no change (nothing to fetch)",
+      "assertion": "action stays static best",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "09a-N2-all-hits",
+      "given": "all hits",
+      "action": "calibrate",
+      "expected": "no change",
+      "assertion": "no oscillation",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "09a-N3-cpu-unavailable",
+      "given": "CPU worker absent",
+      "action": "calibrate",
+      "expected": "fallback offload",
+      "assertion": "deterministic fallback to offload",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "09a-N4-noisy",
+      "given": "noisy samples",
+      "action": "calibrate",
+      "expected": "hold static best",
+      "assertion": "no change under noise",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "09a-N5-missing-metrics",
+      "given": "metrics None",
+      "action": "calibrate",
+      "expected": "no change",
+      "assertion": "no guess",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "09a-N6-oscillates",
+      "given": "alternating accept/reject",
+      "action": "calibrate",
+      "expected": "hysteresis holds",
+      "assertion": "<=1 change per hold window",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "09a-N7-short-request",
+      "given": "very short request",
+      "action": "calibrate",
+      "expected": "no observation",
+      "assertion": "stays default",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    }
+  ],
+  "commands": [
+    {
+      "id": "09a-CMD1",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/moe/test_hybrid_fetch.py",
+        "tests/moe/test_bench_profile.py"
+      ],
+      "cwd": "dev worktree /opt/FreeToken-mtp",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/pytest.txt"
+    }
+  ],
+  "performance_gate": {
+    "metric": "median decode tok/s or TTFT",
+    "direction": "maximize",
+    "threshold": ">=5% or no-change ADR"
+  },
+  "quality_gate": {
+    "note": "no per-layer host sync; graph-valid allocations; offload fallback on missing data"
+  },
+  "candidates": {
+    "hybrid_max_fetch": [
+      0,
+      1,
+      2
+    ],
+    "fraction": [
+      "fixed 0.3192",
+      "bounded set"
+    ],
+    "adaptive": [
+      "off",
+      "hysteresis 32/32"
+    ]
+  },
+  "rollback_recipe": "Set --moe-hybrid-max-fetch to the static value (1) or --moe-strategy offload; no source change needed if the adaptive path is behind a flag.",
+  "limitations": [
+    "Requires target GPU for the A/B; CPU worker presence for hybrid.",
+    "The fetch sweep (05b) already found fetch1/fetch2 close; an adaptive policy may not beat static."
+  ],
+  "generated_utc": "2026-09-11"
+}

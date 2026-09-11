@@ -1,0 +1,5 @@
+### tests/moe/test_offload.py -k cache or evict or lru or admit
+python/freetoken/engine/engine.py:258: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/moe/test_offload.py::test_adjust_config_converts_moe_cache_rate_to_cache_size
+1 failed, 11 passed, 1 skipped, 17 deselected in 2.36s

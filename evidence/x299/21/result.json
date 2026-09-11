@@ -1,0 +1,71 @@
+{
+  "task_key": "11a",
+  "bead_id": "FreeToken-mtp-1ll.21",
+  "outcome": "contract_ready",
+  "tested_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "cases": [
+    {
+      "id": "11a-C1-copy-bench",
+      "status": "pass",
+      "command_id": "11a-CMD1",
+      "log_path": "raw/pytest.txt"
+    },
+    {
+      "id": "11a-C2-live",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "11a-N1-small-mixed",
+      "status": "pass",
+      "command_id": "11a-CMD1",
+      "log_path": "raw/pytest.txt"
+    },
+    {
+      "id": "11a-N2-scales-absent",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "11a-N3-offset-2^31",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "11a-N4-zero-misses",
+      "status": "pass",
+      "command_id": "11a-CMD1",
+      "log_path": "raw/pytest.txt"
+    },
+    {
+      "id": "11a-N5-buffer-reuse",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "11a-N6-cancel",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "11a-baseline",
+      "raw_path": "raw/pytest.txt",
+      "result": "3 passed, 5 skipped, 26 deselected in 2.59s"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "H2D is already saturated (04b), so the only lever is fewer BYTES, not fewer calls.",
+    "Any kernel change must be compiled on the target (dev cannot build CUDA)."
+  ],
+  "rollback_result": "not_applicable (phase a: no production code changed)"
+}

@@ -1,0 +1,71 @@
+{
+  "task_key": "11a",
+  "bead_id": "FreeToken-mtp-1ll.21",
+  "note": "given/when/then with exact assertions; existing=true pinned by the baseline tests.",
+  "valid": [
+    {
+      "id": "11a-F1-copy-bench",
+      "given": "fixed expert shapes",
+      "when": "bench copy",
+      "then": "~12.2 GB/s",
+      "assertion": "bandwidth near ceiling"
+    },
+    {
+      "id": "11a-F2-zero-miss",
+      "given": "zero misses",
+      "when": "copy",
+      "then": "no-op",
+      "assertion": "no copy issued"
+    }
+  ],
+  "invalid_negative": [
+    {
+      "id": "11a-N1-small-mixed",
+      "given": "small mixed",
+      "when": "copy",
+      "then": "byte-exact",
+      "assertion": "byte-exact",
+      "existing": true
+    },
+    {
+      "id": "11a-N2-scales-absent",
+      "given": "no bank scales",
+      "when": "copy",
+      "then": "handled",
+      "assertion": "handled",
+      "existing": false
+    },
+    {
+      "id": "11a-N3-offset-2^31",
+      "given": "offset >2^31",
+      "when": "copy",
+      "then": "64-bit",
+      "assertion": "64-bit",
+      "existing": false
+    },
+    {
+      "id": "11a-N4-zero-misses",
+      "given": "zero misses",
+      "when": "copy",
+      "then": "no-op",
+      "assertion": "no-op",
+      "existing": true
+    },
+    {
+      "id": "11a-N5-buffer-reuse",
+      "given": "reuse before event",
+      "when": "copy",
+      "then": "ordered",
+      "assertion": "ordered",
+      "existing": false
+    },
+    {
+      "id": "11a-N6-cancel",
+      "given": "cancel",
+      "when": "copy",
+      "then": "clean",
+      "assertion": "clean",
+      "existing": false
+    }
+  ]
+}

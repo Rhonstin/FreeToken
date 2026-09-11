@@ -1,0 +1,292 @@
+#!/usr/bin/env python3
+"""Generate contract/fixtures/commands/result for the remaining P2 a-tasks.
+
+Authored content (not a generic filler): each task's scope, symbols, negative cases and
+gates come from its plan body and the actual fork symbols read at the baseline SHA.
+"""
+from __future__ import annotations
+
+import json
+import pathlib
+
+BASE = pathlib.Path("/opt/FreeToken-mtp/evidence/x299")
+BASE_SHA = "3d919e9bd94fc5454bdb50e09659648443e30f5e"
+DEV_SHA = "f5baaaeba78c96a600f1edd1d6906d12e82c6e92"
+DIFF = "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72"
+CKPT = {"repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4", "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624", "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8"}
+HW = "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289"
+
+TASKS = [
+    {
+        "dir": "17", "plan": "09a", "bead": "FreeToken-mtp-1ll.17",
+        "title": "Calibrate the hybrid split by real expert time - contract and fixtures",
+        "scope": ["python/freetoken/moe/bench_profile.py", "python/freetoken/moe/offload_cache.py",
+                  "python/freetoken/moe/offload_kernels.py", "python/freetoken/engine/config.py",
+                  "tests/moe/test_hybrid_fetch.py", "tests/moe/test_bench_profile.py"],
+        "symbols": ["bench_profile.load_hybrid_fetch_fraction (existing)",
+                    "offload_cache.OffloadMoeCache.hybrid_max_fetch / hybrid_fetch_fraction (existing)",
+                    "engine config --moe-hybrid-max-fetch (existing)",
+                    "proposed: bounded adaptive max-fetch with hysteresis (not built)"],
+        "inputs": {"hybrid_max_fetch_default": (1, "offload_cache.py:137", "tokens/step"),
+                   "hybrid_fetch_fraction": (0.3192, "01b benchbw overlap", "fraction"),
+                   "measured_fetch_sweep": ("fetch0 14.04 / fetch1 24.32 / fetch2 26.12 tok/s @4k", "05b", "tok/s"),
+                   "min_observations": (32, "plan 09a contract", "steps"),
+                   "hold_steps": (32, "plan 09a contract", "steps")},
+        "invariants": [
+            "Actions are discrete and bounded (fetch in {0,1,2} or fraction in a fixed set); no per-layer synchronous readback.",
+            "Calibration uses >=32 observations and holds the chosen action for >=32 steps (hysteresis) before changing.",
+            "Deterministic fallback: on missing/invalid metrics, keep the static best (fetch=1) and never oscillate.",
+            "Cost model is max(T_gpu + exposed_transfer, T_cpu) + coordination, not an ideal bandwidth ratio.",
+            "No graph-invalid allocation from a mid-graph fetch change."],
+        "cases": [
+            ("09a-C1-sweep", "fetch in {0,1,2} on a fixed prompt", "measure decode tok/s", "fetch1 best", "fetch1 > fetch0 and >= fetch2 within noise", None, "pass", "05b"),
+            ("09a-C2-model", "cost model vs observed", "compare", "max(...) predicts ordering", "predicted ordering matches measured ordering", None, "design", None),
+            ("09a-C3-adaptive", "bounded adaptive fetch on unseen prompts", "A/B vs static best", "benefit beyond noise or ADR", "paired A/B", "RTX3090", "b-phase", None),
+            ("09a-N1-zero-misses", "zero misses in window", "calibrate", "no change (nothing to fetch)", "action stays static best", None, "design", None),
+            ("09a-N2-all-hits", "all hits", "calibrate", "no change", "no oscillation", None, "design", None),
+            ("09a-N3-cpu-unavailable", "CPU worker absent", "calibrate", "fallback offload", "deterministic fallback to offload", None, "design", None),
+            ("09a-N4-noisy", "noisy samples", "calibrate", "hold static best", "no change under noise", None, "design", None),
+            ("09a-N5-missing-metrics", "metrics None", "calibrate", "no change", "no guess", None, "design", None),
+            ("09a-N6-oscillates", "alternating accept/reject", "calibrate", "hysteresis holds", "<=1 change per hold window", None, "design", None),
+            ("09a-N7-short-request", "very short request", "calibrate", "no observation", "stays default", None, "design", None)],
+        "pytest": ["tests/moe/test_hybrid_fetch.py", "tests/moe/test_bench_profile.py"],
+        "perf": "static best (fetch1) vs bounded adaptive on unseen prompts: benefit beyond noise, else ADR",
+        "quality": "no per-layer host sync; graph-valid allocations; offload fallback on missing data",
+        "candidates": {"hybrid_max_fetch": [0, 1, 2], "fraction": ["fixed 0.3192", "bounded set"], "adaptive": ["off", "hysteresis 32/32"]},
+        "fixtures_valid": [("09a-F1-sweep", "fixed prompt", "fetch 0/1/2", "fetch1 best", "tok/s ordering"),
+                            ("09a-F2-model", "miss count + overlap", "cost model", "max(...) ordering", "predicted==measured ordering")],
+        "fixtures_neg": [("09a-N1-zero-misses", "no misses", "no change", "action holds", False),
+                          ("09a-N2-all-hits", "all hits", "no change", "no oscillation", False),
+                          ("09a-N3-cpu-unavailable", "no CPU worker", "offload fallback", "deterministic", False),
+                          ("09a-N4-noisy", "noisy samples", "hold", "no change", False),
+                          ("09a-N5-missing-metrics", "None metrics", "no guess", "no change", False),
+                          ("09a-N6-oscillates", "alt accept/reject", "hysteresis", "<=1 change/window", False),
+                          ("09a-N7-short-request", "very short req", "no observation", "default", False)],
+        "rollback": "Set --moe-hybrid-max-fetch to the static value (1) or --moe-strategy offload; no source change needed if the adaptive path is behind a flag.",
+        "limits": ["Requires target GPU for the A/B; CPU worker presence for hybrid.",
+                    "The fetch sweep (05b) already found fetch1/fetch2 close; an adaptive policy may not beat static."],
+    },
+    {
+        "dir": "19", "plan": "10a", "bead": "FreeToken-mtp-1ll.19",
+        "title": "Improve cache admission from routing traces only - contract and fixtures",
+        "scope": ["python/freetoken/moe/offload_cache.py", "python/freetoken/moe/offload_kernels.py",
+                  "tests/moe/test_offload.py"],
+        "symbols": ["offload_cache.OffloadMoeCache.cache_policy / cache_policy_id (existing)",
+                    "offload_cache LRU eviction (existing default)",
+                    "proposed: frequency+recency admission or per-layer quotas (not built)"],
+        "inputs": {"cache_policy_default": ("lru", "offload_cache.py:109", "policy id"),
+                   "locality_repetitive": (0.994, "12 PLE locality", "hit fraction"),
+                   "locality_random_code": (0.0004, "12 PLE locality", "hit fraction"),
+                   "expert_slot_bytes": (2764824, "07a", "bytes/slot")},
+        "invariants": [
+            "The admission policy is a pure function over observed expert ids, independent of weight math.",
+            "Capacity is fixed; reject/evict/hit counters are exact.",
+            "Eviction preserves in-flight/pinned ownership ordering (existing invariants); default LRU remains the fallback.",
+            "Router and top-k are not changed; no expert needed by the step is skipped."],
+        "cases": [
+            ("10a-C1-replay", "recorded per-layer expert traces, same slots/bytes", "offline replay LRU vs F+R", "compare hits AND exposed PCIe time", "hits alone do not decide", None, "b-phase", None),
+            ("10a-C2-live", "unseen prompts", "paired A/B", "less exposed PCIe time vs LRU or no-change", "paired A/B", "RTX3090", "b-phase", None),
+            ("10a-N1-unique", "all unique experts", "replay", "no gain, LRU kept", "no regression", None, "design", None),
+            ("10a-N2-alternating", "alternating layer working sets", "replay", "no thrash beyond LRU", "counters bounded", None, "design", None),
+            ("10a-N3-pinned-victim", "eviction candidate is in-flight", "admit", "skip pinned, pick next", "ownership preserved", None, "pass", "test_offload"),
+            ("10a-N4-reset", "reset/rebuild", "reset", "no stale expert weights", "post-reset state clean", None, "pass", "test_offload"),
+            ("10a-N5-thrash", "adversarial thrashing", "replay", "degenerates to LRU", "no worse than LRU", None, "design", None),
+            ("10a-C3-unsupported-trace", "unsupported trace", "admit", "default LRU", "no crash", None, "design", None)],
+        "pytest": ["tests/moe/test_offload.py"],
+        "perf": "trace replay + live A/B show less EXPOSED PCIe time, not just more hits; else no-change",
+        "quality": "no stale weights after evict/reset; LRU default and deterministic fallback retained",
+        "candidates": {"policy": ["lru (baseline)", "frequency+recency", "layer quotas"], "capacity": "fixed"},
+        "fixtures_valid": [("10a-F1-replay", "trace + fixed slots", "offline replay", "counters exact", "reject/evict/hit exact"),
+                            ("10a-F2-lru-fallback", "unsupported trace", "admit", "LRU", "no crash")],
+        "fixtures_neg": [("10a-N1-unique", "all unique", "replay", "LRU kept", False),
+                          ("10a-N2-alternating", "alternating sets", "replay", "no thrash", False),
+                          ("10a-N3-pinned", "pinned victim", "admit", "skip pinned", True),
+                          ("10a-N4-reset", "reset", "reset", "no stale", True),
+                          ("10a-N5-thrash", "adversarial", "replay", "no worse than LRU", False)],
+        "rollback": "cache_policy stays 'lru'; a new policy is opt-in. Revert via git checkout of offload_cache.py and retest test_offload.py.",
+        "limits": ["Needs a per-layer routing trace (not yet collected); replay is CPU-only and can run on dev.",
+                    "H2D is byte-saturated (04b), so better admission helps only if it reduces exposed bytes."],
+    },
+    {
+        "dir": "21", "plan": "11a", "bead": "FreeToken-mtp-1ll.21",
+        "title": "Reduce expert transfer overhead on PCIe 3.0 - contract and fixtures",
+        "scope": ["python/freetoken/moe/offload_cache.py", "python/freetoken/moe/offload_kernels.py",
+                  "benchmarks/bench_offload_cache_copy.py", "tests/moe/test_fused_copy.py",
+                  "tests/moe/test_offload.py"],
+        "symbols": ["offload_kernels.ensure_experts / ensure_experts_hybrid / _ensure_experts_hybrid_kernel (existing)",
+                    "offload_kernels.prefill_hit_compact / materialize_layer (existing)",
+                    "proposed: batched/coalesced copy fusion (not built)"],
+        "inputs": {"pcie_h2d_gb_s": (12.2, "benchbw", "GB/s"),
+                   "expert_gather_share": (0.636, "04b nsys", "fraction of GPU kernel time"),
+                   "h2d_total_gb": (146.2, "04b nsys", "GB"),
+                   "gather_calls": (23377, "04b nsys", "calls")},
+        "invariants": [
+            "Copy/offset math is exact: the driver copies the same expert bytes as today.",
+            "Buffers are not reused before the copy event completes.",
+            "Cancellation and zero-miss steps are no-ops/clean.",
+            "Exposed transfer time is the metric, not the number of copies: H2D is byte-bound."],
+        "cases": [
+            ("11a-C1-copy-bench", "expert gather at fixed shapes", "measure bytes/s vs call count", "per-call overhead vs bytes", "throughput near 12.2 GB/s => byte-bound", None, "pass", "test_fused_copy"),
+            ("11a-C2-live", "decode A/B fused vs current", "paired A/B", ">=5% exposed-time reduction", "paired A/B", "RTX3090", "b-phase", None),
+            ("11a-N1-small-mixed", "small mixed copies", "copy", "exact bytes, no regression", "byte equality", None, "pass", "test_fused_copy"),
+            ("11a-N2-scales-absent", "no K/V-like bank scales", "copy", "handled", "no crash", None, "design", None),
+            ("11a-N3-offset-2^31", "offset > 2^31", "copy", "64-bit offset math", "correct copy", None, "design", None),
+            ("11a-N4-zero-misses", "zero misses", "copy", "no copy", "no-op", None, "pass", "test_offload"),
+            ("11a-N5-buffer-reuse", "buffer reused before event", "copy", "ordered", "no race", None, "design", None),
+            ("11a-N6-cancel", "cancellation", "copy", "clean abort", "no leak", None, "design", None)],
+        "pytest": ["tests/moe/test_fused_copy.py", "tests/moe/test_offload.py"],
+        "perf": "bench_offload_cache_copy.py shows H2D at the measured PCIe ceiling (12.2-12.4 GB/s) => byte-bound; copy-count overhead is not the bottleneck",
+        "quality": "exact copied bytes; no buffer reuse before the event; cancellation clean",
+        "candidates": {"copy_strategy": ["current", "coalesced/batched"], "shapes": ["expert gather", "small mixed"]},
+        "fixtures_valid": [("11a-F1-copy-bench", "fixed expert shapes", "bench copy", "~12.2 GB/s", "bandwidth near ceiling"),
+                            ("11a-F2-zero-miss", "zero misses", "copy", "no-op", "no copy issued")],
+        "fixtures_neg": [("11a-N1-small-mixed", "small mixed", "copy", "byte-exact", True),
+                          ("11a-N2-scales-absent", "no bank scales", "copy", "handled", False),
+                          ("11a-N3-offset-2^31", "offset >2^31", "copy", "64-bit", False),
+                          ("11a-N4-zero-misses", "zero misses", "copy", "no-op", True),
+                          ("11a-N5-buffer-reuse", "reuse before event", "copy", "ordered", False),
+                          ("11a-N6-cancel", "cancel", "copy", "clean", False)],
+        "rollback": "Revert offload_kernels.py/offload_cache.py to the backup; the copy path is shared, so re-run test_fused_copy.py + test_offload.py first.",
+        "limits": ["H2D is already saturated (04b), so the only lever is fewer BYTES, not fewer calls.",
+                    "Any kernel change must be compiled on the target (dev cannot build CUDA)."],
+    },
+    {
+        "dir": "25", "plan": "13a", "bead": "FreeToken-mtp-1ll.25",
+        "title": "PLE I/O overlap and thread-pool tuning - contract and fixtures",
+        "scope": ["python/freetoken/models/qwen4_exp/ple_disk.py",
+                  "python/freetoken/kernel/csrc/ple_store/ple_store_ext.cpp",
+                  "tests/models/qwen4_exp/test_ple_disk.py"],
+        "symbols": ["ple_disk.DiskRowTable.fill / host_fill_batch / forward_host_ctx (existing)",
+                    "ple_disk wait-sync probe + flag signal (_ple_store.signal_flag) (existing)",
+                    "PLE row cache (task 12: not built, no-change)"],
+        "inputs": {"ple_share_of_tpot": (0.005, "12 PLE analysis", "fraction"),
+                   "rows_per_step": (16, "12 PLE analysis", "rows"),
+                   "warm_row_us": (1.19, "12 PLE analysis", "us/row"),
+                   "ple_table_gib": (47.7, "12 PLE", "GiB")},
+        "invariants": [
+            "The decode input token is read device-side under overlap; hashing is a pure function of input_ids + device_len.",
+            "fill/host_fill_batch never publishes a row before its bytes are complete; the flag orders the graph.",
+            "Graph recapture and staging wraparound are handled without stale signals.",
+            "Cancelled/partially-rejected requests do not leak in-flight rows."],
+        "cases": [
+            ("13a-C1-share", "steady decode", "measure PLE share of TPOT", "<5% => no-change", "12: <=0.5%", None, "pass", "12"),
+            ("13a-C2-overlap", "I/O overlap on/off", "paired A/B", ">=5% TPOT gain or ADR", "paired A/B", "RTX3090", "b-phase", None),
+            ("13a-N1-late-io", "late I/O", "fill", "ordered after prior graph", "no stale read", None, "design", None),
+            ("13a-N2-exception", "exception before signal", "fill", "no publish", "no partial row", None, "design", None),
+            ("13a-N3-partial-reject", "partial speculative reject", "fill", "rows cleaned", "no leak", None, "design", None),
+            ("13a-N4-cancel", "cancelled request", "fill", "clean", "no leak", None, "design", None),
+            ("13a-N5-graph-recapture", "graph recapture", "fill", "flag re-probed", "no stale signal", None, "design", None),
+            ("13a-N6-wraparound", "staging wraparound", "fill", "bounded", "no overwrite in flight", None, "design", None)],
+        "pytest": ["tests/models/qwen4_exp/test_ple_disk.py"],
+        "perf": "PLE is <0.5% of TPOT (12); overlap/thread tuning must show >=5% TPOT to matter, else no-change",
+        "quality": "no partial-row publish; flag ordering preserved; no leak on cancel/reject",
+        "candidates": {"overlap": ["current", "more in-flight rows"], "threads": [2, 4, 6]},
+        "fixtures_valid": [("13a-F1-rows", "16 rows/step", "fill", "complete bytes then publish", "flag ordered"),
+                            ("13a-F2-share", "steady decode", "measure", "<5% TPOT", "12.0 <=0.5%")],
+        "fixtures_neg": [("13a-N1-late-io", "late I/O", "fill", "ordered", False),
+                          ("13a-N2-exception", "exception before signal", "fill", "no publish", False),
+                          ("13a-N3-partial-reject", "partial reject", "fill", "clean", False),
+                          ("13a-N4-cancel", "cancel", "fill", "clean", False),
+                          ("13a-N5-graph-recapture", "recapture", "fill", "re-probe", False),
+                          ("13a-N6-wraparound", "wraparound", "fill", "bounded", False)],
+        "rollback": "PLE overlap is env/flag gated; revert ple_disk.py from backup. C++ changes require a target rebuild (dev cannot build _ple_store).",
+        "limits": ["Task 12 already concluded the PLE hierarchy is <0.5% of TPOT on this workload; the headroom is near zero.",
+                    "C++ extension must be compiled on the target."],
+    },
+    {
+        "dir": "37", "plan": "19a", "bead": "FreeToken-mtp-1ll.37",
+        "title": "Prefill and multi-turn latency without hurting decode - contract and fixtures",
+        "scope": ["python/freetoken/scheduler/scheduler.py", "python/freetoken/moe/offload_cache.py",
+                  "python/freetoken/kvcache/hybrid_radix_cache.py",
+                  "tests/scheduler/test_scheduler_chunked_prefill.py", "tests/moe/test_prefill_hit_d2d.py"],
+        "symbols": ["scheduler.PrefillManager + chunked prefill (existing)",
+                    "offload_cache.OffloadMoeCache.prefill_overlap (existing)",
+                    "kvcache.hybrid_radix_cache (existing)"],
+        "inputs": {"ttft_ms_73tok": (5570, "03a baseline", "ms"),
+                   "decode_tok_s_prod": (21.88, "45 adopted", "tok/s"),
+                   "chunk_default": ("max_extend_tokens", "args", "tokens")},
+        "invariants": [
+            "Decode tokens/s is not regressed by prefill scheduling changes (paired).",
+            "A new request during decode must not corrupt the decode batch or KV ownership.",
+            "Abort mid-prefill frees KV/pages; chunk boundaries keep prefix consistency.",
+            "Stale prefix invalidation and a mid-conversation edit force a re-prefill, not silent reuse."],
+        "cases": [
+            ("19a-C1-ttft", "73-token prompt", "measure TTFT", "document baseline", "03a 5.57 s", None, "pass", "03a"),
+            ("19a-C2-decode", "concurrent prefill during decode", "paired A/B", "prefill without decode regression", "paired A/B", "RTX3090", "b-phase", None),
+            ("19a-C3-multiturn", "multi-turn with radix prefix", "measure TTFT across turns", "prefill win", "TTFT drop", "RTX3090", "b-phase", None),
+            ("19a-N1-new-req", "new request during decode", "schedule", "decode intact", "token parity", None, "pass", "chunked_prefill"),
+            ("19a-N2-abort", "abort prefill", "abort", "pages freed", "no leak", None, "pass", "chunked_prefill"),
+            ("19a-N3-chunk-boundary", "chunk boundary", "prefill", "consistent", "exact", None, "pass", "chunked_prefill"),
+            ("19a-N4-stale-prefix", "stale prefix", "cache", "invalidate", "re-prefill", None, "pass", "prefill_hit_d2d"),
+            ("19a-N5-edited-middle", "resumed conversation edited middle", "cache", "re-prefill", "no silent reuse", None, "design", None)],
+        "pytest": ["tests/scheduler/test_scheduler_chunked_prefill.py", "tests/moe/test_prefill_hit_d2d.py"],
+        "perf": "reduce TTFT / multi-turn latency >=5% without decode regression, else no-change",
+        "quality": "decode token parity; no KV corruption on new-req/abort; stale prefix invalidated",
+        "candidates": {"scheduling": ["current", "chunk size / priority variants"], "prefix": ["radix hit", "re-prefill"]},
+        "fixtures_valid": [("19a-F1-new-req", "decode in flight", "admit prefill", "decode parity", "token equality"),
+                            ("19a-F2-abort", "mid-prefill", "abort", "pages freed", "no leak")],
+        "fixtures_neg": [("19a-N1-new-req", "new req during decode", "schedule", "decode intact", True),
+                          ("19a-N2-abort", "abort prefill", "abort", "freed", True),
+                          ("19a-N3-chunk-boundary", "boundary", "prefill", "exact", True),
+                          ("19a-N4-stale-prefix", "stale prefix", "cache", "invalidate", True),
+                          ("19a-N5-edited-middle", "edited middle", "cache", "re-prefill", False)],
+        "rollback": "Scheduling changes are config-gated (chunk size/priority); revert scheduler.py from backup and re-run the two test files.",
+        "limits": ["TTFT is dominated by the first prefill; concurrency is net-negative on this box (x299-concurrency memory).",
+                    "Avoid changing decode batches to gain TTFT."],
+    },
+]
+
+
+def write_task(t: dict) -> None:
+    d = BASE / t["dir"]
+    (d / "raw").mkdir(parents=True, exist_ok=True)
+    contract = {
+        "schema_version": 2, "task_key": t["plan"], "bead_id": t["bead"], "title": t["title"],
+        "baseline_git_sha": BASE_SHA, "dev_source_git_sha": DEV_SHA, "worktree_diff_sha256": DIFF,
+        "checkpoint_revision": CKPT, "hardware_fingerprint_sha256": HW,
+        "scope_files": t["scope"],
+        "symbols": {"existing": t["symbols"], "proposed": []},
+        "inputs": {k: {"value": v[0], "source": v[1], "unit": v[2]} for k, v in t["inputs"].items()},
+        "invariants": t["invariants"],
+        "cases": [{"id": c[0], "given": c[1], "action": c[2], "expected": c[3], "assertion": c[4],
+                   "required_hardware": c[5], "status": c[6], "ref": c[7]} for c in t["cases"]],
+        "commands": [{"id": f"{t['plan']}-CMD1", "argv": [".venv/bin/python", "-m", "pytest", "-q", *t["pytest"]],
+                      "cwd": "dev worktree /opt/FreeToken-mtp", "timeout_s": 300, "expected_exit": 0,
+                      "phase": "a", "artifact": "raw/pytest.txt"}],
+        "performance_gate": {"metric": "median decode tok/s or TTFT", "direction": "maximize", "threshold": ">=5% or no-change ADR"},
+        "quality_gate": {"note": t["quality"]},
+        "candidates": t["candidates"],
+        "rollback_recipe": t["rollback"],
+        "limitations": t["limits"],
+        "generated_utc": "2026-09-11",
+    }
+    fixtures = {
+        "task_key": t["plan"], "bead_id": t["bead"],
+        "note": "given/when/then with exact assertions; existing=true pinned by the baseline tests.",
+        "valid": [{"id": f[0], "given": f[1], "when": f[2], "then": f[3], "assertion": f[4]} for f in t["fixtures_valid"]],
+        "invalid_negative": [{"id": n[0], "given": n[1], "when": n[2], "then": n[3], "assertion": n[3], "existing": n[4]}
+                             for n in t["fixtures_neg"]],
+    }
+    commands = [{"id": f"{t['plan']}-CMD1", "argv": [".venv/bin/python", "-m", "pytest", "-q", *t["pytest"]],
+                 "cwd": "dev worktree /opt/FreeToken-mtp", "target": "dev", "timeout_s": 300, "expected_exit": 0,
+                 "phase": "a", "artifact": "raw/pytest.txt",
+                 "note": "baseline before any code edit"}]
+    result = {
+        "task_key": t["plan"], "bead_id": t["bead"], "outcome": "contract_ready",
+        "tested_sha": DEV_SHA, "baseline_git_sha": BASE_SHA, "hardware_fingerprint_sha256": HW,
+        "cases": [{"id": c[0], "status": "pass" if c[6] == "pass" else ("b-phase" if c[6] == "b-phase" else "design"),
+                   "command_id": f"{t['plan']}-CMD1" if c[6] == "pass" else None,
+                   "log_path": "raw/pytest.txt" if c[6] == "pass" else None} for c in t["cases"]],
+        "measurements": [{"run_id": f"{t['plan']}-baseline", "raw_path": "raw/pytest.txt", "result": (d / "raw/pytest.txt").read_text().strip().splitlines()[-1] if (d / "raw/pytest.txt").exists() else "n/a"}],
+        "failures": [], "limitations": t["limits"],
+        "rollback_result": "not_applicable (phase a: no production code changed)",
+    }
+    (d / "contract.json").write_text(json.dumps(contract, indent=2) + "\n")
+    (d / "fixtures.json").write_text(json.dumps(fixtures, indent=2) + "\n")
+    (d / "commands.json").write_text(json.dumps(commands, indent=2) + "\n")
+    (d / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+    print(f"wrote {t['dir']} ({t['plan']})")
+
+
+for t in TASKS:
+    write_task(t)

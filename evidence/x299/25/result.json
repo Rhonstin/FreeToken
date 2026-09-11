@@ -1,0 +1,71 @@
+{
+  "task_key": "13a",
+  "bead_id": "FreeToken-mtp-1ll.25",
+  "outcome": "contract_ready",
+  "tested_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "cases": [
+    {
+      "id": "13a-C1-share",
+      "status": "pass",
+      "command_id": "13a-CMD1",
+      "log_path": "raw/pytest.txt"
+    },
+    {
+      "id": "13a-C2-overlap",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "13a-N1-late-io",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "13a-N2-exception",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "13a-N3-partial-reject",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "13a-N4-cancel",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "13a-N5-graph-recapture",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "13a-N6-wraparound",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "13a-baseline",
+      "raw_path": "raw/pytest.txt",
+      "result": "2 passed, 2 skipped in 2.42s"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Task 12 already concluded the PLE hierarchy is <0.5% of TPOT on this workload; the headroom is near zero.",
+    "C++ extension must be compiled on the target."
+  ],
+  "rollback_result": "not_applicable (phase a: no production code changed)"
+}

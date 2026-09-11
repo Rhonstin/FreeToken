@@ -1,0 +1,71 @@
+{
+  "task_key": "10a",
+  "bead_id": "FreeToken-mtp-1ll.19",
+  "outcome": "contract_ready",
+  "tested_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "cases": [
+    {
+      "id": "10a-C1-replay",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "10a-C2-live",
+      "status": "b-phase",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "10a-N1-unique",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "10a-N2-alternating",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "10a-N3-pinned-victim",
+      "status": "pass",
+      "command_id": "10a-CMD1",
+      "log_path": "raw/pytest.txt"
+    },
+    {
+      "id": "10a-N4-reset",
+      "status": "pass",
+      "command_id": "10a-CMD1",
+      "log_path": "raw/pytest.txt"
+    },
+    {
+      "id": "10a-N5-thrash",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    },
+    {
+      "id": "10a-C3-unsupported-trace",
+      "status": "design",
+      "command_id": null,
+      "log_path": null
+    }
+  ],
+  "measurements": [
+    {
+      "run_id": "10a-baseline",
+      "raw_path": "raw/pytest.txt",
+      "result": "1 failed, 11 passed, 1 skipped, 17 deselected in 2.36s"
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "Needs a per-layer routing trace (not yet collected); replay is CPU-only and can run on dev.",
+    "H2D is byte-saturated (04b), so better admission helps only if it reduces exposed bytes."
+  ],
+  "rollback_result": "not_applicable (phase a: no production code changed)"
+}

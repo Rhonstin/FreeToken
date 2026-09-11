@@ -1,0 +1,3 @@
+### tests/models/qwen4_exp/test_ple_disk.py -m not slow
+..ss                                                                     [100%]
+2 passed, 2 skipped in 2.42s

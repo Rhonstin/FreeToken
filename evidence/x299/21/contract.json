@@ -1,0 +1,182 @@
+{
+  "schema_version": 2,
+  "task_key": "11a",
+  "bead_id": "FreeToken-mtp-1ll.21",
+  "title": "Reduce expert transfer overhead on PCIe 3.0 - contract and fixtures",
+  "baseline_git_sha": "3d919e9bd94fc5454bdb50e09659648443e30f5e",
+  "dev_source_git_sha": "f5baaaeba78c96a600f1edd1d6906d12e82c6e92",
+  "worktree_diff_sha256": "b1d01058abcfcc7dd7e60d53cb6083be7c37dd6a4a803fbd0e60d37a06518d72",
+  "checkpoint_revision": {
+    "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+    "config_sha256": "e765305daba0951974308f4d32c075b52a6a45974730d273f2216718a994d624",
+    "hf_quant_sha256": "7e69ef4b94302ae5b6f453b913621f698d5631a1d023d8b3e9e3b829721b98e8"
+  },
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "scope_files": [
+    "python/freetoken/moe/offload_cache.py",
+    "python/freetoken/moe/offload_kernels.py",
+    "benchmarks/bench_offload_cache_copy.py",
+    "tests/moe/test_fused_copy.py",
+    "tests/moe/test_offload.py"
+  ],
+  "symbols": {
+    "existing": [
+      "offload_kernels.ensure_experts / ensure_experts_hybrid / _ensure_experts_hybrid_kernel (existing)",
+      "offload_kernels.prefill_hit_compact / materialize_layer (existing)",
+      "proposed: batched/coalesced copy fusion (not built)"
+    ],
+    "proposed": []
+  },
+  "inputs": {
+    "pcie_h2d_gb_s": {
+      "value": 12.2,
+      "source": "benchbw",
+      "unit": "GB/s"
+    },
+    "expert_gather_share": {
+      "value": 0.636,
+      "source": "04b nsys",
+      "unit": "fraction of GPU kernel time"
+    },
+    "h2d_total_gb": {
+      "value": 146.2,
+      "source": "04b nsys",
+      "unit": "GB"
+    },
+    "gather_calls": {
+      "value": 23377,
+      "source": "04b nsys",
+      "unit": "calls"
+    }
+  },
+  "invariants": [
+    "Copy/offset math is exact: the driver copies the same expert bytes as today.",
+    "Buffers are not reused before the copy event completes.",
+    "Cancellation and zero-miss steps are no-ops/clean.",
+    "Exposed transfer time is the metric, not the number of copies: H2D is byte-bound."
+  ],
+  "cases": [
+    {
+      "id": "11a-C1-copy-bench",
+      "given": "expert gather at fixed shapes",
+      "action": "measure bytes/s vs call count",
+      "expected": "per-call overhead vs bytes",
+      "assertion": "throughput near 12.2 GB/s => byte-bound",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "test_fused_copy"
+    },
+    {
+      "id": "11a-C2-live",
+      "given": "decode A/B fused vs current",
+      "action": "paired A/B",
+      "expected": ">=5% exposed-time reduction",
+      "assertion": "paired A/B",
+      "required_hardware": "RTX3090",
+      "status": "b-phase",
+      "ref": null
+    },
+    {
+      "id": "11a-N1-small-mixed",
+      "given": "small mixed copies",
+      "action": "copy",
+      "expected": "exact bytes, no regression",
+      "assertion": "byte equality",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "test_fused_copy"
+    },
+    {
+      "id": "11a-N2-scales-absent",
+      "given": "no K/V-like bank scales",
+      "action": "copy",
+      "expected": "handled",
+      "assertion": "no crash",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "11a-N3-offset-2^31",
+      "given": "offset > 2^31",
+      "action": "copy",
+      "expected": "64-bit offset math",
+      "assertion": "correct copy",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "11a-N4-zero-misses",
+      "given": "zero misses",
+      "action": "copy",
+      "expected": "no copy",
+      "assertion": "no-op",
+      "required_hardware": null,
+      "status": "pass",
+      "ref": "test_offload"
+    },
+    {
+      "id": "11a-N5-buffer-reuse",
+      "given": "buffer reused before event",
+      "action": "copy",
+      "expected": "ordered",
+      "assertion": "no race",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    },
+    {
+      "id": "11a-N6-cancel",
+      "given": "cancellation",
+      "action": "copy",
+      "expected": "clean abort",
+      "assertion": "no leak",
+      "required_hardware": null,
+      "status": "design",
+      "ref": null
+    }
+  ],
+  "commands": [
+    {
+      "id": "11a-CMD1",
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/moe/test_fused_copy.py",
+        "tests/moe/test_offload.py"
+      ],
+      "cwd": "dev worktree /opt/FreeToken-mtp",
+      "timeout_s": 300,
+      "expected_exit": 0,
+      "phase": "a",
+      "artifact": "raw/pytest.txt"
+    }
+  ],
+  "performance_gate": {
+    "metric": "median decode tok/s or TTFT",
+    "direction": "maximize",
+    "threshold": ">=5% or no-change ADR"
+  },
+  "quality_gate": {
+    "note": "exact copied bytes; no buffer reuse before the event; cancellation clean"
+  },
+  "candidates": {
+    "copy_strategy": [
+      "current",
+      "coalesced/batched"
+    ],
+    "shapes": [
+      "expert gather",
+      "small mixed"
+    ]
+  },
+  "rollback_recipe": "Revert offload_kernels.py/offload_cache.py to the backup; the copy path is shared, so re-run test_fused_copy.py + test_offload.py first.",
+  "limitations": [
+    "H2D is already saturated (04b), so the only lever is fewer BYTES, not fewer calls.",
+    "Any kernel change must be compiled on the target (dev cannot build CUDA)."
+  ],
+  "generated_utc": "2026-09-11"
+}
