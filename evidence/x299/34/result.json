@@ -1,0 +1,29 @@
+{
+  "task_key": "17b", "bead_id": "FreeToken-mtp-1ll.34",
+  "title": "Evaluate prompt lookup as cheaper speculation - execution and acceptance",
+  "outcome": "no_change",
+  "checkpoint_revision": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+  "hardware_fingerprint_sha256": "7ef87cf9868386b006cdf4384feca80a41e186dae7a7dbd050c0e5c0d907a289",
+  "protocol": "offload --moe-cache-auto --max-running-requests 1, kv nvfp4 220032; plain vs --lookup-draft 4 --lookup-ngram 6 --lookup-min-ngram 2; 128 greedy decode; fixtures rep1k/rep4k (repeated passage) and prose16k (03b fixture)",
+  "measurements": {
+    "resolved_cache": {"plain": 3447, "lookup": 3449},
+    "moe_miss": {"plain": 0.25, "lookup": 0.25},
+    "plain": {"rep1k": 20.62, "rep4k": 24.59, "prose16k": 20.72},
+    "lookup": {"rep1k": 18.30, "rep4k": 13.85, "prose16k": 12.55},
+    "delta_pct": {"rep1k": -11.2, "rep4k": -43.7, "prose16k": -39.4},
+    "sha1": {"plain_prose16k": "f8cb8d6f5b7b", "lookup_prose16k": "00082e945c2c"}
+  },
+  "cases": [
+    {"id": "17a-C11-greedy-parity", "status": "fail", "detail": "lookup changed the greedy output sha on prose16k (00082e945c2c vs f8cb8d6f5b7b) -> spurious min_ngram matches drafted"},
+    {"id": "17a-C12-throughput", "status": "fail", "detail": "lookup is slower on every workload (-11% to -44%), including repetitive text where drafts should win"}
+  ],
+  "decision": {"adopt_lookup": false, "reason": "draft-free PLD regresses decode on this PCIe-bound offload box: the multi-token verify frame and graph changes cost more than the saved decode steps even on repetitive text, and weak matches alter the greedy output. Keep lookup_draft=0 (default)."},
+  "rollback_recipe": "n/a (no production change; lookup is opt-in and stays off)",
+  "limitations": [
+    "Single configuration (depth 4, max_ngram 6, min_ngram 2); other depths not swept.",
+    "greedy + CUDA graphs on (max bs 1); the spec frame changes graph shapes.",
+    "Repetitive fixtures are synthetic repeats of one passage."
+  ],
+  "evidence": ["raw/run-34.log", "raw/probe.jsonl", "raw/miss.txt"],
+  "generated_utc": "2026-09-11"
+}
