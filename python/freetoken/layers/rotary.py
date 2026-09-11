@@ -74,6 +74,11 @@ class RotaryEmbedding(StateLessOP):
         query: torch.Tensor,
         key: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self._cos_sin_cache.device != query.device:
+            # get_rope caches instances by geometry, not device, so a process that built
+            # one on CPU (tests, meta-device warmups) hands this same instance to a CUDA
+            # forward -- flashinfer then rejects the CPU cache. Follow the tensors.
+            self._cos_sin_cache = self._cos_sin_cache.to(query.device)
         self.apply_rope_with_cos_sin_cache_inplace(
             positions=positions,
             query=query,
