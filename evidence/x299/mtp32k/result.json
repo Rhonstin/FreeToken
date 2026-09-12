@@ -1,0 +1,85 @@
+{
+  "task_key": "mtp-offload-research",
+  "bead_id": "FreeToken-mtp-z8v",
+  "title": "Research: offload the MTP draft head to an external device for prediction",
+  "outcome": "implemented (research; conditional go for a second-GPU prototype)",
+  "phase0_economics": {
+    "config": "offload, kv nvfp4 32768, memory-ratio 0.90, 16k greedy decode",
+    "depth0_cache2600": {
+      "tok_s": 18.86,
+      "miss": 0.42,
+      "vram_mib": 20154
+    },
+    "depth1_cache2600": {
+      "result": "OOM",
+      "detail": "+96 MiB alloc failed, 86 MiB free, 23.33 GiB used -> MTP depth1 needs ~3.1-5 GiB extra device memory; does NOT fit at cache2600 even at 32k"
+    },
+    "depth0_cache1400": {
+      "tok_s": 13.48,
+      "miss": 0.48,
+      "vram_mib": 16974,
+      "sha1": "f8cb8d6f5b7b"
+    },
+    "depth1_cache1400": {
+      "tok_s": 6.94,
+      "miss": 0.47,
+      "vram_mib": 21982,
+      "spec_accept": "58/80 = 72.5%",
+      "sha1": "71d9d2fd668b"
+    },
+    "verdict": "MTP depth1 fits at cache1400 but is 0.51x SLOWER than plain despite 72.5% acceptance -> speculation does not pay on this box."
+  },
+  "root_cause": [
+    "The MTP draft layer's routed experts are bf16 HOST banks (engine/mtp.py build_mtp_draft_banks) fetched over the SAME saturated PCIe 3.0 x16 link as the target's experts.",
+    "So a draft step adds draft-expert H2D traffic on top of the target verify rows' (gamma+1) expert traffic -> roughly doubles the bottleneck that dominates decode (04b: gather 63.6%).",
+    "The earlier lookup result (34: -11..-44%) and this MTP result agree: on a PCIe-bound offload box, any speculation that adds expert traffic loses."
+  ],
+  "why_the_idea_is_directionally_right": [
+    "MTP's computed tokens are only ~72% accepted, but the cost is the DRAFT EXPERTS crossing PCIe, not the proposal transfer.",
+    "Putting the draft head on a SECOND device with its experts LOCAL to that device removes the draft-expert traffic from the 3090's link entirely.",
+    "The cross-device payload is tiny: GPU0 -> second device = inputs_embeds [T,H] + target_hidden [T,4H] (~T*5*H*2 bytes; T=gamma+1, H=2560 -> tens of KB/step); second device -> GPU0 = draft_hidden [T,H]. PCIe 2.0 x4 (~2 GB/s) is more than enough; sync round-trip is small vs ~40 ms/step.",
+    "Offloading the head also frees ~3-5 GiB on the 3090 (depth1 used +5.0 GiB at cache1400), which is exactly the 15b fit blocker at 220k."
+  ],
+  "cross_device_contract": {
+    "gpu0": "embed_tokens(draft_tokens)->[T,H]; target_hidden [T,4H]; apply shared lm_head to the returned draft hidden -> [T,V]; verifier/spec.verify_step stays on GPU0",
+    "second_device": "run Qwen4ExpMTPHead.forward (project + draft decoder layer + attention KV + draft MoE) with the draft expert banks resident locally",
+    "gpu0_to_dev": [
+      [
+        "inputs_embeds",
+        "[T,H]"
+      ],
+      [
+        "target_hidden",
+        "[T,4H]"
+      ]
+    ],
+    "dev_to_gpu0": [
+      [
+        "draft_hidden",
+        "[T,H]"
+      ]
+    ],
+    "open_problems": [
+      "draft attention KV currently lives in GPU0's pool via draft_qsa_layer_ids (the draft batch 'reuses the step's reserved pages'); a second-device head needs its own draft KV (small, a few tokens) or a cross-device page handoff",
+      "the engine is single-device today (model + pools + caches on one CUDA device); needs a --mtp-gpu placement + stream/event sync + a second draft expert cache",
+      "CPU as the second device is unlikely: the draft decoder layer's attention is a Triton/CUDA path (no CPU attention fallback), and reading the draft banks from DDR4 (~44 GB/s) would cost ~100 ms/step"
+    ]
+  },
+  "decision": {
+    "go_no_go": "conditional GO - only worth prototyping on a SECOND GPU (not CPU), and only if the target-verify-row cost alone still leaves a win",
+    "cheapest_next_experiment": "measure the target-side verify-row cost in isolation (MTP with the draft expert fetch removed / draft computed for free) to see whether the remaining verify cost is below the plain baseline; if not, no placement of the draft head can help",
+    "hardware_caveat": "a CMP 90HX at PCIe 2.0 x4 is fine for the tiny cross-device payload, but CMP compute/driver support on Linux and the unlock reliability are risks; a second RTX-class GPU is safer"
+  },
+  "evidence": [
+    "raw/summary.txt",
+    "raw/summary0b.txt",
+    "raw/probe0b.jsonl",
+    "raw/serve-depth1.log",
+    "raw/serve0b-depth1.log"
+  ],
+  "limitations": [
+    "One prompt/config per point; accept rate from the server's cumulative spec counter.",
+    "No second-GPU prototype was built; the contract above is the design, not a measurement."
+  ],
+  "generated_utc": "2026-09-12"
+}

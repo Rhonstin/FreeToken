@@ -1,0 +1,2 @@
+depth0 depth=0 rc=1 vram=16974 miss=moe miss: 0.48 []
+depth1 depth=1 rc=0 vram=21982 miss=moe miss: 0.47 [spec accept: 58/80]
