@@ -40,7 +40,7 @@ def test_to_prometheus_renders_expected_metrics():
     text = to_prometheus(_doc())
     assert "freetoken_info{" in text and 'model="m"' in text
     assert "freetoken_tokens_per_second{phase=\"decode\"} 30.0" in text
-    assert "freetoken_kv_tokens{kind=\"used\"} 448" in text
+    assert "freetoken_kv_pages{kind=\"used\"} 448" in text
     assert "freetoken_kv_usage_ratio 0.00203606" in text or "freetoken_kv_usage_ratio 0.002" in text
     assert "freetoken_mamba_slots{kind=\"used\"} 3" in text
     assert "freetoken_requests_queued 3" in text

@@ -98,7 +98,7 @@ def to_prometheus(doc: dict[str, Any]) -> str:
               (rq.get("decode_ms_p95"), {"kind": "p95"})])
     o.metric("freetoken_n_tokens_max", "gauge", "Largest observed sequence length.",
              [(rq.get("n_tokens_max"), None)])
-    o.metric("freetoken_kv_tokens", "gauge", "KV pool usage in tokens.",
+    o.metric("freetoken_kv_pages", "gauge", "KV page-pool usage (pages).",
              [(kv.get("used_pages"), {"kind": "used"}), (kv.get("total_pages"), {"kind": "total"})])
     o.metric("freetoken_kv_usage_ratio", "gauge", "KV pool used/total.",
              [(kv.get("used_pages") / kv.get("total_pages") if kv.get("total_pages") else None, None)])

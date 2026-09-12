@@ -43,6 +43,8 @@ class StatsTracker:
         self.prefill_active = False
         self.prompt_processed = 0
         self.prompt_total = 0
+        self.prefill_rate_last = 0.0  # tokens/s from the last prefill chunk cadence
+        self._pf_last: tuple[float, int] | None = None
         self.spec_accepted = 0
         self.spec_proposed = 0
         self.moe: dict | None = None
@@ -111,8 +113,14 @@ class StatsTracker:
             self.prefill_active = True
             self.prompt_processed = reply.prompt_processed
             self.prompt_total = reply.prompt_total
+            if self._pf_last is not None and t > self._pf_last[0]:
+                d = reply.prompt_processed - self._pf_last[1]
+                if d > 0:
+                    self.prefill_rate_last = d / (t - self._pf_last[0])
+            self._pf_last = (t, reply.prompt_processed)
         elif getattr(reply, "completion_tokens_delta", 0) > 0:
             self.prefill_active = False  # decoding now
+            self._pf_last = None
         if getattr(reply, "spec_proposed", 0) > 0:
             self.spec_accepted = reply.spec_accepted
             self.spec_proposed = reply.spec_proposed
@@ -192,9 +200,9 @@ def build_stats(state: Any, p95_ms: int, ttft_mean_ms: int) -> dict:
     prefill = None
     if tr.prefill_active and tr.prompt_total > 0:
         eta = None
-        ptps = tr.prefill_tps()
-        if ptps > 0:
-            eta = round(max(0, tr.prompt_total - tr.prompt_processed) / ptps, 2)
+        rate = tr.prefill_rate_last or tr.prefill_tps()
+        if rate > 0:
+            eta = round(max(0, tr.prompt_total - tr.prompt_processed) / rate, 2)
         prefill = {
             "processed_tokens": tr.prompt_processed,
             "total_tokens": tr.prompt_total,
