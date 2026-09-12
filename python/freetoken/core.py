@@ -234,6 +234,10 @@ class Batch:
     # PrefillManager; 0 on decode batches.
     log_new_tokens: int = field(default=0, init=False)
     log_cached_tokens: int = field(default=0, init=False)
+    # Active-prefill progress snapshot: the furthest request's forwarded tokens so far
+    # (cached prefix + this chunk) and its complete prompt length. 0 on decode batches.
+    log_prompt_processed: int = field(default=0, init=False)
+    log_prompt_total: int = field(default=0, init=False)
     # (uid, complete prompt length, prefix-cache hit) for requests entering their first
     # prepared prefill batch. The scheduler turns these into PromptAdmittedMsg only AFTER
     # _prepare_batch succeeds. Continuation chunks leave this empty, so accounting is

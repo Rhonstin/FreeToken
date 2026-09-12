@@ -287,6 +287,8 @@ class PrefillManager:
         # once at admission, so continuation chunks (already-chunked reqs) contribute 0.
         log_new_tokens = 0
         log_cached_tokens = 0
+        log_prompt_processed = 0
+        log_prompt_total = 0
         # Scoring runs isolated: never mixed with generation rows in one forward (the engine's
         # all-rows logits would collide with the one-token-per-request sampling contract), and
         # one scoring request per batch so the retained logits stay bounded by ``score_chunk``.
@@ -313,6 +315,11 @@ class PrefillManager:
                 log_new_tokens += req.extend_len
                 if not is_continuation:
                     log_cached_tokens += req.cache_handle.cached_len
+                if not batch_score_only:
+                    # Active-prefill progress: cached prefix + the tokens forwarded now.
+                    log_prompt_processed = max(
+                        log_prompt_processed, getattr(req, "cached_len", 0) + req.extend_len)
+                    log_prompt_total = max(log_prompt_total, pending_req.input_len)
                 if batch_score_only:
                     break
             else:
@@ -324,6 +331,8 @@ class PrefillManager:
         batch.score_only = bool(batch_score_only)
         batch.log_new_tokens = log_new_tokens
         batch.log_cached_tokens = log_cached_tokens
+        batch.log_prompt_processed = log_prompt_processed
+        batch.log_prompt_total = log_prompt_total
         batch.prompt_admissions = prompt_admissions
         return batch
 

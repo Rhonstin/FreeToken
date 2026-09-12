@@ -67,6 +67,31 @@ class RequestRing:
             return 0
         return int(round(sum(vals) / len(vals)))
 
+    @staticmethod
+    def _pctl(vals: list, q: float) -> int | None:
+        vals = sorted(v for v in vals if v is not None)
+        if not vals:
+            return None
+        k = max(0, math.ceil(q * len(vals)) - 1)
+        return int(round(vals[k]))
+
+    def latency(self) -> dict:
+        """Percentiles over the ring: TTFT, full duration and steady decode ms/token."""
+        ttf = [rec.ttft_ms for _idx, rec in self._buf if rec.ttft_ms is not None]
+        durs = [rec.duration_ms for _idx, rec in self._buf if rec.duration_ms is not None]
+        dec = []
+        for _idx, rec in self._buf:
+            if rec.ttft_ms is not None and rec.duration_ms is not None:
+                n = max(1, (rec.completion_tokens or 1) - 1)
+                dec.append((rec.duration_ms - rec.ttft_ms) / n)
+        seq = [(rec.prompt_tokens or 0) + (rec.completion_tokens or 0) for _idx, rec in self._buf]
+        return {
+            "ttft_p50_ms": self._pctl(ttf, 0.50), "ttft_p95_ms": self._pctl(ttf, 0.95),
+            "duration_p50_ms": self._pctl(durs, 0.50), "duration_p95_ms": self._pctl(durs, 0.95),
+            "decode_ms_p50": self._pctl(dec, 0.50), "decode_ms_p95": self._pctl(dec, 0.95),
+            "n_tokens_max": max(seq) if seq else None,
+        }
+
     def count(self) -> int:
         return self._next
 
@@ -89,6 +114,10 @@ def requests_p95_ms() -> int:
 
 def requests_ttft_mean_ms() -> int:
     return _RING.ttft_mean_ms()
+
+
+def requests_latency() -> dict:
+    return _RING.latency()
 
 
 def requests_count() -> int:

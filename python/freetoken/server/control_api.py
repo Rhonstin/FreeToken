@@ -15,10 +15,11 @@ import time
 from typing import Any, Callable
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from freetoken.core import SamplingParams
 from freetoken.message import TokenizeMsg
 
+from . import metrics
 from .api_models import ScoreRequest
 
 
@@ -77,16 +78,34 @@ def register_control_routes(
 
     from .stats import build_stats
 
-    @app.get("/v1/stats")
-    async def stats():
+    def _stats_doc() -> dict:
+        """The shared /v1/stats document: engine snapshot + ring percentiles + live GPU."""
+        from . import request_ring
+
         doc = build_stats(
             get_state(), request_ring.requests_p95_ms(), request_ring.requests_ttft_mean_ms()
         )
+        doc.setdefault("requests", {}).update(request_ring.requests_latency())
         # Surface the model's recommended sampling (from its generation_config.json / GGUF
         # metadata) so clients can seed their sampling controls per-model instead of guessing.
         if get_model_sampling is not None:
-            doc["model"]["sampling"] = get_model_sampling() or {}
+            doc.setdefault("model", {})["sampling"] = get_model_sampling() or {}
+        doc["gpu_live"] = metrics.gpu_snapshot()
         return doc
+
+    @app.get("/v1/stats")
+    async def stats():
+        return _stats_doc()
+
+    @app.get("/v1/metrics")
+    async def metrics_json():
+        """JSON view of the same document /metrics renders as Prometheus text."""
+        return _stats_doc()
+
+    @app.get("/metrics")
+    async def metrics_prometheus():
+        return Response(content=metrics.to_prometheus(_stats_doc()),
+                        media_type="text/plain; version=0.0.4; charset=utf-8")
 
     @app.post("/v1/score")
     async def score(req: ScoreRequest):

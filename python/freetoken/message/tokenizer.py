@@ -48,6 +48,18 @@ class DetokenizeMsg(BaseTokenizerMsg):
     swa_total_tokens: int = 0
     # Bytes this engine process holds on the GPU (torch reserved pool). 0 on CPU.
     gpu_mem_bytes: int = 0
+    # Scheduler queue depth at this step (requests waiting for prefill/KV admission).
+    queue_reqs: int = 0
+    # Active prefill progress: tokens forwarded so far / total prompt tokens for the
+    # furthest request in this batch. prefill_active marks a prefill sample.
+    prompt_processed: int = 0
+    prompt_total: int = 0
+    prefill_active: bool = False
+    # Cumulative speculative-decoding counters (0 when MTP/lookup is off).
+    spec_accepted: int = 0
+    spec_proposed: int = 0
+    # Opt-in MoE/hybrid readout (--moe-collect-stats), else None.
+    moe: dict | None = None
 
 
 @dataclass

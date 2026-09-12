@@ -30,6 +30,7 @@ class StatsTracker:
         # "cost saved by running locally" accounting. Monotonic; resets when the process restarts.
         self.prompt_tokens_total = 0
         self.completion_tokens_total = 0
+        self.cached_tokens_total = 0
         self.kv_used_pages = 0
         self.kv_total_pages = 0
         self.mamba_used_slots = 0
@@ -37,6 +38,14 @@ class StatsTracker:
         self.swa_used_tokens = 0
         self.swa_total_tokens = 0
         self.vram_bytes = 0
+        self.queue_reqs = 0
+        # Active-prefill progress + speculative/MoE readouts for /metrics.
+        self.prefill_active = False
+        self.prompt_processed = 0
+        self.prompt_total = 0
+        self.spec_accepted = 0
+        self.spec_proposed = 0
+        self.moe: dict | None = None
 
     @property
     def active(self) -> int:
@@ -48,6 +57,15 @@ class StatsTracker:
         return tuple(sorted(self._inflight))
 
     def on_new_user(self, uid: int) -> None:
+        if not self._inflight:
+            # Starting from idle: drop the previous run's residual pool gauges.
+            self.kv_used_pages = 0
+            self.mamba_used_slots = 0
+            self.swa_used_tokens = 0
+            self.prefill_active = False
+            self.prompt_processed = 0
+            self.prompt_total = 0
+            self.queue_reqs = 0
         self._inflight.add(uid)
         self._aborting.discard(uid)
 
@@ -63,17 +81,8 @@ class StatsTracker:
         if getattr(reply, "prompt_tokens_delta", 0) > 0:
             self._prefill.append((t, reply.prompt_tokens_delta))
             self.prompt_tokens_total += reply.prompt_tokens_delta
-        if getattr(reply, "kv_total_pages", 0) > 0:  # ignore 0/0 (prompt reply, owned-KV)
-            self.kv_used_pages = reply.kv_used_pages
-            self.kv_total_pages = reply.kv_total_pages
-        if getattr(reply, "mamba_total_slots", 0) > 0:  # hybrid (GDN) only
-            self.mamba_used_slots = reply.mamba_used_slots
-            self.mamba_total_slots = reply.mamba_total_slots
-        if getattr(reply, "swa_total_tokens", 0) > 0:  # SWA (window pool) only
-            self.swa_used_tokens = reply.swa_used_tokens
-            self.swa_total_tokens = reply.swa_total_tokens
-        if getattr(reply, "gpu_mem_bytes", 0) > 0:
-            self.vram_bytes = reply.gpu_mem_bytes
+        self.cached_tokens_total += getattr(reply, "cached_tokens", 0) or 0
+        # Terminal handling first, so the pool gauges below see the post-finish flight count.
         if getattr(reply, "finished", False):
             uid = getattr(reply, "uid", None)
             if uid in self._inflight:
@@ -82,6 +91,33 @@ class StatsTracker:
                     self._aborting.discard(uid)
                 else:
                     self.completed += 1
+        # Pool gauges: a single batch's snapshot can read 0 while another request still
+        # holds the pool, so keep the peak while anything is in flight and drop to 0 the
+        # moment the engine goes idle.
+        inflight = self.active
+        if getattr(reply, "kv_total_pages", 0) > 0:  # ignore 0/0 (prompt reply, owned-KV)
+            self.kv_total_pages = reply.kv_total_pages
+            self.kv_used_pages = max(self.kv_used_pages, reply.kv_used_pages) if inflight else 0
+        if getattr(reply, "mamba_total_slots", 0) > 0:  # hybrid (GDN) only
+            self.mamba_total_slots = reply.mamba_total_slots
+            self.mamba_used_slots = max(self.mamba_used_slots, reply.mamba_used_slots) if inflight else 0
+        if getattr(reply, "swa_total_tokens", 0) > 0:  # SWA (window pool) only
+            self.swa_total_tokens = reply.swa_total_tokens
+            self.swa_used_tokens = max(self.swa_used_tokens, reply.swa_used_tokens) if inflight else 0
+        if getattr(reply, "gpu_mem_bytes", 0) > 0:
+            self.vram_bytes = reply.gpu_mem_bytes
+        self.queue_reqs = getattr(reply, "queue_reqs", self.queue_reqs) or 0
+        if getattr(reply, "prefill_active", False):
+            self.prefill_active = True
+            self.prompt_processed = reply.prompt_processed
+            self.prompt_total = reply.prompt_total
+        elif getattr(reply, "completion_tokens_delta", 0) > 0:
+            self.prefill_active = False  # decoding now
+        if getattr(reply, "spec_proposed", 0) > 0:
+            self.spec_accepted = reply.spec_accepted
+            self.spec_proposed = reply.spec_proposed
+        if getattr(reply, "moe", None):
+            self.moe = reply.moe
 
     def _rate(self, window: "deque[tuple[float, int]]", now: float | None) -> float:
         t = time.monotonic() if now is None else now
@@ -153,6 +189,30 @@ def build_stats(state: Any, p95_ms: int, ttft_mean_ms: int) -> dict:
          "page_size": sps}
         if tr.swa_total_tokens > 0 else None
     )
+    prefill = None
+    if tr.prefill_active and tr.prompt_total > 0:
+        eta = None
+        ptps = tr.prefill_tps()
+        if ptps > 0:
+            eta = round(max(0, tr.prompt_total - tr.prompt_processed) / ptps, 2)
+        prefill = {
+            "processed_tokens": tr.prompt_processed,
+            "total_tokens": tr.prompt_total,
+            "usage_ratio": tr.prompt_processed / tr.prompt_total,
+            "eta_seconds": eta,
+        }
+    spec = None
+    if tr.spec_proposed > 0:
+        spec = {"accepted": tr.spec_accepted, "proposed": tr.spec_proposed,
+                "rate": tr.spec_accepted / tr.spec_proposed}
+    moe = None
+    if tr.moe:
+        moe = {
+            "miss_ratio": tr.moe.get("miss_rate"),
+            "cache_size": tr.moe.get("slots_per_layer") or tr.moe.get("cache_size"),
+            "hybrid_fetch_fraction": tr.moe.get("hybrid_fetch_fraction"),
+            "oracle_hit": tr.moe.get("oracle_hit_at_slots"),
+        }
     return {
         "instance_id": getattr(state, "instance_id", None),
         "model": derive_model_card(config),
@@ -169,9 +229,14 @@ def build_stats(state: Any, p95_ms: int, ttft_mean_ms: int) -> dict:
         "requests": {
             "active": tr.active,
             "completed": tr.completed,
+            "queued": tr.queue_reqs,
             "p95_ms": p95_ms,
             "ttft_mean_ms": ttft_mean_ms,
             "prompt_tokens_total": tr.prompt_tokens_total,
+            "cached_tokens_total": tr.cached_tokens_total,
             "completion_tokens_total": tr.completion_tokens_total,
         },
+        "prefill": prefill,
+        "spec": spec,
+        "moe": moe,
     }

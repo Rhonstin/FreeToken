@@ -553,15 +553,25 @@ class Scheduler(SchedulerIOMixin):
                     self.cache_manager.cache_req(req, finished=False)
 
         self.finished_reqs = new_finished_reqs
-        # Stamp each reply with the post-batch KV page occupancy so the frontend (shell
-        # status bar) can show live KV usage without a separate query.
+        # Stamp each reply with the post-batch pool occupancy + queue depth so the
+        # frontend (shell status bar / metrics) can show live values without a query.
         used, total = self._kv_usage_pages()
         mamba_slots = self._mamba_slot_usage()
         swa_tokens = self._swa_token_usage()
+        running_reqs = len(self.decode_manager.running_reqs)
+        queue_reqs = len(self.prefill_manager.pending_list)
+        # getattr: unit tests drive this drain as an unbound method on doubles
+        # without a __init__ (no accounting object); production always has one.
+        acct = getattr(self, "spec_accounting", None)
+        spec_stats = acct.snapshot() if acct is not None else None
+        moe_stats = self._moe_stats() if getattr(self.config, "moe_collect_stats", False) else None
         if reply:
             mem = self._gpu_mem_bytes()
             mamba_used, mamba_total = mamba_slots or (0, 0)
             swa_used, swa_total = swa_tokens or (0, 0)
+            prefill = getattr(batch, "phase", "") == "prefill"
+            pp = getattr(batch, "log_prompt_processed", 0)
+            pt = getattr(batch, "log_prompt_total", 0)
             for m in reply:
                 m.kv_used_pages = used
                 m.kv_total_pages = total
@@ -570,22 +580,26 @@ class Scheduler(SchedulerIOMixin):
                 m.swa_used_tokens = swa_used
                 m.swa_total_tokens = swa_total
                 m.gpu_mem_bytes = mem
+                m.queue_reqs = queue_reqs
+                m.prompt_processed = pp
+                m.prompt_total = pt
+                m.prefill_active = prefill and pt > 0
+                m.spec_accepted = (spec_stats or {}).get("accepted", 0)
+                m.spec_proposed = (spec_stats or {}).get("proposed", 0)
+                m.moe = moe_stats
         self.status_reporter.report_batch(
             batch,
-            running_reqs=len(self.decode_manager.running_reqs),
-            queue_reqs=len(self.prefill_manager.pending_list),
+            running_reqs=running_reqs,
+            queue_reqs=queue_reqs,
             kv_used_pages=used,
             kv_total_pages=total,
             page_size=self.config.page_size,
             mamba_slots=mamba_slots,
             swa_tokens=swa_tokens,
-            # getattr: unit tests drive this drain as an unbound method on doubles
-            # without a __init__ (no accounting object); production always has one.
-            spec=(acct.snapshot() if (acct := getattr(
-                self, "spec_accounting", None)) is not None else None),
+            spec=spec_stats,
             # Opt-in MoE tuning readout (--moe-collect-stats): miss/route counters,
             # one device read per log interval.
-            moe=self._moe_stats() if getattr(self.config, "moe_collect_stats", False) else None,
+            moe=moe_stats,
         )
         self.send_result(reply)
 
