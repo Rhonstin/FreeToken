@@ -1,0 +1,8 @@
+utc 2026-09-12T06:32:11Z
+drop_in: ExecStart=/usr/local/bin/freetoken-serve-exp --num-tokens 220032 --kv-reserve-tokens 220032 --kv-cache-dtype nvfp4 --memory-ratio 0.90 --moe-strategy hybrid --moe-hybrid-max-fetch 1 --moe-cache-auto --max-running-requests 1
+gpu:
+NVIDIA GeForce RTX 3090, 610.57.04, 24576 MiB
+model:
+Qwen3.8-Flash-Next-NVFP4
+kv:
+{"instance_id":"19dae117-bfc0-4875-a132-bc508311ae88","model":{"id":"Qwen3.8-Flash-Next-NVFP4","ctx":262144,"attn":"hybrid_linear","moe":true,"sampling":{"temperature":1.0,"top_k":20,"top_p":0.95}},"uptime_s":449,"kv":null,"mamba":null,"swa":null,"vram_bytes":0,"gpus":[{"index":0,"name":"NVIDIA GeFo

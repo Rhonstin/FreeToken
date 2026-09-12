@@ -1,0 +1,84 @@
+{
+  "task_key": "final-measurement",
+  "title": "Final adopted-prod prefill and generation measurement",
+  "config": "hybrid --moe-hybrid-max-fetch 1 --moe-cache-auto --max-running-requests 1 --num-tokens 220032 --kv-cache-dtype nvfp4 --memory-ratio 0.90; RTX3090 24GB, driver 610.57.04; cache 3447/num_pages 3438",
+  "prefill_cold": {
+    "note": "distinct prompt, no warmup -> true cold TTFT",
+    "4k": {
+      "prompt_tokens": 4085,
+      "ttft_s": 6.31,
+      "prefill_tok_s": 648
+    },
+    "16k": {
+      "prompt_tokens": 16225,
+      "ttft_s": 14.29,
+      "prefill_tok_s": 1135
+    },
+    "64k": {
+      "prompt_tokens": 64660,
+      "ttft_s": 47.94,
+      "prefill_tok_s": 1349
+    },
+    "196k": {
+      "prompt_tokens": 197764,
+      "ttft_s": 140.46,
+      "prefill_tok_s": 1408
+    }
+  },
+  "generation_warm": {
+    "note": "radix-cached context (context_probe measured pass)",
+    "4k": {
+      "decode_tok_s": 26.92,
+      "p50_ms": 35.5,
+      "p95_ms": 50.6
+    },
+    "16k": {
+      "decode_tok_s": 32.71,
+      "p50_ms": 30.4,
+      "p95_ms": 35.6
+    },
+    "64k": {
+      "decode_tok_s": 31.23,
+      "p50_ms": 32.5,
+      "p95_ms": 38.7
+    },
+    "192k": {
+      "decode_tok_s": 26.96,
+      "p50_ms": 35.1,
+      "p95_ms": 51.3
+    }
+  },
+  "generation_cold": {
+    "4k": 28.56,
+    "16k": 29.29,
+    "64k": 31.73,
+    "196k": 30.79
+  },
+  "short_prompt_cold": {
+    "prompt_tokens": 81,
+    "ttft_ms": 5590.8,
+    "decode_tok_s": 27.37,
+    "radix_hit": {
+      "ttft_ms": 5650.9,
+      "decode_tok_s": 27.9
+    }
+  },
+  "vs_original_prod": {
+    "baseline_decode_tok_s": 17.53,
+    "adopted_decode_tok_s": 30.79,
+    "gain_pct": 75.6,
+    "note": "original prod = offload manual cache2600 220k; adopted = hybrid auto mr1"
+  },
+  "limitations": [
+    "196k prompt uses 197764 tokens (>192k nominal).",
+    "Warm generation rows come from a radix-cached second request; cold generation rows are from the cold run.",
+    "Single request."
+  ],
+  "evidence": [
+    "raw/final.jsonl",
+    "raw/cold.jsonl",
+    "raw/short.json",
+    "raw/snapshot.txt"
+  ],
+  "generated_utc": "2026-09-12"
+}

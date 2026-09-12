@@ -1,0 +1,28 @@
+{
+  "runs": [
+    {
+      "prompt_tokens": 81,
+      "completion_tokens": 31,
+      "ttft_ms": 5590.8,
+      "total_s": 6.687,
+      "decode_tok_s": 27.37,
+      "tag": "cold"
+    },
+    {
+      "prompt_tokens": 81,
+      "completion_tokens": 31,
+      "ttft_ms": 5650.9,
+      "total_s": 6.726,
+      "decode_tok_s": 27.9,
+      "tag": "radix-hit"
+    },
+    {
+      "prompt_tokens": 111,
+      "completion_tokens": 31,
+      "ttft_ms": 5687.6,
+      "total_s": 6.862,
+      "decode_tok_s": 25.55,
+      "tag": "turn2"
+    }
+  ]
+}
