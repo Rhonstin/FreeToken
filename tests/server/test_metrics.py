@@ -51,7 +51,7 @@ def test_to_prometheus_renders_expected_metrics():
     assert 'freetoken_gpu_utilization_ratio{index="0"' in text
     assert "freetoken_gpu_power_watts" in text
     # every sample line has a matching TYPE header for its metric
-    assert "# TYPE freetoken_kv_tokens gauge" in text
+    assert "# TYPE freetoken_kv_pages gauge" in text
 
 
 def test_to_prometheus_skips_absent_metrics():
