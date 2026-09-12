@@ -1,0 +1,32 @@
+{
+  "task_key": "metrics",
+  "epic": "FreeToken-mtp-qtq",
+  "title": "Prometheus /metrics (HTTP-only telemetry), better than llama.cpp",
+  "outcome": "implemented",
+  "deployed": {
+    "target": "/opt/FreeToken (freetoken.service)",
+    "fixes": ["server/metrics.py (new)", "server/control_api.py", "server/request_ring.py",
+              "server/stats.py", "message/tokenizer.py", "message/frontend.py",
+              "tokenizer/server.py", "core.py", "scheduler/prefill.py", "scheduler/scheduler.py"],
+    "endpoints": ["/metrics (Prometheus)", "/v1/metrics (JSON alias of /v1/stats + enrichment)"],
+    "rollback": "git -C /opt/FreeToken checkout <file> for each file + systemctl restart freetoken.service; the pre-change copies are in the campaign history (dev fork is source of truth)."
+  },
+  "metrics": ["token counters", "decode/prefill tps", "active/queued/completed",
+              "kv pages + usage ratio", "mamba slots", "swa tokens",
+              "ttft/duration/decode ms percentiles", "n_tokens_max", "vram bytes",
+              "gpu util/mem/temp/power (pynvml)", "prefill processed/total/ratio/eta",
+              "moe miss/slots/hybrid-fetch (opt-in)", "spec draft/accepted/ratio"],
+  "verification": [
+    "idle: /metrics returns 73 lines; gpu util 0, temp 31-33C, power 122W via pynvml",
+    "prefill: processed 8192->16384->24576 / 60056, kv pages 128->256->384, mamba 3/8 stable (peak, not clobbered), queue 1",
+    "decode: kv 20 pages, mamba 3, 32.2 tok/s, gpu util 90%",
+    "unit: tests/server/test_metrics.py 6 passed; scheduler/server/engine-adjacent 950 passed (2 env-only flashinfer fails)"
+  ],
+  "dashboard": {
+    "path": "/home/rhonstin/freetoken-dashboard (systemd freetoken-dashboard.service, :8798)",
+    "change": "HTTP-only: collector polls /v1/metrics; /gpus and /api/live are derived from it; ssh tail/nvidia-smi removed",
+    "verified": "no ssh subprocesses; /gpus real (22480 MiB, 32C); /api/live phase/kv/mamba live"
+  },
+  "comparison": "evidence/x299/metrics/comparison.md",
+  "generated_utc": "2026-09-12"
+}

@@ -1,0 +1,73 @@
+# HELP freetoken_info Served model identity and config.
+# TYPE freetoken_info gauge
+freetoken_info{model="Qwen3.8-Flash-Next-NVFP4",ctx="262144",attn="hybrid_linear",moe="true",kv_quant="nvfp4"} 1
+# HELP freetoken_uptime_seconds Seconds since the engine became ready.
+# TYPE freetoken_uptime_seconds gauge
+freetoken_uptime_seconds 376
+# HELP freetoken_prompt_tokens_total Prompt tokens processed, excluding cache hits.
+# TYPE freetoken_prompt_tokens_total counter
+freetoken_prompt_tokens_total 63
+# HELP freetoken_prompt_tokens_cached_total Prompt tokens served from the prefix cache.
+# TYPE freetoken_prompt_tokens_cached_total counter
+freetoken_prompt_tokens_cached_total 0
+# HELP freetoken_generated_tokens_total Generation tokens emitted.
+# TYPE freetoken_generated_tokens_total counter
+freetoken_generated_tokens_total 1199
+# HELP freetoken_requests_active Requests currently in flight.
+# TYPE freetoken_requests_active gauge
+freetoken_requests_active 0
+# HELP freetoken_requests_queued Requests deferred in the queue.
+# TYPE freetoken_requests_queued gauge
+freetoken_requests_queued 0
+# HELP freetoken_requests_completed_total Requests finished.
+# TYPE freetoken_requests_completed_total counter
+freetoken_requests_completed_total 1
+# HELP freetoken_tokens_per_second Sliding-window throughput (tokens/s).
+# TYPE freetoken_tokens_per_second gauge
+freetoken_tokens_per_second{phase="decode"} 0.0
+freetoken_tokens_per_second{phase="prefill"} 0.0
+# HELP freetoken_ttft_milliseconds Time to first token (ms).
+# TYPE freetoken_ttft_milliseconds gauge
+freetoken_ttft_milliseconds{kind="mean"} 5769
+freetoken_ttft_milliseconds{kind="p50"} 5769
+freetoken_ttft_milliseconds{kind="p95"} 5769
+# HELP freetoken_request_duration_milliseconds Full request duration (ms).
+# TYPE freetoken_request_duration_milliseconds gauge
+freetoken_request_duration_milliseconds{kind="p50"} 43719
+freetoken_request_duration_milliseconds{kind="p95"} 43719
+# HELP freetoken_decode_milliseconds_per_token Steady-state decode latency (ms/token).
+# TYPE freetoken_decode_milliseconds_per_token gauge
+freetoken_decode_milliseconds_per_token{kind="p50"} 32
+freetoken_decode_milliseconds_per_token{kind="p95"} 32
+# HELP freetoken_n_tokens_max Largest observed sequence length.
+# TYPE freetoken_n_tokens_max gauge
+freetoken_n_tokens_max 1262
+# HELP freetoken_kv_pages KV page-pool usage (pages).
+# TYPE freetoken_kv_pages gauge
+freetoken_kv_pages{kind="used"} 0
+freetoken_kv_pages{kind="total"} 3438
+# HELP freetoken_kv_usage_ratio KV pool used/total.
+# TYPE freetoken_kv_usage_ratio gauge
+freetoken_kv_usage_ratio 0.0
+# HELP freetoken_mamba_slots GDN state-slot usage.
+# TYPE freetoken_mamba_slots gauge
+freetoken_mamba_slots{kind="used"} 0
+freetoken_mamba_slots{kind="total"} 8
+# HELP freetoken_vram_bytes GPU bytes reserved by the engine process.
+# TYPE freetoken_vram_bytes gauge
+freetoken_vram_bytes 22586327040
+# HELP freetoken_gpu_utilization_ratio GPU SM utilization in [0,1].
+# TYPE freetoken_gpu_utilization_ratio gauge
+freetoken_gpu_utilization_ratio{index="0",uuid="GPU-fd98efd2-8559-aa03-d51e-99d494ae8061",name="NVIDIA GeForce RTX 3090"} 0.0
+# HELP freetoken_gpu_memory_used_bytes GPU memory used (bytes).
+# TYPE freetoken_gpu_memory_used_bytes gauge
+freetoken_gpu_memory_used_bytes{index="0",uuid="GPU-fd98efd2-8559-aa03-d51e-99d494ae8061",name="NVIDIA GeForce RTX 3090"} 23579983872
+# HELP freetoken_gpu_memory_total_bytes GPU memory total (bytes).
+# TYPE freetoken_gpu_memory_total_bytes gauge
+freetoken_gpu_memory_total_bytes{index="0",uuid="GPU-fd98efd2-8559-aa03-d51e-99d494ae8061",name="NVIDIA GeForce RTX 3090"} 25769803776
+# HELP freetoken_gpu_temperature_celsius GPU temperature (C).
+# TYPE freetoken_gpu_temperature_celsius gauge
+freetoken_gpu_temperature_celsius{index="0",uuid="GPU-fd98efd2-8559-aa03-d51e-99d494ae8061",name="NVIDIA GeForce RTX 3090"} 40
+# HELP freetoken_gpu_power_watts GPU power draw (W).
+# TYPE freetoken_gpu_power_watts gauge
+freetoken_gpu_power_watts{index="0",uuid="GPU-fd98efd2-8559-aa03-d51e-99d494ae8061",name="NVIDIA GeForce RTX 3090"} 125.7
