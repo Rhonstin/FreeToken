@@ -19,6 +19,7 @@ from freetoken.message import (
     CacheRebuildResultMsg,
     DetokenizeMsg,
     ErrorReplyMsg,
+    PrefillProgressMsg,
     PromptAdmittedMsg,
     ScoreChunkMsg,
     TokenizeMsg,
@@ -48,6 +49,23 @@ def _prompt_admitted_reply(msg: PromptAdmittedMsg) -> UserReply:
         finished=False,
         prompt_tokens_delta=msg.prompt_tokens,
         cached_tokens=msg.cached_tokens,
+    )
+
+
+def _prefill_progress_reply(msg: PrefillProgressMsg) -> UserReply:
+    """Per-chunk prefill progress; carries no token deltas (accounting is untouched)."""
+    return UserReply(
+        uid=msg.uid,
+        incremental_output="",
+        finished=False,
+        prefill_active=True,
+        prompt_processed=msg.processed,
+        prompt_total=msg.total,
+        kv_used_pages=msg.kv_used_pages,
+        kv_total_pages=msg.kv_total_pages,
+        mamba_used_slots=msg.mamba_used_slots,
+        mamba_total_slots=msg.mamba_total_slots,
+        queue_reqs=msg.queue_reqs,
     )
 
 
@@ -179,6 +197,7 @@ def tokenize_worker(
             tokenize_msg = [m for m in pending_msg if isinstance(m, TokenizeMsg)]
             abort_msg = [m for m in pending_msg if isinstance(m, AbortMsg)]
             prompt_admitted_msg = [m for m in pending_msg if isinstance(m, PromptAdmittedMsg)]
+            prefill_progress_msg = [m for m in pending_msg if isinstance(m, PrefillProgressMsg)]
             error_reply_msg = [m for m in pending_msg if isinstance(m, ErrorReplyMsg)]
             score_chunk_msg = [m for m in pending_msg if isinstance(m, ScoreChunkMsg)]
             # Cache-rebuild control messages are pure passthrough (no tokenization):
@@ -214,6 +233,7 @@ def tokenize_worker(
                         CacheRebuildMsg,
                         CacheRebuildResultMsg,
                         ErrorReplyMsg,
+                        PrefillProgressMsg,
                         PromptAdmittedMsg,
                         ScoreChunkMsg,
                     ),
@@ -266,7 +286,8 @@ def tokenize_worker(
 
             _send_generation_replies(
                 send_frontend,
-                [_prompt_admitted_reply(msg) for msg in prompt_admitted_msg],
+                [_prompt_admitted_reply(msg) for msg in prompt_admitted_msg]
+                + [_prefill_progress_reply(msg) for msg in prefill_progress_msg],
                 sampled_replies,
                 [_error_reply(msg) for msg in error_reply_msg],
             )

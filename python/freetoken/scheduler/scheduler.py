@@ -17,6 +17,7 @@ from freetoken.message import (
     DetokenizeMsg,
     ErrorReplyMsg,
     ExitMsg,
+    PrefillProgressMsg,
     PromptAdmittedMsg,
     ScoreChunkMsg,
     UserMsg,
@@ -1107,7 +1108,34 @@ class Scheduler(SchedulerIOMixin):
             return None
         forward_input = self._prepare_batch(batch)
         self._report_prompt_admissions(batch)
+        self._report_prefill_progress(batch)
         return forward_input
+
+    def _report_prefill_progress(self, batch: Batch) -> None:
+        """Publish live prefill progress for a chunk so the frontend can show a prompt bar.
+
+        Emitted every prefill batch (admissions are once); carries the furthest request's
+        processed/total tokens plus the current pool/queue snapshot, no token deltas.
+        """
+        if not batch.is_prefill:
+            return
+        total = getattr(batch, "log_prompt_total", 0)
+        if total <= 0:
+            return
+        processed = getattr(batch, "log_prompt_processed", 0)
+        used, total_pages = self._kv_usage_pages()
+        m_used, m_total = self._mamba_slot_usage() or (0, 0)
+        queue = len(self.prefill_manager.pending_list)
+        msgs = [
+            PrefillProgressMsg(
+                uid=req.uid, processed=processed, total=total,
+                kv_used_pages=used, kv_total_pages=total_pages,
+                mamba_used_slots=m_used, mamba_total_slots=m_total, queue_reqs=queue,
+            )
+            for req in batch.reqs if req.uid >= 0
+        ]
+        if msgs:
+            self.send_result(msgs)
 
     def _report_prompt_admissions(self, batch: Batch) -> None:
         """Publish first-prefill accounting only after batch preparation succeeded.

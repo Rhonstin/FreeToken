@@ -78,6 +78,25 @@ class PromptAdmittedMsg(BaseTokenizerMsg):
 
 
 @dataclass
+class PrefillProgressMsg(BaseTokenizerMsg):
+    """Scheduler -> tokenizer live prefill progress for one request, per chunk.
+
+    Emitted on every prefill batch (not just admission) so the frontend can render a
+    prompt-processing bar: ``processed`` / ``total`` prompt tokens plus the current
+    pool/queue snapshot. Carries no token deltas, so it never affects accounting.
+    """
+
+    uid: int
+    processed: int
+    total: int
+    kv_used_pages: int = 0
+    kv_total_pages: int = 0
+    mamba_used_slots: int = 0
+    mamba_total_slots: int = 0
+    queue_reqs: int = 0
+
+
+@dataclass
 class TokenizeMsg(BaseTokenizerMsg):
     uid: int
     text: str | List[Dict[str, Any]]
