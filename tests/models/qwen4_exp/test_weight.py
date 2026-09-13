@@ -168,10 +168,13 @@ def checkpoint(tmp_path_factory) -> tuple[str, dict[str, torch.Tensor]]:
 @pytest.fixture(scope="module")
 def loaded(checkpoint) -> dict[str, torch.Tensor]:
     folder, _raw = checkpoint
+    # Text-only read: the model under test builds no tower, and the key map is the text
+    # state dict. tests/engine/test_mm_encoder.py and test_qwen3_vl* cover the tower.
     return {
         name: tensor.clone()
         for name, tensor in iter_weights(
-            folder, torch.device("cpu"), include_moe_experts=True, include_non_moe=True
+            folder, torch.device("cpu"), include_moe_experts=True, include_non_moe=True,
+            include_vision=False,
         )
     }
 
@@ -207,10 +210,22 @@ def test_key_map_is_exactly_the_model_state_dict(loaded):
 
 def test_mtp_visual_experts_and_table_never_loaded(loaded):
     for name in loaded:
-        assert not name.startswith(("mtp.", "model.visual."))
+        assert not name.startswith(("mtp.", "visual."))
         assert ".mlp.experts." not in name
         assert "ngram_embedding" not in name
         assert not name.endswith((".weight_scale", ".weight_scale_2", ".input_scale"))
+
+
+def test_vision_keys_load_only_when_the_tower_is_built(checkpoint):
+    folder, _raw = checkpoint
+    vision = {
+        name for name, _ in iter_weights(
+            folder, torch.device("cpu"), include_moe_experts=False, include_non_moe=True,
+            include_vision=True,
+        )
+        if name.startswith("visual.")
+    }
+    assert vision == {"visual.blocks.0.attn.qkv.weight", "visual.merger.norm.weight"}
 
 
 @pytest.fixture(scope="module")
@@ -219,7 +234,8 @@ def mtp_loaded(checkpoint):
     return {
         name: tensor.clone()
         for name, tensor in iter_weights(
-            folder, torch.device("cpu"), include_moe_experts=True, include_non_moe=True, include_mtp=True
+            folder, torch.device("cpu"), include_moe_experts=True, include_non_moe=True,
+            include_mtp=True, include_vision=False,
         )
     }
 

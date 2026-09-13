@@ -7,12 +7,14 @@ from typing import Any, Tuple
 import torch
 
 from freetoken.models.config import (
+    mrope_layout_from_rope_params,
     FullAttentionGroupConfig,
     LinearGatedDeltaGroupConfig,
     ModelConfig,
     RotaryConfig,
     SlotStateSpec,
 )
+from freetoken.models.qwen3_vl.config import parse_vision_config
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,9 @@ class Qwen4ExpArgs:
     # field (transformers ignores ``mtp.*``), so this is opt-in (a CLI flag in 419.7) or
     # ``num_nextn_predict_layers`` when a checkpoint config provides it.
     mtp_num_layers: int = 0
+    # The checkpoint's image placeholder id (multimodal qwen4_exp releases); None for
+    # text-only conversions. The tokenizer/template own the actual image expansion.
+    image_token_id: int | None = None
 
     @property
     def index_topk_blocks(self) -> int:
@@ -194,12 +199,19 @@ def parse_config(hf_config: Any) -> ModelConfig:
         if layer_types[lid] != "linear_attention":
             raise ValueError(f"PLE must sit on a linear_attention layer, got layer {lid}")
 
+    vision_config = parse_vision_config(hf_config)
     full_rotary = RotaryConfig(
         head_dim=head_dim,
         rotary_dim=rotary_dim,
         max_position=text.max_position_embeddings,
         base=rope_theta,
         scaling=rope_scaling,
+        mrope_section=(
+            list(rope_params["mrope_section"])
+            if vision_config is not None and "mrope_section" in rope_params
+            else None
+        ),
+        mrope_layout=mrope_layout_from_rope_params(rope_params),
     )
     full_group = FullAttentionGroupConfig(
         name="full",
@@ -256,6 +268,7 @@ def parse_config(hf_config: Any) -> ModelConfig:
         index_budget=int(text.indexer_budget),
         index_ratio=int(text.indexer_compress_ratio),
         mtp_num_layers=int(getattr(text, "num_nextn_predict_layers", 0) or 0),
+        image_token_id=getattr(hf_config, "image_token_id", None),
     )
 
     return ModelConfig(
@@ -283,7 +296,7 @@ def parse_config(hf_config: Any) -> ModelConfig:
         use_qk_norm=True,
         model_type=getattr(hf_config, "model_type", "qwen4_exp"),
         architectures=getattr(hf_config, "architectures", ["Qwen4ExpForConditionalGeneration"]),
-        vision_config=None,  # served text-only
+        vision_config=vision_config,
         image_token_id=getattr(hf_config, "image_token_id", None),
         attention_groups=groups,
         expert_quant=expert_quant,

@@ -100,9 +100,12 @@ class CacheManager:
         # would then never produce logits for the NLL pass (an empty match forwards and
         # scores every token). Both cases match against the empty prefix.
         score_only = getattr(req, "score_only", False)
+        has_images = getattr(req, "mm_embeds", None) is not None or getattr(
+            req, "mm_items", None
+        ) is not None
         ids = (
             req.input_ids[:0]
-            if (req.mm_embeds is not None or score_only)
+            if (has_images or score_only)
             else req.input_ids[: input_len - 1]
         )
         if self.is_swa:
@@ -386,17 +389,6 @@ class CacheManager:
         #                                           We should free it if the request has finished.
         page_indices = self.page_table[req.table_idx, : req.cached_len]
         old_handle = req.cache_handle
-        # Multimodal requests are never inserted into the shared prefix cache (see
-        # ``match_req``). Their KV pages stay owned by the active request and are freed
-        # on completion; nothing is exposed for cross-request reuse.
-        if req.mm_embeds is not None:
-            self.unlock(old_handle)
-            if finished:
-                tail = self._padded_tail(req, old_handle.cached_len)
-                if self.swa_paged:
-                    self._free_swa(tail)
-                self._free(tail)
-            return
         insert_ids = req.input_ids[: req.cached_len]
         cached_len, new_handle = self.prefix_cache.insert_prefix(insert_ids, page_indices)
         # unlock until all operations on handle is done
@@ -436,13 +428,6 @@ class CacheManager:
         pool = self.linear_state_pool
         old_handle = req.cache_handle
         page_indices = self.page_table[req.table_idx, : req.cached_len]
-
-        if req.mm_embeds is not None:
-            self.unlock(old_handle)
-            if finished:
-                self._free(page_indices[old_handle.cached_len :])
-                self._free_req_slots(req)
-            return
 
         if finished:
             # A pending freeze (the tool-call anchor, or a prefill ×64 track the request
@@ -530,14 +515,6 @@ class CacheManager:
 
         old_handle = req.cache_handle
         page_indices = self.page_table[req.table_idx, : req.cached_len]
-
-        if req.mm_embeds is not None:
-            self.unlock(old_handle)
-            if finished:
-                tail = self._padded_tail(req, old_handle.cached_len)
-                self._free_swa(tail)
-                self._free(tail)
-            return
 
         insert_len = align_down(req.cached_len, self.page_size)
         freed = page_indices[:0]

@@ -277,6 +277,7 @@ def create_kvcache_pool(
                 spec.index_ratio, max(0, num_speculative_tokens)),
             layer_ids=layer_ids,
             kv_quant=kv_quant,
+            mrope=getattr(model_config, "model_is_mrope", False),
         )
 
     if len(kv_specs) == 1 and kv_specs[0].mla:

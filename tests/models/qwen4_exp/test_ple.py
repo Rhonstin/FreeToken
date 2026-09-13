@@ -758,7 +758,7 @@ def test_spec_row_contexts_roll_from_committed_and_flat_rows():
 
     from freetoken.models.qwen4_exp.ple import build_ple_metadata
 
-    args = SimpleNamespace(ngram_size=3, ngram_boundary_token_id=7)
+    args = SimpleNamespace(ngram_size=3, ngram_boundary_token_id=7, image_token_id=None)
     pool = torch.tensor([[70, 71], [80, 81]], dtype=torch.int64)  # pre-step states
     r1 = SimpleNamespace(cached_len=10, table_idx=0, spec_depth=2)
     r2 = SimpleNamespace(cached_len=5, table_idx=1, spec_depth=0)

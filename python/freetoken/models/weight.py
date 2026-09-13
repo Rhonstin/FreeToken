@@ -223,6 +223,7 @@ def load_weight(
     *,
     include_moe_experts: bool = True,
     include_mtp: bool = False,
+    include_vision: bool = True,
 ) -> Iterator[Tuple[str, torch.Tensor]]:
     # FTW checkpoint: dense weights are stored post-iter_weights, so we replay them
     # model-agnostically instead of re-running the per-model reader. Which tensors exist is
@@ -230,16 +231,13 @@ def load_weight(
     # fails loudly in load_state_dict (strict missing/unexpected expert keys), so the reader
     # just yields the stored weight tensors regardless of the include_moe_experts flag.
     from freetoken.checkpoint.ftw import is_ftw_checkpoint, iter_ftw_weights
-    from freetoken.models.config import VISION_KEY_PREFIXES, vision_load_enabled
+    from freetoken.models.config import VISION_KEY_PREFIXES
 
     if is_ftw_checkpoint(model_path):
-        # The FTW dense shard stores whatever existed at conversion, including the vision
-        # stack. Vision is opt-in (default OFF, see vision_load_enabled): when it is off the
-        # model never builds the tower, so replaying those tensors would trip load_state_dict's
-        # strict unexpected-key check. Skip them here to match the model the engine built.
-        skip_vision = not vision_load_enabled()
+        # FTW dense shard: the vision stack (if the conversion kept it) is skipped here when
+        # the engine did not build the tower, so a strict load_state_dict stays inert.
         for name, tensor in iter_ftw_weights(model_path):
-            if skip_vision and name.startswith(VISION_KEY_PREFIXES):
+            if not include_vision and name.startswith(VISION_KEY_PREFIXES):
                 continue
             yield name, tensor
         return
@@ -258,6 +256,9 @@ def load_weight(
         if any(p.kind == inspect.Parameter.VAR_KEYWORD
                or p.name == "include_mtp" for p in params):
             kwargs["include_mtp"] = True
+    # only a family that registers an encoder is asked about the tower; the others never load one
+    if getattr(spec, "encoders", ()):
+        kwargs["include_vision"] = include_vision
     yield from iter_weights(model_path, device, **kwargs)
 
 

@@ -107,6 +107,8 @@ class TokenizeMsg(BaseTokenizerMsg):
     sampling_params: SamplingParams
     chat_template_kwargs: Dict[str, Any] | None = None
     tools: List[Dict[str, Any]] | None = None
+    # Raw image bytes from OpenAI/Anthropic image parts, in prompt order (None = text-only).
+    images: List[bytes] | None = None
     # Teacher-forced scoring (internal /v1/score): tokenize raw text and return per-token
     # NLLs instead of generating. ``score_chunk`` caps the prefill rows per forward.
     score_only: bool = False

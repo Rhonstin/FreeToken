@@ -11,7 +11,8 @@ Three separate paths, because the checkpoint's three weight classes live in diff
 layer plus a top-level hyper-connection mixer, keys already ``mtp.``-namespaced) is only
 loaded on request (``include_mtp=True``), gated by the draft module the model builds. Its
 routed experts are stacked per-MTP-layer dense-bf16 tensors, always served from the
-expert banks instead of the state dict. ``model.visual.*`` stays dropped (served text-only).
+expert banks instead of the state dict. ``model.visual.*`` is renamed to its state-dict
+``visual.`` keys and only yielded when the model built the tower (``include_vision``).
 """
 
 from __future__ import annotations
@@ -26,7 +27,9 @@ from typing import Iterator
 import safetensors
 import torch
 from freetoken.distributed import get_tp_info
+from freetoken.models.config import VISION_KEY_PREFIXES
 from freetoken.models.loader import ShardReader, drop_page_cache, iter_weight_files
+from freetoken.models.qwen3_vl.weight import rename_vl_prefix
 from freetoken.models.nvfp4_banks import (
     Nvfp4ExpertSourceSpec,
 )
@@ -120,18 +123,14 @@ def _rename(raw_name: str, *, include_mtp: bool = False) -> str | None:
             return None  # MTP routed experts: iter_mtp_expert_pieces
         return raw_name  # already namespaced below the model root
     if raw_name.startswith(("model.visual.", "visual.")):
-        return None
+        return rename_vl_prefix(raw_name)
     if _PLE_TABLE_INFIX in raw_name:
         return None  # n-gram table + its scale: load_ple_table
     if _EXPERT_RE.search(raw_name):
         return None  # routed experts: offload source banks
     if raw_name.endswith(_SCALE_SUFFIXES):
         return None
-    if raw_name.startswith("model.language_model."):
-        return "model." + raw_name[len("model.language_model.") :]
-    if raw_name.startswith("language_model."):
-        return "model." + raw_name[len("language_model.") :]
-    return raw_name
+    return rename_vl_prefix(raw_name)
 
 
 def _try_fuse(
@@ -163,6 +162,7 @@ def iter_weights(
     include_moe_experts: bool,
     include_non_moe: bool,
     include_mtp: bool = False,
+    include_vision: bool = True,
 ) -> Iterator[tuple[str, torch.Tensor]]:
     """Yield the dense (non-expert) weights, prefix-stripped and fused to the model's buffers.
 
@@ -198,6 +198,8 @@ def iter_weights(
             for raw_name in f.keys():
                 name = _rename(raw_name, include_mtp=include_mtp)
                 if name is None:
+                    continue
+                if not include_vision and name.startswith(VISION_KEY_PREFIXES):
                     continue
                 tensor = f.get_tensor(raw_name)
                 fused = _try_fuse(name, tensor, fuse_buf)

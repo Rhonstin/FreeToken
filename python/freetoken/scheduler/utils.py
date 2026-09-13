@@ -18,6 +18,12 @@ class PendingReq:
     sampling_params: SamplingParams
     chunked_req: ChunkedReq | None = None
     mm_embeds: torch.Tensor | None = None
+    # per-image processor outputs, in prompt order (None for text-only requests)
+    mm_items: list | None = None
+    # precomputed [3, len(input_ids)] mrope positions and decode delta; None for text-only
+    # requests and 1-D rope models
+    mrope_positions_full: torch.Tensor | None = None
+    mrope_delta: int = 0
     # Grammar-constrained decoding state (engine/structured.StructuredState). Built once at
     # admission from ``sampling_params.structured_output`` and handed to the request's Req --
     # chunked prefill rows carry no state (their samples are discarded), so the grammar only
