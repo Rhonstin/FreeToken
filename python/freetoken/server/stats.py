@@ -145,6 +145,99 @@ class StatsTracker:
         return self._rate(self._prefill, now)
 
 
+def _sum_or_none(docs: list, getter) -> Any:
+    vals = [getter(d) for d in docs]
+    vals = [v for v in vals if v is not None]
+    return sum(vals) if vals else None
+
+
+def build_dp_stats(dp: Any, p95_ms: int, ttft_mean_ms: int) -> dict:
+    """Aggregate /v1/stats for a data-parallel serve: the SAME top-level shape as build_stats
+    but totalled across engines, plus ``data_parallel`` {size, routing} and ``engines`` (one
+    compact block per engine). Counters/tokens/throughput are summed (engines run in
+    parallel, so summed decode_tps is the real serve throughput); pool gauges are summed;
+    model/uptime/instance come from the aggregate."""
+    engines = list(getattr(dp, "engines", None) or [])
+    docs = [build_stats(e.frontend, p95_ms, ttft_mean_ms) for e in engines]
+    base = dict(docs[0]) if docs else {}
+    ready = [e.ready_at for e in engines if getattr(e, "ready_at", None) is not None]
+    fully = bool(ready) and len(ready) == len(engines)
+    now = time.monotonic()
+    base["uptime_s"] = max(0, int(now - max(ready))) if fully else 0  # type: ignore[arg-type]
+    base["instance_id"] = getattr(dp, "instance_id", None)
+    base["gpus"] = [g for d in docs for g in (d.get("gpus") or [])]
+
+    def rq(d, k):
+        return (d.get("requests") or {}).get(k)
+
+    base["requests"] = {
+        "active": _sum_or_none(docs, lambda d: rq(d, "active")) or 0,
+        "completed": _sum_or_none(docs, lambda d: rq(d, "completed")) or 0,
+        "queued": _sum_or_none(docs, lambda d: rq(d, "queued")) or 0,
+        "p95_ms": p95_ms,
+        "ttft_mean_ms": ttft_mean_ms,
+        "prompt_tokens_total": _sum_or_none(docs, lambda d: rq(d, "prompt_tokens_total")) or 0,
+        "cached_tokens_total": _sum_or_none(docs, lambda d: rq(d, "cached_tokens_total")) or 0,
+        "completion_tokens_total": _sum_or_none(docs, lambda d: rq(d, "completion_tokens_total")) or 0,
+    }
+    base["throughput"] = {
+        "decode_tps": round(_sum_or_none(docs, lambda d: (d.get("throughput") or {}).get("decode_tps")) or 0.0, 1),
+        "prefill_tps": round(_sum_or_none(docs, lambda d: (d.get("throughput") or {}).get("prefill_tps")) or 0.0, 1),
+    }
+    base["vram_bytes"] = _sum_or_none(docs, lambda d: d.get("vram_bytes")) or 0
+
+    kv0 = base.get("kv") or {}
+    if any((d.get("kv") or {}).get("total_pages") for d in docs):
+        base["kv"] = {
+            "used_pages": _sum_or_none(docs, lambda d: (d.get("kv") or {}).get("used_pages")) or 0,
+            "total_pages": _sum_or_none(docs, lambda d: (d.get("kv") or {}).get("total_pages")) or 0,
+            "page_size": kv0.get("page_size", 1),
+            "quant": kv0.get("quant", "none"),
+        }
+    else:
+        base["kv"] = None
+    if any((d.get("mamba") or {}).get("total_slots") for d in docs):
+        base["mamba"] = {
+            "used_slots": _sum_or_none(docs, lambda d: (d.get("mamba") or {}).get("used_slots")) or 0,
+            "total_slots": _sum_or_none(docs, lambda d: (d.get("mamba") or {}).get("total_slots")) or 0,
+        }
+    if any((d.get("swa") or {}).get("total_pages") for d in docs):
+        base["swa"] = {
+            "used_pages": _sum_or_none(docs, lambda d: (d.get("swa") or {}).get("used_pages")) or 0,
+            "total_pages": _sum_or_none(docs, lambda d: (d.get("swa") or {}).get("total_pages")) or 0,
+            "page_size": (base.get("swa") or {}).get("page_size", 1),
+        }
+    base["prefill"] = next((d.get("prefill") for d in docs if d.get("prefill")), None)
+    if any(d.get("spec") for d in docs):
+        base["spec"] = {
+            "accepted": _sum_or_none(docs, lambda d: (d.get("spec") or {}).get("accepted")) or 0,
+            "proposed": _sum_or_none(docs, lambda d: (d.get("spec") or {}).get("proposed")) or 0,
+            "rate": None,
+        }
+    base["moe"] = next((d.get("moe") for d in docs if d.get("moe")), None)
+
+    base["engines"] = [
+        {
+            "index": e.index,
+            "state": e.maintenance_state,
+            "gpu": e.gpu(),
+            "in_flight": e.in_flight(),
+            "restarts": getattr(e, "restarts", 0),
+            **{
+                k: d.get(k) for k in ("requests", "throughput", "kv", "mamba", "swa",
+                                       "vram_bytes", "prefill", "spec", "moe")
+            },
+        }
+        for e, d in zip(engines, docs)
+    ]
+    base["data_parallel"] = {
+        "size": len(engines),
+        "serving": sum(1 for e in engines if e.ready),
+        "routing": dp.routing_stats() if hasattr(dp, "routing_stats") else {},
+    }
+    return base
+
+
 def derive_model_card(config: Any) -> dict:
     """attn enum + moe bool + ctx from the model config."""
     mc = config.model_config

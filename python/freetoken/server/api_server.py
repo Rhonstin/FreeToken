@@ -39,6 +39,7 @@ from .args import ServerArgs
 from .anthropic_api import register_anthropic_routes
 from .accounting import AdmissionClosedError, register_accounting_routes
 from .control_api import register_control_routes
+from .dp import DPServer, EngineRuntime, restart_delay as dp_restart_delay
 from .openai_api import register_openai_routes
 from . import request_ring
 from .access_log_filter import install_polling_access_log_filter
@@ -57,9 +58,28 @@ _MODEL_SAMPLING: Dict[str, Any] = {}
 # shutdown is treated as expected — no ERROR log, no "failed" latch. See run_backend_supervisor.
 _SHUTTING_DOWN = threading.Event()
 BACKEND_DEATH_EXIT_GRACE_S = 10.0
+# DP watchdog: how many consecutive failed (re)loads before an engine is left failed, and the
+# exponential backoff schedule between group restarts.
+DP_RESTART_MAX = 5
+DP_RESTART_BASE_S = 1.0
+DP_RESTART_CAP_S = 30.0
 
 
-def get_global_state() -> FrontendManager:
+def get_global_state(hint: Any = None) -> FrontendManager:
+    """The FrontendManager that should serve this request. In single-engine serve that is the
+    one manager; in DP it is the engine chosen by DPServer.route(hint) — sticky to the
+    conversation when the hint carries one, else least in-flight. ``hint`` is the parsed
+    request (or any object/dict/str); omit it only on paths that need *an* engine, not routing.
+    """
+    global _GLOBAL_STATE
+    assert _GLOBAL_STATE is not None, "Global state is not initialized"
+    route = getattr(_GLOBAL_STATE, "route", None)
+    return route(hint) if callable(route) else _GLOBAL_STATE
+
+
+def get_dp_state() -> Any:
+    """The aggregate DP server (all engines): for health/stats/lifecycle. Falls back to the
+    single FrontendManager when DP support is not active."""
     global _GLOBAL_STATE
     assert _GLOBAL_STATE is not None, "Global state is not initialized"
     return _GLOBAL_STATE
@@ -367,6 +387,20 @@ class FrontendManager:
             asyncio.create_task(self.abort_user(uid))
             raise
 
+    def fail_all_inflight(self, message: str, code: str = "engine_restart") -> int:
+        """Terminate every in-flight request with a synthetic error reply. Called when this
+        engine's worker group dies/restarts: without it, a request routed to the dead engine
+        would hang in wait_for_ack until the client gives up. Returns the number failed."""
+        uids = list(self.ack_map.keys())
+        for uid in uids:
+            self.ack_map.setdefault(uid, []).append(
+                UserReply(uid=uid, incremental_output="", finished=True, error=message, error_code=code)
+            )
+            ev = self.event_map.get(uid)
+            if ev is not None:
+                ev.set()
+        return len(uids)
+
     async def abort_user(self, uid: int):
         await asyncio.sleep(0.1)
         if uid in self.ack_map:
@@ -418,8 +452,8 @@ app = FastAPI(title="FreeToken API Server", version=__version__, lifespan=lifesp
 register_openai_routes(app, get_global_state, lambda: _MODEL_SAMPLING)
 register_anthropic_routes(app, get_global_state, lambda: _MODEL_SAMPLING)
 register_responses_routes(app, get_global_state, lambda: _MODEL_SAMPLING)
-register_control_routes(app, get_global_state, lambda: _MODEL_SAMPLING)
-register_accounting_routes(app, get_global_state)
+register_control_routes(app, get_global_state, lambda: _MODEL_SAMPLING, get_dp_state)
+register_accounting_routes(app, get_global_state, get_dp_state)
 
 
 # Paths the HTTP middleware logs into the request ring. The three chat protocols funnel through
@@ -546,6 +580,40 @@ async def dispatch_rebuild(
         return {"status": "timeout", "request_id": request_id}
 
 
+async def dispatch_rebuild_all(dp: Any, **kwargs) -> Dict[str, Any]:
+    """DP cache rebuild: dispatch the SAME resize to every engine concurrently and aggregate.
+    All engines leave "serving" for the duration, so the aggregate gate blocks new work while
+    any engine rebuilds (no engine serves against a half-resized cache)."""
+    engines = list(getattr(dp, "engines", None) or [])
+    if not engines:
+        return {"status": "failed", "error": "no engines"}
+    results = await asyncio.gather(
+        *(dispatch_rebuild(e.frontend, **kwargs) for e in engines), return_exceptions=True
+    )
+    statuses = []
+    errors = []
+    for r in results:
+        if isinstance(r, BaseException):
+            statuses.append("failed")
+            errors.append(repr(r))
+        else:
+            statuses.append(r.get("status"))
+            if r.get("error"):
+                errors.append(r["error"])
+    if "timeout" in statuses:
+        status = "timeout"
+    elif "failed" in statuses:
+        status = "failed"
+    elif "busy" in statuses:
+        status = "busy"
+    else:
+        status = "ok"
+    out: Dict[str, Any] = {"status": status, "engines": len(engines), "results": statuses}
+    if errors:
+        out["error"] = "; ".join(str(e) for e in errors[:3])
+    return out
+
+
 def _resolve_num_swa_pages(state: FrontendManager, req: CacheRebuildRequest) -> int | None:
     """External accepts num_swa_pages OR swa_full_tokens_ratio; internally only num_swa_pages
     flows. Convert a ratio to an absolute window at the requested (or current) full anchor, in the
@@ -570,7 +638,7 @@ def _resolve_num_swa_pages(state: FrontendManager, req: CacheRebuildRequest) -> 
 async def cache_rebuild(req: CacheRebuildRequest):
     """Trigger a runtime KV/MoE cache resize. Blocks until the scheduler reports a result
     (or timeout). New generation is gated (503) while a rebuild is in flight."""
-    state = get_global_state()
+    state = get_dp_state()
     if state.maintenance_state == "loading":
         return JSONResponse(
             {"status": "loading", "error": "model is still loading; cannot rebuild cache yet"},
@@ -601,8 +669,7 @@ async def cache_rebuild(req: CacheRebuildRequest):
             {"status": "failed", "error": "swa_full_tokens_ratio must be in (0, 1]"},
             status_code=422,
         )
-    result = await dispatch_rebuild(
-        state,
+    rebuild_kwargs = dict(
         moe_cache_size=req.moe_cache_size,
         num_pages=req.num_pages,
         num_mamba_slots=req.num_mamba_slots,
@@ -610,6 +677,10 @@ async def cache_rebuild(req: CacheRebuildRequest):
         mode=req.mode,
         timeout=req.timeout,
     )
+    if hasattr(state, "engines"):
+        result = await dispatch_rebuild_all(state, **rebuild_kwargs)
+    else:
+        result = await dispatch_rebuild(state, **rebuild_kwargs)
     if result["status"] == "timeout":
         return JSONResponse(result, status_code=504)
     return JSONResponse(result, status_code=200 if result["status"] == "ok" else 503)
@@ -809,7 +880,7 @@ def cache_geometry(state: Any) -> dict:
 
 @app.get("/v1/cache/status")
 async def cache_status():
-    state = get_global_state()
+    state = get_dp_state()
     return {
         "state": state.maintenance_state,
         "last_rebuild": state.last_rebuild,
@@ -821,7 +892,7 @@ async def cache_status():
 async def generate(req: GenerateRequest, request: Request):
     logger.debug("Received generate request %s", req)
     log_request("/generate", req, request)
-    state = get_global_state()
+    state = get_global_state(req)
     if state.maintenance_state != "serving":
         detail = "model is still loading" if state.maintenance_state == "loading" else "cache rebuild in progress"
         return JSONResponse({"error": f"server unavailable: {detail}"}, status_code=503)
@@ -958,80 +1029,178 @@ def run_api_server(config: ServerArgs, start_backend: Callable[[], "Any"], run_s
     install_polling_access_log_filter()
 
     assert _GLOBAL_STATE is None, "Global state is already initialized"
-    _GLOBAL_STATE = FrontendManager(
-        config=config,
-        recv_tokenizer=ZmqAsyncPullQueue(
-            config.zmq_frontend_addr,
-            create=True,
-            decoder=BaseFrontendMsg.decoder,
-        ),
-        send_tokenizer=ZmqAsyncPushQueue(
-            config.zmq_tokenizer_addr,
-            create=config.frontend_create_tokenizer_link,
-            encoder=BaseTokenizerMsg.encoder,
-        ),
-    )
 
     from .supervisor import LoadProgress, run_backend_supervisor
 
-    _GLOBAL_STATE.load_progress = LoadProgress()
-    handle = start_backend()
-    # Hold the worker handles so the orderly-shutdown path can tear them down itself (after
-    # setting _SHUTTING_DOWN) rather than relying on OS signal-delivery order.
-    _GLOBAL_STATE.backend_processes = list(getattr(handle, "processes", None) or [])
+    def _build_engine(args: Any, index: int, handle: Any) -> EngineRuntime:
+        """One FrontendManager per engine group, wired to that group's private ZMQ namespace.
+        Identical to the classic single-engine wiring when there is exactly one group."""
+        frontend = FrontendManager(
+            config=args,
+            recv_tokenizer=ZmqAsyncPullQueue(
+                args.zmq_frontend_addr,
+                create=True,
+                decoder=BaseFrontendMsg.decoder,
+            ),
+            send_tokenizer=ZmqAsyncPushQueue(
+                args.zmq_tokenizer_addr,
+                create=args.frontend_create_tokenizer_link,
+                encoder=BaseTokenizerMsg.encoder,
+            ),
+        )
+        frontend.load_progress = LoadProgress()
+        # Hold the worker handles so the orderly-shutdown path can tear them down itself (after
+        # setting _SHUTTING_DOWN) rather than relying on OS signal-delivery order.
+        frontend.backend_processes = list(getattr(handle, "processes", None) or [])
+        return EngineRuntime(index=index, config=args, frontend=frontend, progress=frontend.load_progress, handle=handle)
 
-    def _on_ready() -> None:
+    launched = start_backend()
+    if not isinstance(launched, (list, tuple)):
+        launched = [launched]  # tolerate an older start_backend that returns one handle
+    handles = list(launched)
+    engines = [
+        _build_engine(getattr(h, "config", None) or config, i, h) for i, h in enumerate(handles)
+    ]
+    _GLOBAL_STATE = DPServer(config, engines)
+    n_engines = len(engines)
+
+    def _on_ready(rt: EngineRuntime) -> None:
         # A stop requested while weights were loading has already sealed admission.  The backend
         # may finish its ready handshake before SIGTERM arrives; never reopen that gate after the
         # daemon has received a final accounting snapshot.
-        if _GLOBAL_STATE.maintenance_state == "loading":
-            _GLOBAL_STATE.maintenance_state = "serving"
-            _GLOBAL_STATE.ready_at = time.monotonic()
-            logger.info(f"API server is ready to serve on {host}:{port}")
+        fm = rt.frontend
+        if fm.maintenance_state == "loading":
+            fm.maintenance_state = "serving"
+            fm.ready_at = time.monotonic()
+            rt.ready_at = fm.ready_at
+            rt.last_ready_at = fm.ready_at
+            rt.consecutive_failures = 0
+            logger.info(
+                "DP engine %d/%d is ready to serve on %s:%s",
+                rt.index + 1,
+                n_engines,
+                host,
+                port,
+            )
 
-    def _on_failure(message: str) -> None:
-        _GLOBAL_STATE.fatal_error = message
-        _GLOBAL_STATE.maintenance_state = "failed"
-        logger.error("Backend supervisor: %s", message)
-        # No CacheRebuildReply will ever arrive from a dead backend, so wake any caller blocked
-        # in dispatch_rebuild's await now — otherwise it strands until the full rebuild timeout.
-        _GLOBAL_STATE.fail_pending_rebuilds(message)
-        # Then take the whole serve down (see _exit_after_backend_death). Shell mode is excluded:
-        # a person is sitting at that TUI, the API is theirs alone, and its stop path is ^C.
+    def _on_failure(rt: EngineRuntime, message: str) -> None:
+        fm = rt.frontend
+        fm.fatal_error = message
+        fm.maintenance_state = "failed"
+        rt.consecutive_failures += 1
+        rt.last_failure = message
+        rt.last_failure_at = time.monotonic()
+        logger.error("Backend supervisor (engine %d): %s", rt.index, message)
+        # No CacheRebuildReply will ever arrive from this dead backend, so wake any caller
+        # blocked in dispatch_rebuild's await now — otherwise it strands until the full timeout.
+        fm.fail_pending_rebuilds(message)
+        if n_engines > 1:
+            # DP: one dead engine is a PARTIAL outage — the survivors keep serving. Never take
+            # the whole process down for it.
+            return
+        # Single engine: take the whole serve down (see _exit_after_backend_death). Shell mode is
+        # excluded: a person is sitting at that TUI and its stop path is ^C.
         if not run_shell:
             _exit_after_backend_death(BACKEND_DEATH_EXIT_GRACE_S)
 
-    def _on_meta(meta: dict) -> None:
+    def _on_meta(rt: EngineRuntime, meta: dict) -> None:
         # Per-unit cache VRAM costs + the free-VRAM seed + per-pool floors + the actual pool
         # sizes allocated at load, delivered once on the ack path; surfaced by cache_geometry
         # (unit_bytes + the limits block + the pre-first-chat pool seed). Unpack the extras
         # aside so unit_bytes keeps its original three-key shape; unknown keys, if any, are inert.
+        # Stored on the ENGINE's frontend; the aggregate DPServer falls through to engine 0.
         meta = dict(meta or {})
-        _GLOBAL_STATE.free_vram_bytes = int(meta.pop("free_vram_bytes", 0) or 0)
-        _GLOBAL_STATE.cache_floors = meta.pop("floors", None)
-        _GLOBAL_STATE.cache_pools = meta.pop("pools", None)
-        _GLOBAL_STATE.swa_full_tokens_ratio = float(meta.pop("swa_full_tokens_ratio", 0.0) or 0.0)
-        _GLOBAL_STATE.cache_budget_bytes = int(meta.pop("cache_budget_bytes", 0) or 0)
-        _GLOBAL_STATE.gpus = list(meta.pop("gpus", None) or [])
-        _GLOBAL_STATE.unit_bytes = meta
+        fm = rt.frontend
+        fm.free_vram_bytes = int(meta.pop("free_vram_bytes", 0) or 0)
+        fm.cache_floors = meta.pop("floors", None)
+        fm.cache_pools = meta.pop("pools", None)
+        fm.swa_full_tokens_ratio = float(meta.pop("swa_full_tokens_ratio", 0.0) or 0.0)
+        fm.cache_budget_bytes = int(meta.pop("cache_budget_bytes", 0) or 0)
+        fm.gpus = list(meta.pop("gpus", None) or [])
+        fm.unit_bytes = meta
 
-    # Early-bind: supervise the backend on a daemon thread so uvicorn can bind
+    def _supervise(rt: EngineRuntime) -> None:
+        """Watch one engine for its whole lifetime; in DP, restart its worker group on death
+        with exponential backoff. The other engines keep serving throughout — this is the
+        per-engine independence guarantee, not a reason to take the process down."""
+        while not _SHUTTING_DOWN.is_set():
+            run_backend_supervisor(
+                rt.handle,
+                rt.progress,
+                (lambda rt=rt: _on_ready(rt)),
+                on_failure=(lambda m, rt=rt: _on_failure(rt, m)),
+                on_meta=(lambda meta, rt=rt: _on_meta(rt, meta)),
+                # uvicorn's lifespan shutdown sets this on SIGINT/SIGTERM, so the workers'
+                # expected exit during stop is not reported as a crash.
+                is_shutting_down=_SHUTTING_DOWN.is_set,
+            )
+            if _SHUTTING_DOWN.is_set() or n_engines <= 1 or rt.spawn is None:
+                return  # shut down, or a single-engine serve already exited in _on_failure
+            if rt.consecutive_failures > DP_RESTART_MAX:
+                logger.error(
+                    "DP engine %d exceeded %d consecutive restart attempts; leaving it failed",
+                    rt.index,
+                    DP_RESTART_MAX,
+                )
+                return
+            delay = dp_restart_delay(rt.consecutive_failures, DP_RESTART_BASE_S, DP_RESTART_CAP_S)
+            logger.warning(
+                "Restarting DP engine %d in %.1fs (attempt %d/%d): %s",
+                rt.index,
+                delay,
+                rt.consecutive_failures,
+                DP_RESTART_MAX,
+                rt.last_failure,
+            )
+            waited = 0.0
+            while waited < delay and not _SHUTTING_DOWN.is_set():
+                step = min(0.5, delay - waited)
+                time.sleep(step)
+                waited += step
+            if _SHUTTING_DOWN.is_set():
+                return
+            fm = rt.frontend
+            aborted = fm.fail_all_inflight(f"engine {rt.index} is restarting")
+            if aborted:
+                logger.warning("DP engine %d restart: aborted %d in-flight request(s)", rt.index, aborted)
+            fm.fatal_error = None
+            fm.maintenance_state = "loading"
+            rt.progress = LoadProgress()
+            fm.load_progress = rt.progress
+            fm.ready_at = None
+            rt.ready_at = None
+            # Kill any survivors of the old group first: a scheduler-only death leaves the
+            # detokenizer/tokenizers alive holding the ipc bind, so the respawned group could
+            # not bind its addresses. Reap before respawn.
+            try:
+                _terminate_backend_workers(list(getattr(rt.handle, "processes", None) or []))
+                _reap_backend_workers(list(getattr(rt.handle, "processes", None) or []), timeout=5.0)
+            except Exception:  # noqa: BLE001 -- best-effort; respawn still proceeds
+                pass
+            try:
+                new_handle = rt.spawn()
+            except Exception as exc:  # noqa: BLE001 -- a failed respawn just retries with backoff
+                logger.error("DP engine %d respawn failed: %r", rt.index, exc)
+                rt.consecutive_failures += 1
+                continue
+            rt.handle = new_handle
+            rt.spawn = getattr(new_handle, "restart", None) or rt.spawn
+            fm.backend_processes = list(getattr(new_handle, "processes", None) or [])
+            rt.restarts += 1
+            logger.info("DP engine %d worker group respawned (restart #%d)", rt.index, rt.restarts)
+
+    # Early-bind: supervise each engine on its own daemon thread so uvicorn can bind
     # immediately and /health can report loading progress. Shell mode wants exactly the same
     # thing -- its client waits on /health and renders that progress -- so both paths share
     # this supervisor; only who runs uvicorn differs.
-    threading.Thread(
-        target=run_backend_supervisor,
-        args=(handle, _GLOBAL_STATE.load_progress, _on_ready),
-        kwargs={
-            "on_failure": _on_failure,
-            "on_meta": _on_meta,
-            # uvicorn's lifespan shutdown sets this on SIGINT/SIGTERM, so the workers'
-            # expected exit during stop is not reported as a crash.
-            "is_shutting_down": _SHUTTING_DOWN.is_set,
-        },
-        name="freetoken-backend-supervisor",
-        daemon=True,
-    ).start()
+    for rt in engines:
+        rt.spawn = getattr(rt.handle, "restart", None)
+        threading.Thread(
+            target=_supervise,
+            args=(rt,),
+            name=f"freetoken-supervisor-{rt.index}",
+            daemon=True,
+        ).start()
 
     if run_shell:
         _serve_and_run_shell(host, port)

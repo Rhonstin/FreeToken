@@ -54,6 +54,13 @@ class BackendHandle:
     ack_queue: Any
     processes: List[Any] = field(default_factory=list)
     expected_acks: int = 0
+    # The ServerArgs this engine group was actually launched with (per-engine ZMQ addresses /
+    # GPU / dp_index). Set by launch; the DP frontend builds one FrontendManager from it. None
+    # for hand-built handles (tests).
+    config: Any = None
+    # Callable -> a fresh BackendHandle for this same engine group, used by the DP watchdog to
+    # respawn a dead engine. None for hand-built handles (tests) or a non-DP launch.
+    restart: Any = None
 
 
 class WorkerDied(Exception):

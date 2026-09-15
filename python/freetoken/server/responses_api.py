@@ -116,7 +116,7 @@ def register_responses_routes(
     @app.post("/v1/responses")
     async def v1_responses(req: ResponsesRequest, request: Request):
         log_request("/v1/responses", req, request)
-        state = get_state()
+        state = get_state(req)
         mstate = getattr(state, "maintenance_state", "serving")
         if mstate != "serving":
             detail = "model is still loading" if mstate == "loading" else "cache rebuild in progress"

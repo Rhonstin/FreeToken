@@ -128,6 +128,33 @@ def to_prometheus(doc: dict[str, Any]) -> str:
              [(spec.get("accepted"), None)])
     o.metric("freetoken_spec_accept_ratio", "gauge", "Speculative acceptance rate.",
              [(spec.get("rate"), None)])
+    dp = doc.get("data_parallel") or {}
+    if dp:
+        o.metric("freetoken_dp_engines", "gauge", "Configured DP engine count.", [(dp.get("size"), None)])
+        o.metric("freetoken_dp_engines_serving", "gauge", "DP engines currently serving.",
+                 [(dp.get("serving"), None)])
+    engines = doc.get("engines") or []
+    if engines:
+        o.metric("freetoken_engine_up", "gauge", "1 when the DP engine is serving.",
+                 [(1 if e.get("state") == "serving" else 0, {"engine": e.get("index")}) for e in engines])
+        o.metric("freetoken_engine_active_requests", "gauge", "In-flight requests per engine.",
+                 [((e.get("in_flight") if e.get("in_flight") is not None
+                    else (e.get("requests") or {}).get("active")), {"engine": e.get("index")}) for e in engines])
+        o.metric("freetoken_engine_queued_requests", "gauge", "Queued requests per engine.",
+                 [((e.get("requests") or {}).get("queued"), {"engine": e.get("index")}) for e in engines])
+        o.metric("freetoken_engine_completed_total", "counter", "Completed requests per engine.",
+                 [((e.get("requests") or {}).get("completed"), {"engine": e.get("index")}) for e in engines])
+        o.metric("freetoken_engine_decode_tps", "gauge", "Sliding-window decode tok/s per engine.",
+                 [((e.get("throughput") or {}).get("decode_tps"), {"engine": e.get("index")}) for e in engines])
+        o.metric("freetoken_engine_prefill_tps", "gauge", "Sliding-window prefill tok/s per engine.",
+                 [((e.get("throughput") or {}).get("prefill_tps"), {"engine": e.get("index")}) for e in engines])
+        o.metric("freetoken_engine_vram_bytes", "gauge", "VRAM reserved per engine.",
+                 [(e.get("vram_bytes"), {"engine": e.get("index")}) for e in engines])
+        o.metric("freetoken_engine_restarts_total", "counter", "DP engine group restarts.",
+                 [(e.get("restarts"), {"engine": e.get("index")}) for e in engines])
+        o.metric("freetoken_engine_gpu_memory_bytes", "gauge", "Per-engine GPU memory total (bytes).",
+                 [(((e.get("gpu") or {}).get("total_bytes")), {"engine": e.get("index"),
+                   "gpu": (e.get("gpu") or {}).get("uuid")}) for e in engines])
     for g in doc.get("gpu_live") or []:
         labels = {"index": g.get("index"), "uuid": g.get("uuid"), "name": g.get("name")}
         o.metric("freetoken_gpu_utilization_ratio", "gauge", "GPU SM utilization in [0,1].",

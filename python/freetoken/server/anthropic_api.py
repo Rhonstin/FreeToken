@@ -82,7 +82,7 @@ def register_anthropic_routes(
     @app.post("/v1/messages")
     async def v1_messages(req: AnthropicMessagesRequest, request: Request):
         log_request("/v1/messages", req, request)
-        state = get_state()
+        state = get_state(req)
         mstate = getattr(state, "maintenance_state", "serving")
         if mstate != "serving":
             detail = "model is still loading" if mstate == "loading" else "cache rebuild in progress"
@@ -92,7 +92,7 @@ def register_anthropic_routes(
     @app.post("/v1/messages/count_tokens")
     async def v1_messages_count_tokens(req: AnthropicCountTokensRequest, request: Request):
         log_request("/v1/messages/count_tokens", req, request)
-        return await handle_anthropic_count_tokens(req, get_state())
+        return await handle_anthropic_count_tokens(req, get_state(req))
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError):

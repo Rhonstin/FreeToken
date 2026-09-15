@@ -64,6 +64,13 @@ class ServerArgs(SchedulerConfig):
     gpu: tuple[str, ...] = ()
     # full UUIDs resolved from --gpu, entry i = TP rank i; None = NVML unavailable, each worker then resolves its raw entry against CUDA's own enumeration
     gpu_assigned: "tuple[str, ...] | None" = None
+    # Data-parallel replicas: N independent single-GPU engines behind this one HTTP server,
+    # each with its own KV/radix cache and request queue, sharing one host-RAM expert pool.
+    # Mutually exclusive with tensor_parallel_size > 1. 1 (default) == the classic single engine.
+    data_parallel: int = 1
+    # This engine's 0-based slot inside a DP serve; set per spawned group (never a CLI flag).
+    # Gives each engine its own ipc namespace and gloo store port.
+    dp_index: int = 0
 
     @property
     def share_tokenizer(self) -> bool:
@@ -95,7 +102,9 @@ class ServerArgs(SchedulerConfig):
 
     @property
     def distributed_addr(self) -> str:
-        return f"tcp://127.0.0.1:{self.server_port + 1}"
+        # One gloo store per DP engine (dp_index); each engine is world_size=1, so the port is
+        # only its private rendezvous. dp_index is 0 for the classic single-engine serve.
+        return f"tcp://127.0.0.1:{self.server_port + 1 + self.dp_index}"
 
 
 def parse_args(
@@ -271,6 +280,19 @@ def parse_args(
         type=int,
         default=1,
         help="The tensor parallelism size.",
+    )
+
+    parser.add_argument(
+        "--data-parallel",
+        "--dp-size",
+        type=int,
+        default=1,
+        help=(
+            "Run N independent single-GPU engines behind this one server (each with its own "
+            "KV/radix cache and request queue), sharing one host-RAM expert pool; requests are "
+            "routed inside the engine (no external load balancer). Requires one --gpu entry per "
+            "engine (or none to assign GPUs 0..N-1). Mutually exclusive with --tensor-parallel-size."
+        ),
     )
 
     parser.add_argument(
@@ -790,12 +812,28 @@ def parse_args(
     kwargs = parser.parse_args(args).__dict__.copy()
 
     # reject a too-long list here with a clear reason, not as a dead rank later
-    if len(kwargs["gpu"]) not in (0, kwargs["tensor_parallel_size"]):
-        if kwargs["tensor_parallel_size"] == 1 and len(kwargs["gpu"]) > 1:
+    dp_size = kwargs["data_parallel"]
+    tp_size = kwargs["tensor_parallel_size"]
+    num_gpu = len(kwargs["gpu"])
+    if dp_size < 1:
+        parser.error(f"--data-parallel must be >= 1, got {dp_size}")
+    if dp_size > 1 and tp_size > 1:
+        parser.error(
+            f"--data-parallel {dp_size} and --tensor-parallel-size {tp_size} are mutually "
+            "exclusive (DP replicates whole engines; TP splits one engine across ranks)"
+        )
+    if dp_size > 1:
+        if num_gpu not in (0, dp_size):
+            parser.error(
+                f"--data-parallel {dp_size} needs {dp_size} --gpu entries (one per engine) or "
+                f"none to assign GPUs 0..{dp_size - 1}, got {num_gpu}"
+            )
+    elif num_gpu not in (0, tp_size):
+        if tp_size == 1 and num_gpu > 1:
             parser.error("tensor parallelism is not supported yet: --gpu takes one entry")
         parser.error(
-            f"--gpu has {len(kwargs['gpu'])} entries but --tensor-parallel-size is "
-            f"{kwargs['tensor_parallel_size']}; give one entry per TP rank"
+            f"--gpu has {num_gpu} entries but --tensor-parallel-size is "
+            f"{tp_size}; give one entry per TP rank"
         )
 
     # resolve some arguments

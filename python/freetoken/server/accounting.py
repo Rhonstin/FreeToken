@@ -108,6 +108,63 @@ async def prepare_stop_accounting(
         return sealed
 
 
+async def prepare_stop_all(
+    dp: Any,
+    *,
+    drain_timeout_s: float = 5.0,
+    abort_timeout_s: float = 3.0,
+) -> dict[str, Any]:
+    """DP prepare-stop: seal EVERY engine, then return one aggregated snapshot.
+
+    All engines are sealed concurrently (they share the drain deadline, not the budget, so a
+    whole DP serve stops in one bound). Admission is closed on each engine as its seal runs —
+    the aggregate gate reads "stopping" as soon as no engine is left serving. A failure on any
+    engine preserves the serve (the daemon retries); a success is cached on the DP server so a
+    retry after a lost response returns identical totals."""
+    engines = list(getattr(dp, "engines", None) or [])
+    if not engines:
+        raise AccountingDrainError("data-parallel serve has no engines to stop")
+
+    lock = getattr(dp, "_dp_prepare_lock", None)
+    if lock is None:
+        lock = asyncio.Lock()
+        dp._dp_prepare_lock = lock
+
+    async with lock:
+        sealed = getattr(dp, "_dp_sealed_accounting", None)
+        if sealed is not None:
+            return dict(sealed)
+
+        results = await asyncio.gather(
+            *(
+                prepare_stop_accounting(
+                    e.frontend, drain_timeout_s=drain_timeout_s, abort_timeout_s=abort_timeout_s
+                )
+                for e in engines
+            ),
+            return_exceptions=True,
+        )
+        failures = [r for r in results if isinstance(r, BaseException)]
+        if failures:
+            raise AccountingDrainError(
+                f"DP prepare-stop failed on {len(failures)}/{len(engines)} engine(s): "
+                f"{failures[0]}"
+            )
+        ready = [e.ready_at for e in engines if getattr(e, "ready_at", None) is not None]
+        uptime_s = max(0, int(time.monotonic() - max(ready))) if len(ready) == len(engines) else 0
+        sealed = {
+            "instance_id": getattr(dp, "instance_id", None),
+            "model_id": getattr(getattr(dp, "config", None), "served_model_name", None),
+            "prompt_tokens_total": sum(int(r["prompt_tokens_total"]) for r in results),
+            "completion_tokens_total": sum(int(r["completion_tokens_total"]) for r in results),
+            "uptime_s": uptime_s,
+            "drain_complete": all(bool(r.get("drain_complete")) for r in results),
+            "engines": len(engines),
+        }
+        dp._dp_sealed_accounting = dict(sealed)
+        return sealed
+
+
 class PrepareStopBody(BaseModel):
     # Keep the total below the daemon's independent 15s upstream timeout.
     drain_timeout_s: float = Field(default=5.0, ge=0.0, le=10.0)
@@ -130,7 +187,11 @@ def _is_loopback(host: str | None) -> bool:
     )
 
 
-def register_accounting_routes(app: FastAPI, get_state: Callable[[], Any]) -> None:
+def register_accounting_routes(
+    app: FastAPI,
+    get_state: Callable[[], Any],
+    get_dp_state: Callable[[], Any] | None = None,
+) -> None:
     async def _admission_closed(_: Request, exc: AdmissionClosedError) -> JSONResponse:
         return JSONResponse(status_code=503, content={"error": str(exc)})
 
@@ -144,9 +205,16 @@ def register_accounting_routes(app: FastAPI, get_state: Callable[[], Any]) -> No
         if not _is_loopback(request.client.host if request.client else None):
             return JSONResponse(status_code=403, content={"error": "loopback access required"})
         body = body or PrepareStopBody()
+        state = (get_dp_state or get_state)()
         try:
+            if hasattr(state, "engines"):
+                return await prepare_stop_all(
+                    state,
+                    drain_timeout_s=body.drain_timeout_s,
+                    abort_timeout_s=body.abort_timeout_s,
+                )
             return await prepare_stop_accounting(
-                get_state(),
+                state,
                 drain_timeout_s=body.drain_timeout_s,
                 abort_timeout_s=body.abort_timeout_s,
             )

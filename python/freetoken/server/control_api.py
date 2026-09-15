@@ -63,10 +63,25 @@ def register_control_routes(
     app: FastAPI,
     get_state: Callable[[], Any],
     get_model_sampling: Callable[[], dict] | None = None,
+    get_dp_state: Callable[[], Any] | None = None,
 ) -> None:
+    # health/stats describe the WHOLE serve; in DP that is the aggregate DPServer, not one
+    # engine. get_state still names the (routed) engine for /v1/score and cache control.
+    _agg = get_dp_state or get_state
+
     @app.get("/health")
     async def health():
-        return build_health(get_state(), app.version)
+        dp = _agg()
+        doc = build_health(dp, app.version)
+        engines = getattr(dp, "engines_health", None)
+        if callable(engines):
+            rows = engines()
+            doc["engines"] = rows
+            doc["data_parallel"] = {
+                "size": len(rows),
+                "serving": sum(1 for e in rows if e.get("state") == "serving"),
+            }
+        return doc
 
     from . import request_ring
 
@@ -76,15 +91,20 @@ def register_control_routes(
         entries, next_cursor = request_ring.requests_since(since, limit)
         return {"entries": entries, "next_cursor": next_cursor}
 
-    from .stats import build_stats
+    from .stats import build_dp_stats, build_stats
 
     def _stats_doc() -> dict:
-        """The shared /v1/stats document: engine snapshot + ring percentiles + live GPU."""
+        """The shared /v1/stats document: engine snapshot + ring percentiles + live GPU.
+        In DP the snapshot is aggregated across every engine (build_dp_stats)."""
         from . import request_ring
 
-        doc = build_stats(
-            get_state(), request_ring.requests_p95_ms(), request_ring.requests_ttft_mean_ms()
-        )
+        state = _agg()
+        p95 = request_ring.requests_p95_ms()
+        ttft = request_ring.requests_ttft_mean_ms()
+        if hasattr(state, "engines"):
+            doc = build_dp_stats(state, p95, ttft)
+        else:
+            doc = build_stats(state, p95, ttft)
         doc.setdefault("requests", {}).update(request_ring.requests_latency())
         # Surface the model's recommended sampling (from its generation_config.json / GGUF
         # metadata) so clients can seed their sampling controls per-model instead of guessing.
@@ -106,6 +126,54 @@ def register_control_routes(
     async def metrics_prometheus():
         return Response(content=metrics.to_prometheus(_stats_doc()),
                         media_type="text/plain; version=0.0.4; charset=utf-8")
+
+    def _arena_status() -> dict:
+        """Shared host expert-pool (tmpfs arena) state, from the env pointer the engine used."""
+        import os
+
+        path = os.environ.get("FREETOKEN_SHARED_BANKS")
+        if not path:
+            return {"enabled": False}
+        out: dict = {"enabled": True, "path": path}
+        for suffix, key in (("", "file"), (".ready", "ready"), (".lock", "lock")):
+            p = path + suffix
+            try:
+                st = os.stat(p)
+                out[key] = {
+                    "exists": True,
+                    "size_bytes": st.st_size,
+                    "age_s": round(time.time() - st.st_mtime, 1),
+                }
+            except OSError:
+                out[key] = {"exists": False}
+        return out
+
+    @app.get("/v1/dp/status")
+    async def dp_status():
+        """Detailed DP monitoring: per-engine state/queues/throughput/VRAM + routing counters +
+        shared-arena state + live GPU telemetry. Works for a single-engine serve too (size 1)."""
+        doc = _stats_doc()
+        return {
+            "mode": "data_parallel" if (doc.get("data_parallel") or {}).get("size", 1) > 1 else "single",
+            "instance_id": doc.get("instance_id"),
+            "model": doc.get("model"),
+            "uptime_s": doc.get("uptime_s"),
+            "data_parallel": doc.get("data_parallel"),
+            "engines": doc.get("engines"),
+            "totals": {
+                "requests": doc.get("requests"),
+                "throughput": doc.get("throughput"),
+                "vram_bytes": doc.get("vram_bytes"),
+                "kv": doc.get("kv"),
+                "mamba": doc.get("mamba"),
+                "swa": doc.get("swa"),
+                "prefill": doc.get("prefill"),
+                "spec": doc.get("spec"),
+                "moe": doc.get("moe"),
+            },
+            "arena": _arena_status(),
+            "gpu_live": metrics.gpu_snapshot(),
+        }
 
     @app.post("/v1/score")
     async def score(req: ScoreRequest):

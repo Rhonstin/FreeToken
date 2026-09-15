@@ -115,7 +115,7 @@ def register_openai_routes(
     @app.post("/v1/chat/completions")
     async def v1_chat_completions(req: ChatCompletionRequest, request: Request):
         log_request("/v1/chat/completions", req, request)
-        state = get_state()
+        state = get_state(req)
         if (gate := _maintenance_gate(state)) is not None:
             return gate
         return await handle_chat_completion(req, request, state, get_model_sampling())
@@ -123,7 +123,7 @@ def register_openai_routes(
     @app.post("/v1/completions")
     async def v1_completions(req: CompletionRequest, request: Request):
         log_request("/v1/completions", req, request)
-        state = get_state()
+        state = get_state(req)
         if (gate := _maintenance_gate(state)) is not None:
             return gate
         return await handle_completion(req, request, state, get_model_sampling())

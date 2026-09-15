@@ -150,18 +150,114 @@ def launch_server(
             f"{', '.join(server_args.gpu_assigned) if server_args.gpu_assigned else 'resolved at CUDA init (no NVML)'}"
         )
 
-    def start_subprocess() -> "BackendHandle":
+    def _spawn_engine(
+        engine_args: "ServerArgs", tag: str
+    ) -> "BackendHandle":
+        """Spawn one independent engine group (its own scheduler + detokenizer + tokenizers)
+        on ``engine_args``' private ipc namespace, and hand back its BackendHandle. One group
+        is one whole model replica on one GPU — the unit DP replicates."""
         import multiprocessing as mp
 
         from .supervisor import BackendHandle
 
-        mp.set_start_method("spawn", force=True)
-        detach = server_args.shell_mode  # see _detach_process_group
-
-        world_size = server_args.tp_info.size
+        detach = engine_args.shell_mode  # see _detach_process_group
         ack_queue: mp.Queue = mp.Queue()
         processes: list[mp.Process] = []
 
+        p = mp.Process(
+            target=_run_scheduler,
+            args=(engine_args, ack_queue),
+            daemon=False,
+            name=f"{tag}-scheduler",
+        )
+        p.start()
+        processes.append(p)
+
+        num_tokenizers = engine_args.num_tokenizer
+        p = mp.Process(
+            target=_run_tokenize_worker,
+            kwargs={
+                "detach": detach,
+                "tokenizer_path": engine_args.model_path,
+                "addr": engine_args.zmq_detokenizer_addr,
+                "backend_addr": engine_args.zmq_backend_addr,
+                "frontend_addr": engine_args.zmq_frontend_addr,
+                "local_bs": 1,
+                "create": engine_args.tokenizer_create_addr,
+                "tokenizer_id": num_tokenizers,
+                "ack_queue": ack_queue,
+            },
+            daemon=False,
+            name=f"{tag}-detokenizer-0",
+        )
+        p.start()
+        processes.append(p)
+        for i in range(num_tokenizers):
+            p = mp.Process(
+                target=_run_tokenize_worker,
+                kwargs={
+                    "detach": detach,
+                    "tokenizer_path": engine_args.model_path,
+                    "addr": engine_args.zmq_tokenizer_addr,
+                    "backend_addr": engine_args.zmq_backend_addr,
+                    "frontend_addr": engine_args.zmq_frontend_addr,
+                    "local_bs": 1,
+                    "create": engine_args.tokenizer_create_addr,
+                    "tokenizer_id": i,
+                    "ack_queue": ack_queue,
+                },
+                daemon=False,
+                name=f"{tag}-tokenizer-{i}",
+            )
+            p.start()
+            processes.append(p)
+
+        # Expected ready acks: 1 primary scheduler + num_tokenizers + 1 detokenizer.
+        handle = BackendHandle(
+            ack_queue=ack_queue,
+            processes=processes,
+            expected_acks=num_tokenizers + 2,
+            config=engine_args,
+        )
+        # Watchdog hook: respawn this exact group (same addresses/GPU) if it dies.
+        handle.restart = lambda: _spawn_engine(engine_args, tag)
+        return handle
+
+    def start_subprocess() -> "list[BackendHandle]":
+        """Launch every engine group. Single-engine (DP=1, TP=1) yields one handle — the classic
+        path; DP yields one handle per GPU, all sharing the host expert pool via env."""
+        import multiprocessing as mp
+
+        mp.set_start_method("spawn", force=True)
+        detach = server_args.shell_mode  # see _detach_process_group
+
+        dp_size = getattr(server_args, "data_parallel", 1) or 1
+        world_size = server_args.tp_info.size
+        if dp_size > 1:
+            gpus = tuple(server_args.gpu) or tuple(str(i) for i in range(dp_size))
+            assigned = server_args.gpu_assigned
+            handles: list = []
+            for i in range(dp_size):
+                engine_args = replace(
+                    server_args,
+                    tp_info=DistributedInfo(0, 1),
+                    dp_index=i,
+                    # private ipc namespace + gloo store port for this engine
+                    _unique_suffix=f".pid={os.getpid()}.dp={i}",
+                    gpu=(gpus[i],),
+                    gpu_assigned=(assigned[i],) if assigned else None,
+                )
+                handles.append(_spawn_engine(engine_args, tag=f"freetoken-DP{i}"))
+            return handles
+
+        # Classic path: one engine, possibly TP-sharded across world_size ranks that share the
+        # single ack queue and tokenizer set (rank0 broadcasts to the others).
+        import multiprocessing as mp
+
+        from .supervisor import BackendHandle
+
+        ack_queue: mp.Queue = mp.Queue()
+        processes: list[mp.Process] = []
         for i in range(world_size):
             new_args = replace(server_args, tp_info=DistributedInfo(i, world_size))
             p = mp.Process(
@@ -212,12 +308,13 @@ def launch_server(
             p.start()
             processes.append(p)
 
-        # Expected ready acks: 1 primary scheduler + num_tokenizers + 1 detokenizer.
-        return BackendHandle(
-            ack_queue=ack_queue,
-            processes=processes,
-            expected_acks=num_tokenizers + 2,
-        )
+        return [
+            BackendHandle(
+                ack_queue=ack_queue,
+                processes=processes,
+                expected_acks=num_tokenizers + 2,
+            )
+        ]
 
     run_api_server(server_args, start_subprocess, run_shell=run_shell)
 
