@@ -57,6 +57,54 @@ _DEFAULT_CHUNK = 8 << 20
 # Hold the mmaps for the process lifetime; the offload cache reads from these banks forever.
 _LIVE_BUFFERS: list[mmap.mmap] = []
 
+
+def align_up(nbytes: int, alignment: int = _BLK) -> int:
+    """Round ``nbytes`` up to ``alignment`` (page size); shared with the shared-bank sizing."""
+    return (nbytes + alignment - 1) // alignment * alignment
+
+
+class SharedArena:
+    """A shmem-backed bump arena so several processes share ONE physical copy of the expert banks.
+
+    ``cudaHostRegister`` accepts shmem pages but rejects regular-file mappings (measured: an ext4
+    file mmap fails with ``invalid argument``), so the arena MUST live on tmpfs (``/dev/shm`` or a
+    dedicated mount). Every process maps the same region ``MAP_SHARED`` and registers it for its
+    own CUDA context; the physical pages are shared by the kernel, so N replicas cost one copy.
+    Layout is a deterministic bump allocation: every process that builds the same banks reserves
+    the same offsets, so the mapping is interchangeable between processes.
+    """
+
+    __slots__ = ("path", "_fd", "_off", "_size")
+
+    def __init__(self, path: str):
+        self.path = path
+        self._fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        self._off = 0
+        self._size = os.fstat(self._fd).st_size
+
+    def ensure_size(self, nbytes: int) -> None:
+        """Grow the file to hold ``nbytes``; never shrinks (callers serialize this call)."""
+        if nbytes > self._size:
+            os.ftruncate(self._fd, nbytes)
+            self._size = nbytes
+
+    def reserve(self, nbytes: int) -> int:
+        """Bump-allocate ``nbytes``; returns a page-aligned offset. Grows the file if needed."""
+        off = self._off
+        self._off = align_up(off + nbytes)
+        if self._off > self._size:
+            os.ftruncate(self._fd, self._off)
+            self._size = self._off
+        return off
+
+    def mapping(self, offset: int, size: int) -> mmap.mmap:
+        """A ``MAP_SHARED`` view of the arena at ``offset`` (offset must be page-aligned)."""
+        assert offset % _BLK == 0, offset
+        return mmap.mmap(self._fd, size, offset=offset)
+
+    def close(self) -> None:
+        os.close(self._fd)
+
 def _env_born_pinned() -> bool | None:
     """``FREETOKEN_BANK_CUDA_ALLOC`` tri-state: unset -> ``None`` (default applies), else the parsed boolean."""
     v = os.environ.get("FREETOKEN_BANK_CUDA_ALLOC", "").strip().lower()
@@ -83,20 +131,34 @@ class HostBank:
 
     The buffer is rounded up to the O_DIRECT block; ``tensor`` views exactly ``nbytes``. ``backing=None`` follows ``FREETOKEN_BANK_CUDA_ALLOC``."""
 
-    __slots__ = ("tensor", "addr", "nbytes", "_buf", "_pinned", "_locked")
+    __slots__ = ("tensor", "addr", "nbytes", "_buf", "_pinned", "_locked", "_shared")
 
     def __init__(self, shape: tuple[int, ...], dtype: torch.dtype,
-                 *, backing: str | None = None):
+                 *, backing: str | None = None, arena: "SharedArena | None" = None):
         if backing is None:
-            plan = _requested_residency
-            # a plan with non-pinned labels vetoes born-pinned: cudaHostAlloc spends the pin quota the plan exists to save
-            born = _env_born_pinned() and (plan is None or not plan.has_unpinned)
-            backing = "cuda" if born else "mmap"
-        assert backing in ("mmap", "cuda"), backing
+            if arena is not None:
+                # an arena bank must be a plain shmem mapping; cudaHostAlloc could not be shared
+                backing = "shared"
+            else:
+                plan = _requested_residency
+                # a plan with non-pinned labels vetoes born-pinned: cudaHostAlloc spends the pin quota the plan exists to save
+                born = _env_born_pinned() and (plan is None or not plan.has_unpinned)
+                backing = "cuda" if born else "mmap"
+        if arena is not None and backing == "mmap":
+            backing = "shared"
+        assert backing in ("mmap", "cuda", "shared"), backing
         elsize = torch.empty((), dtype=dtype).element_size()
         self.nbytes = math.prod(shape) * elsize
         asize = ((self.nbytes + _BLK - 1) // _BLK) * _BLK
-        if backing == "cuda":
+        self._shared = backing == "shared"
+        if backing == "shared":
+            assert arena is not None
+            off = arena.reserve(asize)
+            self._buf = arena.mapping(off, asize)
+            _LIVE_BUFFERS.append(self._buf)
+            self.addr = ctypes.addressof(ctypes.c_char.from_buffer(self._buf))
+            self._pinned = False
+        elif backing == "cuda":
             from freetoken.kernel.pinned import alloc_pinned_tensor
 
             # direct-IO readers need page alignment, but cudaHostAlloc only guarantees ~512 in practice
@@ -149,6 +211,8 @@ class HostBank:
         For buffers that are done being read (the converter). No-op for born-pinned banks: registered pages cannot be dropped."""
         if self._pinned:
             return
+        if self._shared:
+            return  # shared arena pages are owned by the whole host; dropping them would hit every other replica
         self._buf.madvise(mmap.MADV_DONTNEED)
 
     def lock(self) -> None:
@@ -199,21 +263,31 @@ def _os_lock(addr: int, nbytes: int) -> None:
     _os_locked_total += nbytes
 
 
-def alloc_banks(specs: dict[str, tuple[tuple[int, ...], torch.dtype]]) -> dict[str, HostBank]:
-    """Allocate (lazy, unpinned) host banks from ``{name: (shape, dtype)}``."""
-    return {name: HostBank(shape, dtype) for name, (shape, dtype) in specs.items()}
+def alloc_banks(specs: dict[str, tuple[tuple[int, ...], torch.dtype]],
+                arena: "SharedArena | None" = None) -> dict[str, HostBank]:
+    """Allocate (lazy, unpinned) host banks from ``{name: (shape, dtype)}``.
+
+    ``arena`` (optional): back every bank with a slice of a shared shmem arena instead of a
+    private anonymous mmap, so several processes share one physical copy (see :class:`SharedArena`)."""
+    return {name: HostBank(shape, dtype, arena=arena) for name, (shape, dtype) in specs.items()}
 
 
 def alloc_layer_banks(
-    specs: dict[str, tuple[tuple[int, ...], torch.dtype]], num_layers: int
+    specs: dict[str, tuple[tuple[int, ...], torch.dtype]], num_layers: int,
+    arena: "SharedArena | None" = None,
 ) -> dict[str, list[HostBank]]:
     """Allocate per-layer host banks: ``{name: ([num_experts, ...] row shape, dtype)}``
     -> one independently allocated (page-aligned, independently pin/lock-able)
-    ``HostBank`` per layer per name."""
+    ``HostBank`` per layer per name. ``arena`` backs them with shared shmem (see :func:`alloc_banks`)."""
     return {
-        name: [HostBank(shape, dtype) for _ in range(num_layers)]
+        name: [HostBank(shape, dtype, arena=arena) for _ in range(num_layers)]
         for name, (shape, dtype) in specs.items()
     }
+
+
+def arena_tensor(arena: SharedArena, shape: tuple[int, ...], dtype: torch.dtype) -> torch.Tensor:
+    """A CPU tensor living in the shared arena (for small shared sidecars like the alpha scales)."""
+    return HostBank(shape, dtype, arena=arena).tensor
 
 
 class _ResidencyPlan:

@@ -18,8 +18,13 @@ import torch
 from freetoken.layers.quantization import QuantKind
 from freetoken.utils import init_logger
 
-from .host_banks import alloc_layer_banks
+from .host_banks import SharedArena, align_up, alloc_layer_banks, arena_tensor
 from .offload_cache import _BANK_BYTES_PER_EXPERT, _BANK_SCHEMAS
+
+# Env: path of a tmpfs/shmem file that backs the expert banks. When set, every process maps the
+# same region MAP_SHARED (one physical RAM copy) instead of a private anonmmap; the first process
+# fills it and writes "<path>.ready", later ones skip the fill. See host_banks.SharedArena.
+_SHARED_BANKS_ENV = "FREETOKEN_SHARED_BANKS"
 
 logger = init_logger(__name__)
 
@@ -75,6 +80,8 @@ def build_expert_banks(
     device: torch.device,
     layer_sink=None,
     dummy: bool = False,
+    arena=None,
+    prebuilt: bool = False,
 ) -> ExpertBanks:
     """Fill host banks in the kernel's layout from a stream of expert pieces.
 
@@ -91,12 +98,20 @@ def build_expert_banks(
     layout = method.layout()
     E = method.cfg.num_experts
     specs = {role: ((E, *spec.shape), spec.dtype) for role, spec in layout.items() if not spec.resident}
-    hb = alloc_layer_banks(specs, num_layers)
+    hb = alloc_layer_banks(specs, num_layers, arena=arena)
     banks = {role: [b.tensor for b in hb[role]] for role in specs}
-    alphas = {
-        role: torch.empty(num_layers * E, dtype=spec.dtype, device=device)
-        for role, spec in layout.items() if spec.resident
-    }
+    if arena is not None:
+        # shared mode: alphas live in the arena too (CPU) so a prebuilt replica can read them;
+        # ExpertBanks consumers .to(device) them
+        alphas = {
+            role: arena_tensor(arena, (num_layers * E,), spec.dtype)
+            for role, spec in layout.items() if spec.resident
+        }
+    else:
+        alphas = {
+            role: torch.empty(num_layers * E, dtype=spec.dtype, device=device)
+            for role, spec in layout.items() if spec.resident
+        }
 
     if dummy:
         for role, per_layer in banks.items():
@@ -104,6 +119,16 @@ def build_expert_banks(
                 _dummy_fill(role, tensor)
         for alpha in alphas.values():
             alpha.fill_(1.0)
+        if torch.cuda.is_available():
+            pin_banks(hb)
+        return ExpertBanks(
+            legacy_format_for(method.kind, kernel.name), banks,
+            gate_up_alpha=alphas.get("gate_up_alpha"), down_alpha=alphas.get("down_alpha"),
+            kind=method.kind, kernel=kernel.name, layout=layout,
+        )
+
+    if prebuilt:
+        # the first process already packed the shared arena; just register it in this CUDA context
         if torch.cuda.is_available():
             pin_banks(hb)
         return ExpertBanks(
@@ -192,16 +217,19 @@ def _legacy_expert_banks(model_path, model_config, device, dtype, dummy, paralle
     )
 
 
-def _method_expert_banks(model_path, model_config, method, device, dummy, parallel, workers, chunk, layer_sink=None) -> ExpertBanks:
+def _method_expert_banks(model_path, model_config, method, device, dummy, parallel, workers, chunk, layer_sink=None,
+                         *, arena=None, prebuilt=False) -> ExpertBanks:
     from freetoken.moe.expert_pieces import iter_expert_pieces
 
     num_layers = model_config.num_moe_layers
     if dummy:
         return build_expert_banks(method, num_layers, None, device=device, dummy=True)
-    pieces = iter_expert_pieces(
+    # prebuilt: the shared arena already holds the packed banks -> do not even open the checkpoint
+    pieces = None if prebuilt else iter_expert_pieces(
         model_path, model_config, method.kind, parallel=parallel, workers=workers, chunk=chunk
     )
-    return build_expert_banks(method, num_layers, pieces, device=device, layer_sink=layer_sink)
+    return build_expert_banks(method, num_layers, pieces, device=device, layer_sink=layer_sink,
+                              arena=arena, prebuilt=prebuilt)
 
 
 def _host_ram_fits_parallel(model_path: str) -> bool:
@@ -272,6 +300,61 @@ def bank_bytes_estimate(model_config, method=None) -> int | None:
     return layers * experts * per_expert(hidden, inter)
 
 
+def _shared_arena_bytes(method, num_layers: int) -> int:
+    """Exact byte size of the shared arena for a bound expert ``method``: per-layer non-resident
+    bank bytes plus the resident alpha sidecars, each page-aligned (mirrors ``alloc_layer_banks``
+    + ``arena_tensor`` reservation order)."""
+    layout = method.layout()
+    E = method.cfg.num_experts
+    total = 0
+    for spec in layout.values():
+        if spec.resident:
+            continue
+        elsize = torch.empty((), dtype=spec.dtype).element_size()
+        total += align_up(E * math.prod(spec.shape) * elsize) * num_layers
+    for spec in layout.values():
+        if not spec.resident:
+            continue
+        total += align_up(num_layers * E * torch.empty((), dtype=spec.dtype).element_size())
+    return total
+
+
+class _SharedBanksSession:
+    """Owns the shared-bank lock/arena for one load: serializes the fill across processes and
+    tells the caller whether the arena is already populated (``prebuilt``)."""
+
+    def __init__(self, path: str, total_bytes: int):
+        import fcntl
+
+        self.arena = SharedArena(path)
+        self._lock_fd = os.open(path + ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+        fcntl.flock(self._lock_fd, fcntl.LOCK_EX)  # blocks a second builder until this one is done
+        self.arena.ensure_size(total_bytes)
+        self._marker = path + ".ready"
+        self.prebuilt = os.path.exists(self._marker)
+
+    def mark_ready(self) -> None:
+        with open(self._marker, "w") as f:
+            f.write("ready\n")
+
+    def close(self) -> None:
+        import fcntl
+
+        try:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+        finally:
+            os.close(self._lock_fd)
+            self.arena.close()
+
+
+def _open_shared_banks(model_config, method) -> "_SharedBanksSession | None":
+    path = os.environ.get(_SHARED_BANKS_ENV, "").strip()
+    if not path or method is None:
+        return None
+    total = _shared_arena_bytes(method, model_config.num_moe_layers)
+    return _SharedBanksSession(path, total)
+
+
 def load_expert_banks(
     model_path: str,
     model_config,
@@ -322,49 +405,74 @@ def load_expert_banks(
             logger.info_rank0(f"expert banks: FTW fast path (FTW checkpoint {model_path})")
             return banks
 
-    if parallel and not _PARALLEL_READER_SUPPORTED:
-        logger.warning_rank0(
-            "expert banks: parallel O_DIRECT reader unsupported on this platform "
-            "(no os.O_DIRECT/preadv) -> serial build"
-        )
-        parallel = False
+    shared = None if dummy else _open_shared_banks(model_config, method)
+    try:
+        if shared is not None:
+            if shared.prebuilt:
+                logger.info_rank0(
+                    f"expert banks: shared arena hit ({shared.arena.path}); skipping fill"
+                )
+            else:
+                logger.info_rank0(
+                    f"expert banks: building shared arena {shared.arena.path} "
+                    "(later replicas will map the same one physical copy)"
+                )
+            # one deterministic build: the parallel reader would allocate, fall back, and shift the
+            # bump offsets; the serial path packs straight into the arena in a fixed order
+            parallel = False
 
-    auto = parallel is None
-    if auto:
-        from freetoken.models.weight import experts_scattered
-
-        parallel = _PARALLEL_READER_SUPPORTED and not dummy and experts_scattered(model_path)
-        # Low-RAM fallback: the parallel reader holds whole-shard ANONYMOUS buffers
-        # (non-reclaimable) on top of the ~bank-sized resident set, so on a memory-tight box
-        # it OOMs where the serial path (reclaimable file mmap) survives. Drop to serial when
-        # free RAM can't cover the banks + one shard's transient. (--expert-load serial/parallel
-        # bypass this by forcing ``parallel`` explicitly.)
-        if parallel and not _host_ram_fits_parallel(model_path):
+        if parallel and not _PARALLEL_READER_SUPPORTED:
             logger.warning_rank0(
-                "expert banks: low free RAM -> serial build (avoids parallel-reader OOM; "
-                "override with --expert-load parallel)"
+                "expert banks: parallel O_DIRECT reader unsupported on this platform "
+                "(no os.O_DIRECT/preadv) -> serial build"
             )
             parallel = False
-    logger.info_rank0(f"expert banks: slow path ({'parallel' if parallel else 'serial'} build)")
-    # parallel's reader resolves hub ids + handles single-file/no-index checkpoints, so it won't
-    # OSError on those (which would leak the banks it pre-allocated, since host banks live for
-    # the process). Only NotImplementedError (quant has no parallel reader; raised before any
-    # allocation) falls back to serial.
-    from freetoken.moe.host_banks import requested_residency
 
-    def _build(par: bool) -> ExpertBanks:
-        if method is not None:
-            return _method_expert_banks(model_path, model_config, method, device, dummy, par, workers, chunk, layer_sink)
-        return _legacy_expert_banks(model_path, model_config, device, dtype, dummy, par, workers, chunk, decode_target, layer_sink)
+        auto = parallel is None
+        if auto:
+            from freetoken.models.weight import experts_scattered
 
-    with requested_residency(layer_residency) as residency_plan:
-        try:
-            banks = _build(parallel)
-        except NotImplementedError as exc:
-            if not parallel:
-                raise
-            logger.warning_rank0(f"parallel reader unavailable ({exc}); falling back to serial build")
-            banks = _build(False)
+            parallel = _PARALLEL_READER_SUPPORTED and not dummy and experts_scattered(model_path)
+            # Low-RAM fallback: the parallel reader holds whole-shard ANONYMOUS buffers
+            # (non-reclaimable) on top of the ~bank-sized resident set, so on a memory-tight box
+            # it OOMs where the serial path (reclaimable file mmap) survives. Drop to serial when
+            # free RAM can't cover the banks + one shard's transient. (--expert-load serial/parallel
+            # bypass this by forcing ``parallel`` explicitly.)
+            if parallel and not _host_ram_fits_parallel(model_path):
+                logger.warning_rank0(
+                    "expert banks: low free RAM -> serial build (avoids parallel-reader OOM; "
+                    "override with --expert-load parallel)"
+                )
+                parallel = False
+        logger.info_rank0(f"expert banks: slow path ({'parallel' if parallel else 'serial'} build)")
+        # parallel's reader resolves hub ids + handles single-file/no-index checkpoints, so it won't
+        # OSError on those (which would leak the banks it pre-allocated, since host banks live for
+        # the process). Only NotImplementedError (quant has no parallel reader; raised before any
+        # allocation) falls back to serial.
+        from freetoken.moe.host_banks import requested_residency
+
+        arena = shared.arena if shared is not None else None
+        prebuilt = bool(shared is not None and shared.prebuilt)
+
+        def _build(par: bool) -> ExpertBanks:
+            if method is not None:
+                return _method_expert_banks(model_path, model_config, method, device, dummy, par, workers, chunk, layer_sink,
+                                            arena=arena, prebuilt=prebuilt)
+            return _legacy_expert_banks(model_path, model_config, device, dtype, dummy, par, workers, chunk, decode_target, layer_sink)
+
+        with requested_residency(layer_residency) as residency_plan:
+            try:
+                banks = _build(parallel)
+            except NotImplementedError as exc:
+                if not parallel:
+                    raise
+                logger.warning_rank0(f"parallel reader unavailable ({exc}); falling back to serial build")
+                banks = _build(False)
+        if shared is not None and not shared.prebuilt:
+            shared.mark_ready()
+    finally:
+        if shared is not None:
+            shared.close()
     return _echo_residency(banks, layer_residency, residency_plan)
 
 
