@@ -22,6 +22,7 @@ from .api_models import (
 )
 from .function_call_parser import ToolCallItem
 from .request_logger import log_request
+from .structured_format import normalize_response_format, structured_conflict
 from .generation import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     ContentDelta,
@@ -60,13 +61,20 @@ def chat_request_to_genspec(
     req: ChatCompletionRequest,
     model_sampling: dict[str, Any],
     default_max_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+    structured_output: dict[str, Any] | None = None,
 ) -> GenSpec:
     """OpenAI ChatCompletionRequest -> GenSpec (the OpenAI 'to_sampling_params')."""
-    from .model_meta import effort_toggle_kwargs
+    from .model_meta import effort_toggle_kwargs, thinking_toggle_kwargs
 
     ctk = req.chat_template_kwargs
     thinking_type = _thinking_type(req)
-    if req.reasoning_effort or thinking_type:
+    if structured_output is not None:
+        # The grammar constrains from the first sampled token, so the turn must start inside
+        # the JSON document: turn thinking off (the template then emits its closed
+        # ``<think></think>`` pair as a prefix). An explicit thinking request is rejected in
+        # the handler -- silently overriding it would answer a different question than asked.
+        ctk = {**thinking_toggle_kwargs(False), **(ctk or {})}
+    elif req.reasoning_effort or thinking_type:
         ctk = effort_toggle_kwargs(req.reasoning_effort, ctk, thinking_type=thinking_type)
     return GenSpec(
         messages=render_messages([m.model_dump(exclude_none=True) for m in req.messages]),
@@ -79,6 +87,7 @@ def chat_request_to_genspec(
             model_sampling=model_sampling,
             stop=req.stop,
             default_max_tokens=default_max_tokens,
+            structured_output=structured_output,
         ),
         chat_template_kwargs=ctk,
         template_tools=_tools_for_template(req),
@@ -157,11 +166,28 @@ async def handle_chat_completion(
         return create_error_response("function_call is not supported; use tools/tool_choice instead")
     if req.logit_bias is not None:
         return create_error_response("logit_bias is not supported")
-    if _response_format_unsupported(req.response_format):
-        return create_error_response(
-            "response_format json_object/json_schema is not supported (no constrained decoding)",
-            param="response_format",
+    try:
+        structured_output = normalize_response_format(req.response_format)
+    except ValueError as exc:
+        return create_error_response(str(exc), param="response_format")
+    if structured_output is not None:
+        conflict = structured_conflict(
+            tools=req.tools, stop=req.stop, ignore_eos=req.ignore_eos
         )
+        if conflict is not None:
+            return create_error_response(conflict, param="response_format")
+        if not _structured_available():
+            return create_error_response(_STRUCTURED_UNAVAILABLE, param="response_format")
+        explicit_thinking = _explicit_thinking_request(req)
+        if explicit_thinking is not None:
+            # The grammar constrains from the first sampled token; a thinking block would be
+            # constrained too and could never be reproduced. Structural tags would lift this,
+            # but this server keeps the promise simple: structured means answer-only.
+            return create_error_response(
+                "response_format requires thinking to be disabled; "
+                f"{explicit_thinking}. Drop it, or set reasoning_effort='none'.",
+                param="reasoning_effort",
+            )
     if req.n != 1:
         return create_error_response("Only n=1 is supported", param="n")
     # Case/whitespace and the "off" disable synonym stay accepted here because
@@ -185,7 +211,12 @@ async def handle_chat_completion(
         default_max_tokens = (
             getattr(state.config, "max_output_tokens", None) or DEFAULT_MAX_OUTPUT_TOKENS
         )
-        spec = chat_request_to_genspec(req, model_sampling, default_max_tokens=default_max_tokens)
+        spec = chat_request_to_genspec(
+            req,
+            model_sampling,
+            default_max_tokens=default_max_tokens,
+            structured_output=structured_output,
+        )
     except ValueError as exc:
         return create_error_response(str(exc))
 
@@ -391,11 +422,25 @@ async def handle_completion(
     unsupported = _completion_unsupported_reason(req)
     if unsupported is not None:
         return create_error_response(unsupported)
+    try:
+        structured_output = normalize_response_format(req.response_format)
+    except ValueError as exc:
+        return create_error_response(str(exc), param="response_format")
+    if structured_output is not None:
+        if (conflict := structured_conflict(tools=None, stop=req.stop, ignore_eos=req.ignore_eos)) is not None:
+            return create_error_response(conflict, param="response_format")
+        if not _structured_available():
+            return create_error_response(_STRUCTURED_UNAVAILABLE, param="response_format")
     try:  # surfaces an out-of-range max_tokens as a 400 rather than a 500 from the worker
         default_max_tokens = (
             getattr(state.config, "max_output_tokens", None) or DEFAULT_MAX_OUTPUT_TOKENS
         )
-        _resolve_sampling(req, model_sampling, default_max_tokens=default_max_tokens)
+        _resolve_sampling(
+            req,
+            model_sampling,
+            default_max_tokens=default_max_tokens,
+            structured_output=structured_output,
+        )
     except ValueError as exc:
         return create_error_response(str(exc), param="max_tokens")
 
@@ -407,7 +452,8 @@ async def handle_completion(
         uid = state.new_user()
         await state.send_one(
             TokenizeMsg(uid=uid, text=prompts[0], sampling_params=_resolve_sampling(
-                req, model_sampling, default_max_tokens=default_max_tokens
+                req, model_sampling, default_max_tokens=default_max_tokens,
+                structured_output=structured_output,
             ))
         )
         chunks = stream_completion_chunks(uid, req, state)
@@ -426,7 +472,8 @@ async def handle_completion(
                 uid=uid,
                 text=prompt,
                 sampling_params=_resolve_sampling(
-                    req, model_sampling, default_max_tokens=default_max_tokens
+                    req, model_sampling, default_max_tokens=default_max_tokens,
+                    structured_output=structured_output,
                 ),
             )
         )
@@ -537,6 +584,7 @@ def _resolve_sampling(
     req: ChatCompletionRequest | CompletionRequest,
     model_sampling: dict[str, Any],
     default_max_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+    structured_output: dict[str, Any] | None = None,
 ) -> SamplingParams:
     return resolve_sampling(
         temperature=req.temperature,
@@ -547,6 +595,7 @@ def _resolve_sampling(
         model_sampling=model_sampling,
         stop=req.stop,
         default_max_tokens=default_max_tokens,
+        structured_output=structured_output,
     )
 
 
@@ -640,9 +689,51 @@ def _usage(prompt_tokens: int, completion_tokens: int, cached_tokens: int = 0) -
     return usage
 
 
-def _response_format_unsupported(response_format: dict[str, Any] | None) -> bool:
-    # We have no constrained/guided decoding; only plain text ('text' or unset) is honored.
-    return response_format is not None and response_format.get("type") not in (None, "text")
+#: Refusal used when the grammar backend is missing from the server environment.
+_STRUCTURED_UNAVAILABLE = (
+    "response_format json_object/json_schema requires constrained decoding, and this "
+    "server environment has no grammar backend: install the optional 'xgrammar' "
+    "dependency (pip install xgrammar) and restart"
+)
+
+
+def _structured_available() -> bool:
+    from freetoken.engine.structured import available
+
+    return available()
+
+
+def _explicit_thinking_request(req: ChatCompletionRequest) -> str | None:
+    """Name the field asking for thinking, or None when the request leaves it to the server
+    default. Structured output overrides the default to off; an explicit ask is refused
+    because the grammar would have to reproduce the reasoning block to honor it."""
+    from .model_meta import _DISABLE_EFFORTS
+
+    if _thinking_type(req) == "enabled":
+        return "thinking.type is 'enabled'"
+    effort = (
+        req.reasoning_effort.strip().lower()
+        if isinstance(req.reasoning_effort, str)
+        else None
+    )
+    if effort and effort not in _DISABLE_EFFORTS:
+        return f"reasoning_effort={req.reasoning_effort!r}"
+    ctk = req.chat_template_kwargs or {}
+    enable = ctk.get("enable_thinking")
+    if enable is True or (
+        isinstance(enable, str) and enable.strip().lower() in ("true", "on", "1")
+    ):
+        return "chat_template_kwargs.enable_thinking is on"
+    ctk_effort = ctk.get("reasoning_effort")
+    if isinstance(ctk_effort, str) and ctk_effort.strip().lower() not in _DISABLE_EFFORTS:
+        return f"chat_template_kwargs.reasoning_effort={ctk_effort!r}"
+    for key in ("thinking", "thinking_mode"):
+        value = ctk.get(key)
+        if value is True or (
+            isinstance(value, str) and value.strip().lower() in ("true", "on", "enabled")
+        ):
+            return f"chat_template_kwargs.{key} is {value!r}"
+    return None
 
 
 def _completion_unsupported_reason(req: CompletionRequest) -> str | None:
@@ -656,8 +747,6 @@ def _completion_unsupported_reason(req: CompletionRequest) -> str | None:
         return "suffix is not supported"
     if req.logit_bias is not None:
         return "logit_bias is not supported"
-    if _response_format_unsupported(req.response_format):
-        return "response_format json_object/json_schema is not supported (no constrained decoding)"
     return None
 
 

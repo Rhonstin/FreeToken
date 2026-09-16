@@ -57,6 +57,12 @@ class DecodeManager:
             # position further. Plain decode passes through unchanged since the
             # post-commit frame already equals cached_len + 1.
             for req in reqs:
+                # A grammar-constrained request never speculates: its drafts would need the
+                # same matcher advanced per draft row, and only the accepted continuation is
+                # streamed -- so speculation could only add unverified tokens to the grammar.
+                if getattr(req, "structured_state", None) is not None:
+                    req.reserve_spec(0)
+                    continue
                 depth = clamp_spec_depth(self.spec_depth_fn(req), req.cached_len, req.max_device_len)
                 req.reserve_spec(depth)
             if any(req.spec_depth for req in reqs):

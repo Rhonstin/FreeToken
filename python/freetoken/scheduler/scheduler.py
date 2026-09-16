@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, List, NamedTuple, NoReturn, Set, Tuple, TypeAlias
+from typing import TYPE_CHECKING, Any, List, NamedTuple, NoReturn, Set, Tuple, TypeAlias
 
 import torch
 from freetoken.attention.linear import build_fla_metadata
@@ -205,6 +205,12 @@ class Scheduler(SchedulerIOMixin):
         self._pending_rebuild: CacheRebuildBackendMsg | None = None
         self.tokenizer = load_tokenizer(config.model_path)
         self.eos_token_ids = load_eos_token_ids(config.model_path, self.tokenizer)
+        # Compiled structured-output grammars (OpenAI response_format). Built on first use so a
+        # server that never sees structured traffic does not pay for the compiler -- or import
+        # xgrammar at all. ``structured_error`` caches an initialization failure, so every
+        # affected request is refused with the same actionable message instead of retrying.
+        self.structured: Any | None = None
+        self.structured_error: str | None = None
         self.toolcall_anchor_id = None
         if config.special_token_ckpt and (
             self.cache_manager.is_hybrid or self.cache_manager.is_swa
@@ -503,6 +509,22 @@ class Scheduler(SchedulerIOMixin):
                 # rejections/cancellations are the verify pass's (419.5) business.
                 next_token = int(next_token_items[-1].item())
                 i += row_span
+                # Grammar-constrained decoding (OpenAI structured outputs): the engine runs
+                # one batch ahead of this drain, so `terminated` is already advanced for the
+                # next step and reading it here would finish the request one token early
+                # (dropping the closing brace through the finished_reqs skip below). The
+                # state instead records the position of the token that completed the
+                # document, and this drain finishes on that very token -- after shipping it.
+                structured_state = getattr(req, "structured_state", None)
+                structured_done = False
+                if structured_state is not None and structured_state.completed_at is not None:
+                    # append_host above already counted this token, so the generated-token
+                    # position is the host ids past the prompt (the same prompt_len the stop
+                    # probe uses).
+                    prompt_len = req.max_device_len - req.output_len
+                    structured_done = (
+                        structured_state.completed_at == len(req.input_ids) - prompt_len
+                    )
                 # EOS / stop-string -> "stop", output budget exhausted -> "length";
                 # EOS and stop strings win over length.
                 hit_length = not req.can_decode
@@ -514,9 +536,15 @@ class Scheduler(SchedulerIOMixin):
                     if not hit_eos and req.sampling_params.stop_strs
                     else None
                 )
-                finished = hit_length or hit_eos or matched_stop is not None
+                finished = (
+                    hit_length or hit_eos or matched_stop is not None or structured_done
+                )
                 finish_reason = (
-                    ("stop" if (hit_eos or matched_stop is not None) else "length")
+                    (
+                        "stop"
+                        if (hit_eos or matched_stop is not None or structured_done)
+                        else "length"
+                    )
                     if finished
                     else None
                 )
@@ -731,6 +759,38 @@ class Scheduler(SchedulerIOMixin):
             return 0
         return torch.cuda.memory_reserved(self.device)
 
+    def _structured_compiler(self) -> Any:
+        """Lazily build the process-local grammar compiler (OpenAI structured outputs).
+
+        One compiler per engine process: the tokenizer info is derived from the already
+        loaded tokenizer, and the compiled-grammar cache inside serves every request that
+        shares a schema. Failures are sticky (``structured_error``) so a missing or broken
+        xgrammar yields the same actionable client error for every structured request
+        instead of being retried per request.
+        """
+        if self.structured is not None:
+            return self.structured
+        if self.structured_error is not None:
+            raise RuntimeError(self.structured_error)
+        from freetoken.engine.structured import StructuredCompiler, available
+
+        if not available():
+            self.structured_error = (
+                "this server build cannot enforce JSON schemas: the optional 'xgrammar' "
+                "dependency is not installed (pip install xgrammar)"
+            )
+            raise RuntimeError(self.structured_error)
+        try:
+            self.structured = StructuredCompiler.from_tokenizer(
+                self.tokenizer,
+                vocab_size=int(getattr(self.config.model_config, "vocab_size", 0) or 0) or None,
+                stop_token_ids=sorted(self.eos_token_ids),
+            )
+        except Exception as exc:  # noqa: BLE001 -- report, do not abort the engine
+            self.structured_error = f"structured output is unavailable: {exc}"
+            raise RuntimeError(self.structured_error) from exc
+        return self.structured
+
     def _process_one_msg(self, msg: BaseBackendMsg) -> None:
         if isinstance(msg, BatchBackendMsg):
             for msg in msg.data:
@@ -781,6 +841,48 @@ class Scheduler(SchedulerIOMixin):
                 logger.warning_rank0(
                     f"Adjust max_tokens to {max_output_len} for request {msg.uid}."
                 )
+            if msg.sampling_params.structured_output:
+                if msg.sampling_params.ignore_eos:
+                    # A completed grammar is closed by the model's stop token; ignoring EOS
+                    # would decode past a finished document. The API rejects this too; this
+                    # check keeps the invariant for callers that bypass the API layer.
+                    self.send_result(
+                        [
+                            ErrorReplyMsg(
+                                uid=msg.uid,
+                                error=(
+                                    "ignore_eos is not supported together with "
+                                    "response_format"
+                                ),
+                                code="invalid_request_error",
+                            )
+                        ]
+                    )
+                    return
+                # Compile the grammar here, at admission: a bad schema becomes one actionable
+                # error reply instead of a mid-generation failure, and the (expensive) compile
+                # happens once per schema, off the HTTP event loop.
+                try:
+                    msg.structured_state = self._structured_compiler().new_state(
+                        msg.sampling_params.structured_output
+                    )
+                except Exception as exc:  # noqa: BLE001 -- client-visible, never fatal
+                    logger.warning_rank0(
+                        f"Rejecting structured request {msg.uid}: {exc}"
+                    )
+                    self.send_result(
+                        [
+                            ErrorReplyMsg(
+                                uid=msg.uid,
+                                error=(
+                                    "response_format could not be served: "
+                                    f"{exc}"
+                                ),
+                                code="invalid_request_error",
+                            )
+                        ]
+                    )
+                    return
             self.prefill_manager.add_one_req(msg)
         elif isinstance(msg, AbortBackendMsg):
             logger.debug_rank0("Aborting request %d", msg.uid)

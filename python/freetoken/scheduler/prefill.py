@@ -215,6 +215,11 @@ class PrefillAdder:
         req.swa_evicted_seqlen = swa_evicted_seqlen  # carry the extend-free watermark across chunks
         req.score_only = pending_req.score_only
         req.score_chunk = pending_req.score_chunk
+        # Grammar state rides the request, not the chunk. Intermediate prefill chunks are never
+        # sampled from (their rows are discarded before the drain), so attaching the matcher
+        # only to the final, non-chunked Req means every accepted token advances it exactly once.
+        if not is_chunked:
+            req.structured_state = pending_req.structured_state
         if pending_req.score_only:
             # The chunk's own input_ids stop at the chunk end, but scoring row i needs
             # token i+1 -- for an intermediate chunk that is the first token of the NEXT
@@ -277,6 +282,7 @@ class PrefillManager:
                 req.input_ids,
                 req.sampling_params,
                 mm_embeds=req.mm_embeds,
+                structured_state=getattr(req, "structured_state", None),
                 score_only=req.score_only,
                 score_chunk=req.score_chunk,
             )

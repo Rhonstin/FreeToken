@@ -24,6 +24,7 @@ from freetoken.utils import align_ceil, init_logger, is_sm90_family, is_sm100_fa
 from .config import EngineConfig
 from .graph import GraphRunner, get_free_memory
 from .sample import BatchSamplingArgs, Sampler
+from .structured import advance_states, mask_logits, states_of
 from freetoken.kvcache import create_kv_pool, resolve_pool_class
 from freetoken.kvcache.base import CacheRebuildRejected
 from freetoken.kvcache.cache_status import _supports_swa_ratio
@@ -1112,7 +1113,17 @@ class Engine:
             next_tokens_gpu = torch.empty(0, dtype=torch.int32, device=logits.device)
         else:
             batch_logits = logits[: batch.size]
+            # Grammar-constrained rows (OpenAI structured outputs) are masked before sampling.
+            # mask_logits returns the tensor unchanged when no row is constrained, so plain
+            # traffic keeps the zero-copy path; structured rows pay one clone plus one int32
+            # bitmask per step. The matcher itself advances in the drain, where the sampled
+            # token is already synchronized -- the engine stays free of a host sync.
+            batch_logits = mask_logits(batch_logits, states_of(batch.reqs))
             next_tokens_gpu = self.sampler.sample(batch_logits, args).to(torch.int32)
+            # Advance the grammars here (not in the scheduler's drain): overlap scheduling
+            # launches batch N before draining N-1, so a drain-side advance would leave the
+            # next batch's mask one token stale.
+            advance_states(batch.reqs, next_tokens_gpu)
             spec_logits = None
         next_tokens_cpu = next_tokens_gpu.to("cpu", non_blocking=True)
         copy_done_event = torch.cuda.Event()

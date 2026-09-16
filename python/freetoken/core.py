@@ -31,6 +31,12 @@ class SamplingParams:
     # Stop strings (OpenAI `stop` / Anthropic `stop_sequences`). Generation finishes when one
     # appears in the decoded output; the matched substring (and anything after) is trimmed.
     stop_strs: list[str] = field(default_factory=list)
+    # OpenAI structured outputs (response_format). Neutral spec, JSON-serializable so it rides
+    # the frontend -> tokenizer -> scheduler msgpack hops like every other field:
+    #   {"type": "json_object"} | {"type": "json_schema", "name", "strict", "schema"}
+    # The scheduler compiles it into an xgrammar matcher and the engine masks logits against
+    # it (engine/structured.py). None = plain text, the pre-existing behavior.
+    structured_output: dict | None = None
 
     @property
     def is_greedy(self) -> bool:

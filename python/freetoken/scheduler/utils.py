@@ -18,6 +18,11 @@ class PendingReq:
     sampling_params: SamplingParams
     chunked_req: ChunkedReq | None = None
     mm_embeds: torch.Tensor | None = None
+    # Grammar-constrained decoding state (engine/structured.StructuredState). Built once at
+    # admission from ``sampling_params.structured_output`` and handed to the request's Req --
+    # chunked prefill rows carry no state (their samples are discarded), so the grammar only
+    # ever advances on tokens the client actually receives.
+    structured_state: object | None = None
     # Teacher-forced scoring (internal /v1/score): score instead of generate; ``score_chunk``
     # caps the rows per prefill forward (0 = the normal prefill budget). Kept on the pending
     # record so every chunk continuation inherits it.
