@@ -46,6 +46,8 @@ dependencies = [
     # ceiling: numba (via flashlib) needs numpy<2.5
     "numpy>=2.0,<2.5",
     "openai>=2.0,<3",
+    # image input: the HF image processor needs both (upstream mm stack)
+    "pillow>=10,<13",
     "partial-json-parser>=0.2,<1",
     "pillow>=10,<13",
     "prompt_toolkit>=3.0,<4",
@@ -56,6 +58,7 @@ dependencies = [
     # PyPI's torch 2.11.0 wheel is itself the cu130 build, so plain pip resolves
     # correctly from PyPI alone; uv additionally pins the index below.
     "torch>=2.11,<2.12",
+    "torchvision>=0.26,<0.27",
     "torchvision>=0.26,<0.27",
     "tqdm>=4.66,<5",
     "transformers>=5.15,<6",
