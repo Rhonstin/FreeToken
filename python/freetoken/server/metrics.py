@@ -100,6 +100,13 @@ def to_prometheus(doc: dict[str, Any]) -> str:
              [(rq.get("n_tokens_max"), None)])
     o.metric("freetoken_kv_pages", "gauge", "KV page-pool usage (pages).",
              [(kv.get("used_pages"), {"kind": "used"}), (kv.get("total_pages"), {"kind": "total"})])
+    _ps = kv.get("page_size") or 1
+    o.metric("freetoken_kv_page_size", "gauge",
+             "Tokens per KV page as the engine resolved it (a backend can override --page-size).",
+             [(_ps if kv.get("total_pages") else None, None)])
+    o.metric("freetoken_kv_tokens", "gauge", "KV pool usage in tokens (pages x page_size).",
+             [((kv.get("used_pages") or 0) * _ps if kv.get("total_pages") else None, {"kind": "used"}),
+              ((kv.get("total_pages") or 0) * _ps if kv.get("total_pages") else None, {"kind": "total"})])
     o.metric("freetoken_kv_usage_ratio", "gauge", "KV pool used/total.",
              [(kv.get("used_pages") / kv.get("total_pages") if kv.get("total_pages") else None, None)])
     o.metric("freetoken_mamba_slots", "gauge", "GDN state-slot usage.",

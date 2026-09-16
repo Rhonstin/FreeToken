@@ -33,6 +33,9 @@ class StatsTracker:
         self.cached_tokens_total = 0
         self.kv_used_pages = 0
         self.kv_total_pages = 0
+        # Tokens per KV page as the ENGINE resolved it (a backend can override the CLI
+        # --page-size, e.g. qsa_sparse forces 64); 0 until an engine reply reports it.
+        self.kv_page_size = 0
         self.mamba_used_slots = 0
         self.mamba_total_slots = 0
         self.swa_used_tokens = 0
@@ -100,6 +103,8 @@ class StatsTracker:
         if getattr(reply, "kv_total_pages", 0) > 0:  # ignore 0/0 (prompt reply, owned-KV)
             self.kv_total_pages = reply.kv_total_pages
             self.kv_used_pages = max(self.kv_used_pages, reply.kv_used_pages) if inflight else 0
+            if getattr(reply, "kv_page_size", 0) > 0:
+                self.kv_page_size = reply.kv_page_size
         if getattr(reply, "mamba_total_slots", 0) > 0:  # hybrid (GDN) only
             self.mamba_total_slots = reply.mamba_total_slots
             self.mamba_used_slots = max(self.mamba_used_slots, reply.mamba_used_slots) if inflight else 0
@@ -276,7 +281,9 @@ def build_stats(state: Any, p95_ms: int, ttft_mean_ms: int) -> dict:
     uptime_s = max(0, int(time.monotonic() - ready_at)) if ready_at is not None else 0
     kv = (
         {"used_pages": tr.kv_used_pages, "total_pages": tr.kv_total_pages,
-         "page_size": getattr(config, "page_size", 1),
+         # Prefer the engine's resolved page size; the CLI value is what the parent
+         # itself parsed and can be stale (a backend override is applied in-engine).
+         "page_size": tr.kv_page_size or getattr(config, "page_size", 1),
          "quant": getattr(config, "kv_quant", "none")}
         if tr.kv_total_pages > 0 else None
     )

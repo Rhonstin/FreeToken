@@ -38,8 +38,11 @@ class DetokenizeMsg(BaseTokenizerMsg):
     stop_strs: list[str] | None = None
     # KV page-pool usage snapshot at this step (not-evictable used/total), passed
     # through to the frontend for the shell status bar. 0/0 for owned-KV models.
+    # ``kv_page_size`` is the pool's RESOLVED token count per page (a backend can
+    # override it, e.g. qsa_sparse forces 64), so callers can report tokens.
     kv_used_pages: int = 0
     kv_total_pages: int = 0
+    kv_page_size: int = 0
     # GDN (mamba) state-pool slot usage (used/total) for hybrid models, else 0/0.
     mamba_used_slots: int = 0
     mamba_total_slots: int = 0
@@ -91,6 +94,7 @@ class PrefillProgressMsg(BaseTokenizerMsg):
     total: int
     kv_used_pages: int = 0
     kv_total_pages: int = 0
+    kv_page_size: int = 0
     mamba_used_slots: int = 0
     mamba_total_slots: int = 0
     queue_reqs: int = 0

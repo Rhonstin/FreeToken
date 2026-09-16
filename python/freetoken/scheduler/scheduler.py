@@ -576,6 +576,7 @@ class Scheduler(SchedulerIOMixin):
             for m in reply:
                 m.kv_used_pages = used
                 m.kv_total_pages = total
+                m.kv_page_size = self.config.page_size
                 m.mamba_used_slots = mamba_used
                 m.mamba_total_slots = mamba_total
                 m.swa_used_tokens = swa_used
@@ -1130,6 +1131,7 @@ class Scheduler(SchedulerIOMixin):
             PrefillProgressMsg(
                 uid=req.uid, processed=processed, total=total,
                 kv_used_pages=used, kv_total_pages=total_pages,
+                kv_page_size=self.config.page_size,
                 mamba_used_slots=m_used, mamba_total_slots=m_total, queue_reqs=queue,
             )
             for req in batch.reqs if req.uid >= 0

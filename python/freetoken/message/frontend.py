@@ -34,9 +34,10 @@ class UserReply(BaseFrontendMsg):
     cached_tokens: int = 0
     # KV page-pool usage snapshot (not-evictable used/total) for the shell status bar.
     # 0/0 when not reported (e.g. the prompt-tokens reply, or owned-KV models with no
-    # shared page pool).
+    # shared page pool). ``kv_page_size`` is the pool's resolved tokens per page.
     kv_used_pages: int = 0
     kv_total_pages: int = 0
+    kv_page_size: int = 0
     # GDN (mamba) state-pool slot usage (used/total) for hybrid models, else 0/0.
     mamba_used_slots: int = 0
     mamba_total_slots: int = 0

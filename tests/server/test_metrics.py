@@ -36,6 +36,22 @@ def _doc(**over) -> dict:
     return doc
 
 
+def test_to_prometheus_reports_kv_tokens_with_the_resolved_page_size():
+    """Pages alone mislead when a backend overrides the page size (qsa_sparse -> 64):
+    3438 pages x 64 = 220032 tokens, not 3438."""
+    text = to_prometheus(_doc(kv={"used_pages": 3092, "total_pages": 3438, "page_size": 64,
+                                  "quant": "nvfp4"}))
+    assert "freetoken_kv_page_size 64" in text
+    assert 'freetoken_kv_tokens{kind="used"} 197888' in text
+    assert 'freetoken_kv_tokens{kind="total"} 220032' in text
+
+
+def test_to_prometheus_skips_kv_series_without_a_pool():
+    text = to_prometheus(_doc(kv={}))
+    assert "freetoken_kv_page_size" not in text or "freetoken_kv_page_size NaN" not in text
+    assert 'freetoken_kv_tokens{kind="total"} 0' not in text
+
+
 def test_to_prometheus_renders_expected_metrics():
     text = to_prometheus(_doc())
     assert "freetoken_info{" in text and 'model="m"' in text
@@ -106,6 +122,42 @@ def test_stats_tracker_peaks_pools_and_resets_at_idle():
                       mamba_used_slots=0, mamba_total_slots=8))
     assert tr.active == 0 and tr.completed == 1
     assert (tr.kv_used_pages, tr.mamba_used_slots) == (0, 0)
+
+
+def test_stats_tracker_keeps_the_engine_resolved_kv_page_size():
+    """The pool's tokens-per-page comes from the engine (a backend can override the CLI
+    value), so the tracker must carry it even when --page-size said something else."""
+    tr = StatsTracker()
+    tr.on_new_user(1)
+    tr.observe(_reply(kv_used_pages=3092, kv_total_pages=3438, kv_page_size=64))
+    assert tr.kv_page_size == 64
+    assert tr.kv_total_pages * tr.kv_page_size == 220032  # the real pool, in tokens
+
+
+def test_build_stats_prefers_the_engine_reported_kv_page_size():
+    from freetoken.server.stats import build_stats
+
+    tr = StatsTracker()
+    tr.on_new_user(1)
+    tr.observe(_reply(kv_used_pages=3092, kv_total_pages=3438, kv_page_size=64))
+    config = SimpleNamespace(served_model_name="m", max_seq_len=262144, page_size=1,
+                             kv_quant="nvfp4", model_config=None)
+    state = SimpleNamespace(stats=tr, config=config, ready_at=None, instance_id="i", gpus=[])
+    doc = build_stats(state, p95_ms=0, ttft_mean_ms=0)
+    assert doc["kv"]["page_size"] == 64
+    assert doc["kv"]["total_pages"] * doc["kv"]["page_size"] == 220032
+
+
+def test_build_stats_falls_back_to_the_cli_page_size():
+    from freetoken.server.stats import build_stats
+
+    tr = StatsTracker()
+    tr.on_new_user(1)
+    tr.observe(_reply(kv_used_pages=10, kv_total_pages=100))  # engine reported no page size
+    config = SimpleNamespace(served_model_name="m", max_seq_len=4096, page_size=1,
+                             kv_quant="none", model_config=None)
+    state = SimpleNamespace(stats=tr, config=config, ready_at=None, instance_id="i", gpus=[])
+    assert build_stats(state, p95_ms=0, ttft_mean_ms=0)["kv"]["page_size"] == 1
 
 
 def test_stats_tracker_prefill_and_counters():
