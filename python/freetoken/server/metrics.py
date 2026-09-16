@@ -73,7 +73,9 @@ def to_prometheus(doc: dict[str, Any]) -> str:
     o.metric("freetoken_uptime_seconds", "gauge", "Seconds since the engine became ready.",
              [(doc.get("uptime_s"), None)])
     o.metric("freetoken_prompt_tokens_total", "counter",
-             "Prompt tokens processed, excluding cache hits.", [(rq.get("prompt_tokens_total"), None)])
+             "Prompt tokens processed, INCLUDING prefix-cache hits "
+             "(freetoken_prompt_tokens_cached_total is the cached subset; "
+             "reuse = cached/prompt).", [(rq.get("prompt_tokens_total"), None)])
     o.metric("freetoken_prompt_tokens_cached_total", "counter",
              "Prompt tokens served from the prefix cache.", [(rq.get("cached_tokens_total"), None)])
     o.metric("freetoken_generated_tokens_total", "counter",
