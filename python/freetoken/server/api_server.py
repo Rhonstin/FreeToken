@@ -1180,7 +1180,7 @@ def run_api_server(config: ServerArgs, start_backend: Callable[[], "Any"], run_s
             try:
                 new_handle = rt.spawn()
             except Exception as exc:  # noqa: BLE001 -- a failed respawn just retries with backoff
-                logger.error("DP engine %d respawn failed: %r", rt.index, exc)
+                logger.error("DP engine %d respawn failed: %r", rt.index, exc, exc_info=True)
                 rt.consecutive_failures += 1
                 continue
             rt.handle = new_handle

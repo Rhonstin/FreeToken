@@ -3,7 +3,9 @@ from __future__ import annotations
 import logging
 import multiprocessing as mp
 import os
+import pickle
 import sys
+import traceback
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -13,6 +15,29 @@ from freetoken.utils import init_logger
 if TYPE_CHECKING:
     from .args import ServerArgs
     from .supervisor import BackendHandle
+
+
+def _spawn_payload(engine_args: "ServerArgs", frozen: bytes | None) -> "tuple[bytes, ServerArgs]":
+    """``(frozen_bytes, args_for_the_child)`` for one worker-group spawn.
+
+    The payload is pickled **once**, at the first spawn, and reused for every respawn: the live
+    ``ServerArgs`` can acquire state that no longer pickles once the engine has been serving
+    (observed on the DP box: a quant Matcher closure -> ``AttributeError("Can't get local object
+    'name_set.<locals>.hit'")`` surfaced from the spawn and killed every watchdog respawn, leaving
+    the engine dead until a service restart). Everything the child needs — paths, ipc addresses,
+    flags, GPU, the private ipc suffix — is fixed at startup, so a frozen copy is the honest
+    payload for a reborn group; on a respawn we only *report* that the live object drifted.
+    """
+    if frozen is None:
+        return pickle.dumps(engine_args), engine_args
+    try:
+        pickle.dumps(engine_args)
+    except Exception:  # noqa: BLE001 -- diagnostics only; the frozen payload is what we spawn
+        logging.getLogger(__name__).error(
+            "engine args are no longer picklable; respawning from the frozen startup payload\n%s",
+            traceback.format_exc(),
+        )
+    return frozen, pickle.loads(frozen)
 
 
 def _report_startup_error(ack_queue: mp.Queue, exc: BaseException) -> None:
@@ -151,15 +176,20 @@ def launch_server(
         )
 
     def _spawn_engine(
-        engine_args: "ServerArgs", tag: str
+        engine_args: "ServerArgs", tag: str, frozen: bytes | None = None
     ) -> "BackendHandle":
         """Spawn one independent engine group (its own scheduler + detokenizer + tokenizers)
         on ``engine_args``' private ipc namespace, and hand back its BackendHandle. One group
-        is one whole model replica on one GPU — the unit DP replicates."""
+        is one whole model replica on one GPU — the unit DP replicates.
+
+        ``frozen`` is the pickle payload taken at the first spawn; a respawn passes it back so the
+        group is rebuilt from the startup values even if the live args stopped pickling (see
+        :func:`_spawn_payload`)."""
         import multiprocessing as mp
 
         from .supervisor import BackendHandle
 
+        frozen, engine_args = _spawn_payload(engine_args, frozen)
         detach = engine_args.shell_mode  # see _detach_process_group
         ack_queue: mp.Queue = mp.Queue()
         processes: list[mp.Process] = []
@@ -220,7 +250,8 @@ def launch_server(
             config=engine_args,
         )
         # Watchdog hook: respawn this exact group (same addresses/GPU) if it dies.
-        handle.restart = lambda: _spawn_engine(engine_args, tag)
+        # ``frozen`` keeps the spawn payload from the first spawn (see _spawn_payload).
+        handle.restart = lambda: _spawn_engine(engine_args, tag, frozen=frozen)
         return handle
 
     def start_subprocess() -> "list[BackendHandle]":
