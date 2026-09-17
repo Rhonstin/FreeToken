@@ -351,6 +351,14 @@ def _open_shared_banks(model_config, method) -> "_SharedBanksSession | None":
     path = os.environ.get(_SHARED_BANKS_ENV, "").strip()
     if not path or method is None:
         return None
+    from freetoken.distributed import try_get_tp_info
+
+    info = try_get_tp_info()
+    if info is not None and info.size > 1:
+        # TP ranks hold DIFFERENT bytes in the arena (rank-sharded banks), and a kernel or
+        # strategy change rewrites the layout: key the file per (kernel, rank) and never
+        # touch the plain TP=1 path, so existing arenas keep their meaning.
+        path = f"{path}.tp{info.rank}of{info.size}-{method.kind.value}-{method.kernel.name}"
     total = _shared_arena_bytes(method, model_config.num_moe_layers)
     return _SharedBanksSession(path, total)
 
