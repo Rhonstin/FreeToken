@@ -41,14 +41,33 @@ class TritonNvfp4MoEKernel(MoEKernel):
     cpu_format = "nvfp4"
 
     def unusable_reason(self, cfg: MoEConfig) -> str | None:
-        reason = self._common_reject(cfg, resident_ok=False, tp_ok=False, cpu_ok=True, plain_silu_only=False)
+        reason = self._common_reject(cfg, resident_ok=False, tp_ok=True, cpu_ok=True, plain_silu_only=False)
         if reason:
             return reason
         reason = gated_epilogue_reason(cfg)
         return f"triton nvfp4 MoE kernel: {reason}" if reason else None
 
+    @staticmethod
+    def _rank_rows(piece: torch.Tensor, cfg: MoEConfig) -> torch.Tensor:
+        """[E, 2I, X] fused gate|up rows -> this rank's [E, 2I/tp, X] (gate half and up half sharded together)."""
+        tp, r = cfg.tp_size, cfg.tp_rank
+        i = cfg.intermediate
+        il = cfg.local_intermediate
+        if tp == 1:
+            return piece
+        return torch.cat([piece[:, r * il : (r + 1) * il], piece[:, i + r * il : i + (r + 1) * il]], dim=1)
+
+    @staticmethod
+    def _rank_down_cols(piece: torch.Tensor, cfg: MoEConfig, groups: int) -> torch.Tensor:
+        """[E, H, I/groups] down rows -> this rank's last-dim shard (row-parallel split of the intermediate K dim)."""
+        tp, r = cfg.tp_size, cfg.tp_rank
+        il = cfg.local_intermediate
+        if tp == 1:
+            return piece
+        return piece[:, :, r * (il // groups) : (r + 1) * (il // groups)]
+
     def layout(self, cfg: MoEConfig) -> dict[str, BankSpec]:
-        i, h = cfg.intermediate, cfg.hidden
+        i, h = cfg.local_intermediate, cfg.hidden
         return {
             "gate_up": BankSpec((2 * i, h // 2), torch.uint8),
             "gate_up_scale": BankSpec((2 * i, h // GROUP), FP8),
@@ -59,11 +78,11 @@ class TritonNvfp4MoEKernel(MoEKernel):
         }
 
     def pack(self, pieces, cfg: MoEConfig, out):
-        out["gate_up"].copy_(fused_piece(pieces, "gate_up"))
-        out["gate_up_scale"].copy_(fused_piece(pieces, "gate_up_scale"))
-        out["gate_up_global"].copy_(fused_global(pieces, cfg.intermediate))
-        out["down"].copy_(pieces["down"])
-        out["down_scale"].copy_(pieces["down_scale"])
+        out["gate_up"].copy_(self._rank_rows(fused_piece(pieces, "gate_up"), cfg))
+        out["gate_up_scale"].copy_(self._rank_rows(fused_piece(pieces, "gate_up_scale"), cfg))
+        out["gate_up_global"].copy_(self._rank_rows(fused_global(pieces, cfg.intermediate), cfg))
+        out["down"].copy_(self._rank_down_cols(pieces["down"], cfg, 2))
+        out["down_scale"].copy_(self._rank_down_cols(pieces["down_scale"], cfg, GROUP))
         out["down_global"].copy_(global_rows(pieces["down_global"], cfg.hidden))
         return {}
 
@@ -230,7 +249,7 @@ class MarlinNvfp4MoEKernel(MoEKernel):
     def unusable_reason(self, cfg: MoEConfig) -> str | None:
         if not backend.is_vllm_installed():
             return "vLLM is not installed"
-        reason = self._common_reject(cfg, resident_ok=False, tp_ok=False, cpu_ok=False, plain_silu_only=True)
+        reason = self._common_reject(cfg, resident_ok=False, tp_ok=True, cpu_ok=False, plain_silu_only=True)
         if reason:
             return reason
         if not _marlin_symbols_ok():
@@ -241,7 +260,7 @@ class MarlinNvfp4MoEKernel(MoEKernel):
         return (8, 0) <= backend.device_capability() < (10, 0)
 
     def layout(self, cfg: MoEConfig) -> dict[str, BankSpec]:
-        i, h = cfg.intermediate, cfg.hidden
+        i, h = cfg.local_intermediate, cfg.hidden
         return {
             "gate_up": BankSpec((h // GROUP, 4 * i), torch.int32),
             "gate_up_scale": BankSpec((h // GROUP, 2 * i), FP8),
@@ -252,10 +271,14 @@ class MarlinNvfp4MoEKernel(MoEKernel):
         }
 
     def pack(self, pieces, cfg: MoEConfig, out):
-        i, h = cfg.intermediate, cfg.hidden
+        i, h = cfg.local_intermediate, cfg.hidden
         device = torch.device("cuda")
-        gu, gus, gug = fused_piece(pieces, "gate_up"), fused_piece(pieces, "gate_up_scale"), fused_global(pieces, i)
-        dn, dns, dng = pieces["down"], pieces["down_scale"], global_rows(pieces["down_global"], h)
+        gu = TritonNvfp4MoEKernel._rank_rows(fused_piece(pieces, "gate_up"), cfg)
+        gus = TritonNvfp4MoEKernel._rank_rows(fused_piece(pieces, "gate_up_scale"), cfg)
+        gug = TritonNvfp4MoEKernel._rank_rows(fused_global(pieces, cfg.intermediate), cfg)
+        dn = TritonNvfp4MoEKernel._rank_down_cols(pieces["down"], cfg, 2)
+        dns = TritonNvfp4MoEKernel._rank_down_cols(pieces["down_scale"], cfg, GROUP)
+        dng = global_rows(pieces["down_global"], h)
         e = gu.shape[0]
         gate_up_alpha = torch.empty(e, dtype=torch.bfloat16, device=device)
         down_alpha = torch.empty(e, dtype=torch.bfloat16, device=device)

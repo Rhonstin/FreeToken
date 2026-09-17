@@ -183,11 +183,19 @@ def iter_weights(
     the model only asks for the head once it builds the draft module, and load_state_dict is
     strict about unexpected keys.
     """
-    if get_tp_info().size > 1:
-        raise NotImplementedError("qwen4_exp weight loading supports TP=1 only")
+    tp_info = get_tp_info()
+    if tp_info.size > 1:
+        if include_mtp:
+            raise NotImplementedError("qwen4_exp weight loading supports TP=1 only for the MTP head")
+        if include_vision:
+            raise NotImplementedError(
+                "qwen4_exp vision-tower weights are not tensor-parallel sharded; "
+                "run with --text-model-only under TP > 1"
+            )
     if not include_non_moe:
         return
 
+    shard = _TpShard(tp_info.size, tp_info.rank, model_path) if tp_info.size > 1 else None
     fuse_buf: dict[str, dict[int, torch.Tensor]] = {}
     for file in tqdm(
         iter_weight_files(model_path),
@@ -205,11 +213,136 @@ def iter_weights(
                 fused = _try_fuse(name, tensor, fuse_buf)
                 if fused is not None:
                     if fused != ():  # () means buffered, not yet complete
-                        yield fused
+                        key, value = fused
+                        yield key, shard.apply(key, value) if shard is not None else value
                     continue
-                yield name, tensor
+                yield name, shard.apply(name, tensor) if shard is not None else tensor
 
     assert not fuse_buf, f"Incomplete projection fusions: {sorted(fuse_buf)}"
+
+
+# ======================================================================================
+# Tensor parallelism: dense weight sharding
+# ======================================================================================
+
+
+class _TpShard:
+    """Shard the dense (non-expert) state-dict tensors of one TP rank.
+
+    The fused buffers are built at FULL geometry (``_try_fuse``), then split here with
+    the head/segment layout the model's TP-aware layers declare (``LinearColParallelMerged``
+    / ``LinearOProj`` / ``LinearRowParallel`` / ``VocabParallelEmbedding`` / ``ParallelLMHead``
+    split each fused segment ``div_even`` by ``tp_size``; the routed experts'
+    intermediate dim is sharded separately in the expert-kernel ``pack``). Everything
+    else -- the router, HC, shared norms, the QSA indexer, PLE, rotary tables -- is
+    replicated and passes through untouched.
+    """
+
+    def __init__(self, tp_size: int, rank: int, model_path: str) -> None:
+        from freetoken.models.qwen4_exp.config import parse_config
+        from freetoken.utils.hf import cached_load_hf_config
+
+        self.tp = tp_size
+        self.rank = rank
+        hf = cached_load_hf_config(model_path)
+        cfg = parse_config(hf)
+        text = getattr(hf, "text_config", hf)
+        # QSA heads (per-head rows of qkv carry q|gate interleaved at head granularity)
+        self.num_q = cfg.num_qo_heads
+        self.num_kv = cfg.num_kv_heads
+        self.head_dim = cfg.head_dim
+        # GDN heads
+        self.num_k = int(text.linear_num_key_heads)
+        self.num_v = int(text.linear_num_value_heads)
+        self.dim_k = int(text.linear_key_head_dim)
+        self.dim_v = int(text.linear_value_head_dim)
+        self.local_q = self._even(self.num_q, "qsa q heads")
+        self.local_kv = self._even(self.num_kv, "qsa kv heads")
+        self.local_k = self._even(self.num_k, "gdn key heads")
+        self.local_v = self._even(self.num_v, "gdn value heads")
+        # zero disables the shared-expert rules (a checkpoint may ship none)
+        self.shared_i = self._even(cfg.shared_expert_intermediate_size, "shared expert intermediate")
+
+    def _even(self, n: int, what: str) -> int:
+        assert n % self.tp == 0, f"{what} count {n} not divisible by tp_size {self.tp}"
+        return n // self.tp
+
+    def apply(self, name: str, tensor: torch.Tensor) -> torch.Tensor:
+        tp, r = self.tp, self.rank
+        if name.endswith(".self_attn.qkv_proj.weight"):
+            # fused rows: [q: num_q * 2*head_dim | k: num_kv*head_dim | v: same]
+            q_w, kv_w = self.num_q * 2 * self.head_dim, self.num_kv * self.head_dim
+            hq = 2 * self.head_dim  # q rows per head (value + gate)
+            hk = self.head_dim
+            q = tensor[:q_w]
+            k = tensor[q_w : q_w + kv_w]
+            v = tensor[q_w + kv_w : q_w + 2 * kv_w]
+            return torch.cat(
+                [
+                    q[r * self.local_q * hq : (r + 1) * self.local_q * hq],
+                    k[r * self.local_kv * hk : (r + 1) * self.local_kv * hk],
+                    v[r * self.local_kv * hk : (r + 1) * self.local_kv * hk],
+                ],
+                dim=0,
+            )
+        if name.endswith(".self_attn.o_proj.weight") or name.endswith(".linear_attn.out_proj.weight"):
+            # row-parallel projections: split the INPUT dim (columns) evenly per head block
+            assert tensor.shape[1] % tp == 0, f"{name}: in_features {tensor.shape[1]} not divisible by tp {tp}"
+            c = tensor.shape[1] // tp
+            return tensor[:, r * c : (r + 1) * c].contiguous()
+        if name.endswith(".linear_attn.in_proj.weight"):
+            # fused rows: [conv: 2*num_k*dim_k + num_v*dim_v | z: num_v*dim_v | b: num_v | a: num_v]
+            conv = 2 * self.num_k * self.dim_k + self.num_v * self.dim_v
+            z = self.num_v * self.dim_v
+            qkv = tensor[:conv]
+            zt = tensor[conv : conv + z]
+            ba = tensor[conv + z :]
+            k0, k1 = self.num_k * self.dim_k, 2 * self.num_k * self.dim_k
+            lk, lv = self.local_k * self.dim_k, self.local_v * self.dim_v
+            conv_r = torch.cat(
+                [
+                    qkv[r * lk : (r + 1) * lk],
+                    qkv[k0 + r * lk : k0 + (r + 1) * lk],
+                    qkv[k1 + r * lv : k1 + (r + 1) * lv],
+                ],
+                dim=0,
+            )
+            z_r = zt[r * lv : (r + 1) * lv]
+            b, a = ba[: self.num_v], ba[self.num_v :]
+            ba_r = torch.cat([b[r * self.local_v : (r + 1) * self.local_v],
+                              a[r * self.local_v : (r + 1) * self.local_v]], dim=0)
+            return torch.cat([conv_r, z_r, ba_r], dim=0)
+        if name.endswith(".linear_attn.conv1d.weight"):
+            # [conv_dim, 1, K] rows follow the qkv layout of in_proj's conv segment
+            k_rows = self.num_k * self.dim_k
+            v_rows = self.num_v * self.dim_v
+            lk, lv = self.local_k * self.dim_k, self.local_v * self.dim_v
+            t = tensor
+            return torch.cat(
+                [
+                    t[r * lk : (r + 1) * lk],
+                    t[k_rows + r * lk : k_rows + (r + 1) * lk],
+                    t[2 * k_rows + r * lv : 2 * k_rows + (r + 1) * lv],
+                ],
+                dim=0,
+            )
+        if name.endswith(".linear_attn.A_log") or name.endswith(".linear_attn.dt_bias"):
+            # per value-head scalars
+            return tensor[r * self.local_v : (r + 1) * self.local_v].contiguous()
+        if name.endswith(".mlp.shared_expert.gate_up_proj.weight"):
+            i = tensor.shape[0] // 2
+            il = self.shared_i
+            gate, up = tensor[:i], tensor[i:]
+            return torch.cat([gate[r * il : (r + 1) * il], up[r * il : (r + 1) * il]], dim=0)
+        if name.endswith(".mlp.shared_expert.down_proj.weight"):
+            c = tensor.shape[1] // tp
+            return tensor[:, r * c : (r + 1) * c].contiguous()
+        if name.endswith("embed_tokens.weight") or name == "lm_head.weight":
+            from freetoken.utils import div_ceil
+
+            part = div_ceil(tensor.shape[0], tp)
+            return tensor[r * part : (r + 1) * part].contiguous()
+        return tensor
 
 
 # ======================================================================================

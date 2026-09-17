@@ -4,9 +4,10 @@ import torch
 import torch.nn.functional as F
 from freetoken.core import get_global_ctx
 from freetoken.kernel.causal_conv1d import causal_conv1d_decode, causal_conv1d_varlen
-from freetoken.layers import BaseOP, GatedRMSNorm, LinearColParallelMerged, LinearReplicated
+from freetoken.layers import BaseOP, GatedRMSNorm, LinearColParallelMerged, LinearOProj
 from freetoken.layers.quantization import QuantConfig
 from freetoken.models.qwen3_5_moe.gdn_kernels import gdn_decode_fla, gdn_prefill_chunk_fla
+from freetoken.utils import div_even
 
 
 class _DepthwiseConv1d(BaseOP):
@@ -34,6 +35,8 @@ class Qwen4ExpGatedDeltaNet(BaseOP):
         conv_kernel_size, rms_norm_eps, layer_id, output_gate: str = "sigmoid",
         *, quant_config: QuantConfig | None = None, prefix: str = "",
     ):
+        from freetoken.distributed import get_tp_info
+
         self.layer_id = layer_id
         # The fla chunk/decode kernels read+write the recurrent state and the per-chunk h as
         # [V, K] while the LinearStatePool declares it [K, V]; these coincide (and the
@@ -42,8 +45,14 @@ class Qwen4ExpGatedDeltaNet(BaseOP):
         assert head_k_dim == head_v_dim, (
             f"GatedDeltaNet requires head_k_dim == head_v_dim, got {head_k_dim} != {head_v_dim}"
         )
-        self.num_k_heads = num_k_heads
-        self.num_v_heads = num_v_heads
+        # TP: heads split evenly across ranks; the state pool (linear_state_pool) is
+        # already TP-local, and the col-parallel projections divide each fused segment
+        # by tp -- the loader shards the checkpoint rows head-aligned, so rank r holds
+        # key heads [r*nk/tp .. (r+1)*nk/tp) and value heads likewise.
+        tp_size = get_tp_info().size
+        full_num_k, full_num_v = num_k_heads, num_v_heads
+        self.num_k_heads = num_k_heads = div_even(num_k_heads, tp_size)
+        self.num_v_heads = num_v_heads = div_even(num_v_heads, tp_size)
         self.head_k_dim = head_k_dim
         self.head_v_dim = head_v_dim
         self.key_dim = num_k_heads * head_k_dim
@@ -55,20 +64,24 @@ class Qwen4ExpGatedDeltaNet(BaseOP):
             quant_config is not None and quant_config.scheme_for(f"{prefix}.in_proj_qkvz") is not None
         )
 
+        # The col-parallel layers take the FULL segment geometry and divide each by tp
+        # themselves; forward splits the GEMM output by these LOCAL sizes.
+        full_conv_dim = 2 * full_num_k * head_k_dim + full_num_v * head_v_dim
+        full_value_dim = full_num_v * head_v_dim
         self._in_proj_split = [self.conv_dim, self.value_dim, num_v_heads, num_v_heads]
         if self._split_in_proj:
             self.in_proj_qkvz = LinearColParallelMerged(
-                hidden_size, [self.conv_dim, self.value_dim], has_bias=False,
+                hidden_size, [full_conv_dim, full_value_dim], has_bias=False,
                 quant_config=quant_config, prefix=f"{prefix}.in_proj_qkvz",
             )
             self.in_proj_ba = LinearColParallelMerged(
-                hidden_size, [num_v_heads, num_v_heads], has_bias=False,
+                hidden_size, [full_num_v, full_num_v], has_bias=False,
                 quant_config=quant_config, prefix=f"{prefix}.in_proj_ba",
             )
         else:
             # Fused input projection (one GEMM instead of four): qkv | z | b | a.
             self.in_proj = LinearColParallelMerged(
-                hidden_size, self._in_proj_split, has_bias=False,
+                hidden_size, [full_conv_dim, full_value_dim, full_num_v, full_num_v], has_bias=False,
                 quant_config=quant_config, prefix=f"{prefix}.in_proj",
             )
         self.conv1d = _DepthwiseConv1d(self.conv_dim, conv_kernel_size)
@@ -79,8 +92,10 @@ class Qwen4ExpGatedDeltaNet(BaseOP):
         self.dt_bias = torch.empty(num_v_heads, dtype=torch.float32)
         self.A_log = torch.empty(num_v_heads, dtype=torch.float32)
         self.norm = GatedRMSNorm(head_v_dim, eps=rms_norm_eps, activation=output_gate)
-        self.out_proj = LinearReplicated(
-            self.value_dim, hidden_size, has_bias=False,
+        # row-parallel output: the value-head dim is sharded per rank and the partial
+        # sums are all-reduced (no-op at tp=1, where LinearOProj is a plain GEMM).
+        self.out_proj = LinearOProj(
+            full_value_dim, hidden_size, has_bias=False,
             quant_config=quant_config, prefix=f"{prefix}.out_proj",
         )
 

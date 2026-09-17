@@ -234,6 +234,14 @@ def load_weight(
     from freetoken.models.config import VISION_KEY_PREFIXES
 
     if is_ftw_checkpoint(model_path):
+        # FTW dense replay bypasses iter_weights, so no reader here ever shards: fail
+        # loudly instead of dying later in the strict shape assert (qwen4_exp TP serves
+        # the source safetensors directory; convert a TP-sharded FTW to support others).
+        if get_tp_info().size > 1:
+            raise NotImplementedError(
+                "FTW checkpoint dense replay is not tensor-parallel sharded; "
+                "point --model at the source safetensors directory under TP > 1"
+            )
         # FTW dense shard: the vision stack (if the conversion kept it) is skipped here when
         # the engine did not build the tower, so a strict load_state_dict stays inert.
         for name, tensor in iter_ftw_weights(model_path):
