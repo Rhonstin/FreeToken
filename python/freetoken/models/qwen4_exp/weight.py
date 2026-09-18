@@ -187,11 +187,6 @@ def iter_weights(
     if tp_info.size > 1:
         if include_mtp:
             raise NotImplementedError("qwen4_exp weight loading supports TP=1 only for the MTP head")
-        if include_vision:
-            raise NotImplementedError(
-                "qwen4_exp vision-tower weights are not tensor-parallel sharded; "
-                "run with --text-model-only under TP > 1"
-            )
     if not include_non_moe:
         return
 
@@ -262,6 +257,17 @@ class _TpShard:
         self.local_v = self._even(self.num_v, "gdn value heads")
         # zero disables the shared-expert rules (a checkpoint may ship none)
         self.shared_i = self._even(cfg.shared_expert_intermediate_size, "shared expert intermediate")
+        # Vision tower (Qwen3-VL ViT): present only on multimodal checkpoints. Its attention
+        # and MLPs are TP-aware on the module side (head-split qkv, col/row MLP), so the
+        # loader must emit the matching shards; norms/patch-embed/pos-embed stay replicated.
+        vc = getattr(hf, "vision_config", None)
+        self.v_num_heads = int(getattr(vc, "num_heads", 0) or 0)
+        self.v_hidden = int(getattr(vc, "hidden_size", 0) or 0)
+        if self.v_num_heads and self.v_hidden:
+            self.v_head_dim = self.v_hidden // self.v_num_heads
+            self.local_v_heads = self._even(self.v_num_heads, "vision attention heads")
+        else:
+            self.v_head_dim = self.local_v_heads = 0
 
     def _even(self, n: int, what: str) -> int:
         assert n % self.tp == 0, f"{what} count {n} not divisible by tp_size {self.tp}"
@@ -269,6 +275,30 @@ class _TpShard:
 
     def apply(self, name: str, tensor: torch.Tensor) -> torch.Tensor:
         tp, r = self.tp, self.rank
+        if name.startswith("visual."):
+            # ViT: qkv rows are [q n*hd | k | v] head-segments; proj/fc2 split their INPUT dim,
+            # fc1 its output rows; bias follows its projection (row-split for col-parallel,
+            # replicated for the row-parallel / o-proj outputs and for every norm).
+            if name.endswith((".attn.qkv.weight", ".attn.qkv.bias")):
+                n, hd, nl = self.v_num_heads, self.v_head_dim, self.local_v_heads
+                seg = n * hd
+                q, k, v = tensor[:seg], tensor[seg : 2 * seg], tensor[2 * seg :]
+                return torch.cat(
+                    [
+                        q[r * nl * hd : (r + 1) * nl * hd],
+                        k[r * nl * hd : (r + 1) * nl * hd],
+                        v[r * nl * hd : (r + 1) * nl * hd],
+                    ],
+                    dim=0,
+                )
+            if name.endswith((".attn.proj.weight", ".mlp.linear_fc2.weight", ".merger.linear_fc2.weight")):
+                c = tensor.shape[1] // tp
+                return tensor[:, r * c : (r + 1) * c].contiguous()
+            if name.endswith((".mlp.linear_fc1.weight", ".mlp.linear_fc1.bias",
+                              ".merger.linear_fc1.weight", ".merger.linear_fc1.bias")):
+                c = tensor.shape[0] // tp
+                return tensor[r * c : (r + 1) * c].contiguous()
+            return tensor  # norms / patch_embed / pos_embed: replicated
         if name.endswith(".self_attn.qkv_proj.weight"):
             # fused rows: [q: num_q * 2*head_dim | k: num_kv*head_dim | v: same]
             q_w, kv_w = self.num_q * 2 * self.head_dim, self.num_kv * self.head_dim

@@ -368,3 +368,127 @@ def test_marlin_bank_layout_is_local_and_tp_ok():
     # the TP rejection must be gone; on a CPU box the remaining vLLM gate may still speak
     reason = k.unusable_reason(cfg)
     assert reason is None or "TP > 1" not in reason, reason
+
+
+# --------------------------------------------------------------------------------------
+# Vision tower TP (Qwen3-VL ViT): qkv head-split + bias, col/row MLP shards
+# --------------------------------------------------------------------------------------
+
+VHID, VHEADS, VI, VOUT = 32, 4, 24, 32  # merged = VHID * spatial_merge^2 = 128
+
+
+def _vision_cfg():
+    return SimpleNamespace(
+        hidden_size=VHID, depth=1, num_heads=VHEADS, intermediate_size=VI,
+        patch_size=16, temporal_patch_size=2, spatial_merge_size=2,
+        num_position_embeddings=16, out_hidden_size=VOUT, in_channels=3,
+        deepstack_visual_indexes=[],
+    )
+
+
+def _vision_raw() -> dict[str, torch.Tensor]:
+    v = "model.visual"
+    return {
+        f"{v}.blocks.0.attn.qkv.weight": _bf16(3 * VHID, VHID),
+        f"{v}.blocks.0.attn.qkv.bias": _bf16(3 * VHID),
+        f"{v}.blocks.0.attn.proj.weight": _bf16(VHID, VHID),
+        f"{v}.blocks.0.attn.proj.bias": _bf16(VHID),
+        f"{v}.blocks.0.mlp.linear_fc1.weight": _bf16(VI, VHID),
+        f"{v}.blocks.0.mlp.linear_fc1.bias": _bf16(VI),
+        f"{v}.blocks.0.mlp.linear_fc2.weight": _bf16(VHID, VI),
+        f"{v}.blocks.0.mlp.linear_fc2.bias": _bf16(VHID),
+        f"{v}.blocks.0.norm1.weight": _bf16(VHID), f"{v}.blocks.0.norm1.bias": _bf16(VHID),
+        f"{v}.blocks.0.norm2.weight": _bf16(VHID), f"{v}.blocks.0.norm2.bias": _bf16(VHID),
+        f"{v}.merger.linear_fc1.weight": _bf16(VHID * 4, VHID * 4),
+        f"{v}.merger.linear_fc1.bias": _bf16(VHID * 4),
+        f"{v}.merger.linear_fc2.weight": _bf16(VOUT, VHID * 4),
+        f"{v}.merger.linear_fc2.bias": _bf16(VOUT),
+        f"{v}.merger.norm.weight": _bf16(VHID), f"{v}.merger.norm.bias": _bf16(VHID),
+        f"{v}.patch_embed.proj.weight": _bf16(VHID, 3, 2, 16, 16),
+        f"{v}.patch_embed.proj.bias": _bf16(VHID),
+        f"{v}.pos_embed.weight": _bf16(16, VHID),
+    }
+
+
+@pytest.fixture(scope="module")
+def vision_ckpt(tmp_path_factory):
+    torch.manual_seed(11)
+    folder = tmp_path_factory.mktemp("qwen4_exp_tp_vision")
+    raw = _raw_checkpoint()
+    raw.update(_vision_raw())
+    names = sorted(raw)
+    save_file({n: raw[n] for n in names[::2]}, str(folder / "model-bf16-00001.safetensors"))
+    save_file({n: raw[n] for n in names[1::2]}, str(folder / "model-bf16-00002.safetensors"))
+    cfg = _text_cfg()
+    cfg.vision_config = _vision_cfg()
+    with open(folder / "config.json", "w", encoding="utf-8") as fh:
+        json.dump(_to_jsonable(cfg), fh)
+    return str(folder)
+
+
+@pytest.fixture(scope="module")
+def loaded_vision(vision_ckpt, tp_global):
+    from freetoken.distributed import info
+    from freetoken.models.qwen4_exp.weight import iter_weights
+
+    out = {}
+    for key, (rank, size) in {"full": (0, 1), 0: (0, 2), 1: (1, 2)}.items():
+        _set_tp(info, rank, size)
+        out[key] = {
+            n: t.clone()
+            for n, t in iter_weights(
+                vision_ckpt, torch.device("cpu"),
+                include_moe_experts=True, include_non_moe=True, include_vision=True,
+            )
+            if n.startswith("visual.")
+        }
+    return out
+
+
+def test_vision_shards_recat_to_full(loaded_vision):
+    full, r0, r1 = loaded_vision["full"], loaded_vision[0], loaded_vision[1]
+    assert set(full) == set(r0) == set(r1)
+    assert len(full) == len(_vision_raw())
+    seg = VHID  # n_heads * head_dim with tiny geometry
+    nl = VHEADS // 2
+    hd = VHID // VHEADS
+    for n, t in full.items():
+        if n.endswith((".attn.qkv.weight", ".attn.qkv.bias")):
+            assert r0[n].shape[0] == 3 * nl * hd
+            for lo, hi, flo in ((0, nl * hd, 0), (nl * hd, 2 * nl * hd, seg), (2 * nl * hd, 3 * nl * hd, 2 * seg)):
+                assert torch.equal(torch.cat([r0[n][lo:hi], r1[n][lo:hi]], 0), t[flo : flo + 2 * (hi - lo)])
+        elif n.endswith((".attn.proj.weight", ".mlp.linear_fc2.weight", ".merger.linear_fc2.weight")):
+            assert torch.equal(torch.cat([r0[n], r1[n]], 1), t)
+        elif n.endswith((".mlp.linear_fc1.weight", ".mlp.linear_fc1.bias",
+                         ".merger.linear_fc1.weight", ".merger.linear_fc1.bias")):
+            assert torch.equal(torch.cat([r0[n], r1[n]], 0), t)
+        else:  # norms, patch_embed, pos_embed: replicated byte-for-byte
+            assert torch.equal(r0[n], t) and torch.equal(r1[n], t)
+
+
+def test_vision_shards_match_module_shapes(loaded_vision, tp_global):
+    from freetoken.distributed import info
+    from freetoken.models.qwen3_vl.config import VisionConfig
+    from freetoken.models.qwen3_vl.vision import VisionAttention, VisionMLP, VisionPatchMerger
+
+    _set_tp(info, 0, 2)
+    try:
+        vc = VisionConfig(
+            hidden_size=VHID, depth=1, num_heads=VHEADS, intermediate_size=VI, patch_size=16,
+            temporal_patch_size=2, spatial_merge_size=2, num_position_embeddings=16,
+            out_hidden_size=VOUT, in_channels=3,
+        )
+        expected: dict[str, tuple[int, ...]] = {}
+        for mod, key_of in (
+            (VisionAttention(vc), lambda k: f"visual.blocks.0.attn.{k}"),
+            (VisionMLP(vc), lambda k: f"visual.blocks.0.mlp.{k}"),
+            (VisionPatchMerger(vc), lambda k: f"visual.merger.{k}"),
+        ):
+            for k, tensor in mod.state_dict().items():
+                expected[key_of(k)] = tuple(tensor.shape)
+        r0 = loaded_vision[0]
+        for name, shape in expected.items():
+            assert name in r0, f"loader never emitted {name}"
+            assert tuple(r0[name].shape) == shape, f"{name}: loader {tuple(r0[name].shape)} != module {shape}"
+    finally:
+        _set_tp(info, 0, 1)
