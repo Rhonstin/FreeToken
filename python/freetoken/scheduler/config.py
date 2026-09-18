@@ -14,6 +14,10 @@ def _get_pid_suffix() -> str:
 @dataclass(frozen=True)
 class SchedulerConfig(EngineConfig):
     max_extend_tokens: int = 8192
+    # Slip a decode step between prefill chunks of a chunked prompt (and between the
+    # chunks of waiting prompts), so running generations never starve behind a long
+    # prefill. Strict prefill priority (False) keeps the legacy behavior.
+    prefill_interleave: bool = False
     cache_type: str = "radix"
     offline_mode: bool = False
     decode_log_interval: int = 40

@@ -411,6 +411,18 @@ def parse_args(
     )
 
     parser.add_argument(
+        "--prefill-interleave",
+        action="store_true",
+        dest="prefill_interleave",
+        default=ServerArgs.prefill_interleave,
+        help=(
+            "Run one decode step between prefill chunks while decodes are running: "
+            "a multi-chunk prefill then stalls co-resident generations for at most one "
+            "chunk instead of the whole prompt (strict prefill priority by default)."
+        ),
+    )
+
+    parser.add_argument(
         "--decode-log-interval",
         type=_positive_int,
         default=ServerArgs.decode_log_interval,

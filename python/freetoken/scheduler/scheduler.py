@@ -235,6 +235,10 @@ class Scheduler(SchedulerIOMixin):
         self.prefill_budget = (
             min(config.max_extend_tokens, _chunk_cap) if _chunk_cap else config.max_extend_tokens
         )
+        # Interleave policy state (see _pick_next_batch); consumed only when
+        # config.prefill_interleave. Deterministic across TP ranks because both
+        # managers' runnability and schedule decisions share the broadcast input.
+        self._decode_turn = False
         self.config = config
         self._model_is_mrope = config.model_config.model_is_mrope
         self.status_reporter = SchedulerStatusReporter(
@@ -1229,17 +1233,40 @@ class Scheduler(SchedulerIOMixin):
             batch.mm_rows = torch.tensor(rows, dtype=torch.int64, pin_memory=True).to(self.device, non_blocking=True)
 
     def _schedule_next_batch(self) -> ForwardInput | None:
-        # TODO: support other policies: e.g. DECODE first
-        batch = (
-            self.prefill_manager.schedule_next_batch(self.prefill_budget)
-            or self.decode_manager.schedule_next_batch()
-        )
+        batch = self._pick_next_batch()
         if batch is None:
             return None
         forward_input = self._prepare_batch(batch)
         self._report_prompt_admissions(batch)
         self._report_prefill_progress(batch)
         return forward_input
+
+    def _pick_next_batch(self) -> Batch | None:
+        """Which manager owns this step -- the scheduling policy in one place.
+
+        Legacy: strict prefill priority (``TODO: support other policies: e.g. DECODE
+        first``). With ``prefill_interleave``, a decode step is slipped in after every
+        prefill chunk while both backlogs are non-empty, so a multi-chunk prompt can
+        starve running decodes for at most one chunk (one step per chunk instead of
+        one per prompt). The decode turn is only consumed when decode actually yields
+        a batch; pages/slot pressure that leaves it empty keeps the turn and prefills,
+        never the reverse (prefill must not idle because a decode skipped a step).
+        """
+        pm, dm = self.prefill_manager, self.decode_manager
+        # getattr-guarded so a bare stubbed scheduler (the legacy cost-accounting
+        # contract tests build one without config/turn state) stays exactly inert.
+        interleave = getattr(getattr(self, "config", None), "prefill_interleave", False)
+        if interleave and self._decode_turn and pm.runnable and dm.runnable:
+            batch = dm.schedule_next_batch()
+            if batch is not None:
+                self._decode_turn = False
+                return batch
+        batch = pm.schedule_next_batch(self.prefill_budget)
+        if batch is None:
+            return dm.schedule_next_batch()
+        if interleave and dm.runnable:
+            self._decode_turn = True  # a chunk ran while decodes waited: slip one in next
+        return batch
 
     def _report_prefill_progress(self, batch: Batch) -> None:
         """Publish live prefill progress for a chunk so the frontend can show a prompt bar.
