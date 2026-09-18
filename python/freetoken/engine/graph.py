@@ -94,7 +94,9 @@ def _determine_cuda_graph_bs(
     if cuda_graph_max_bs < 1:
         return []
 
-    candidates = [1, 2, 4] + list(range(8, cuda_graph_max_bs + 1, 8))
+    # 3 included: a batch of three is a real decode shape (mr=3 engines), and without a
+    # captured graph it falls off the graph path into eager (several x slower per token).
+    candidates = [1, 2, 3, 4] + list(range(8, cuda_graph_max_bs + 1, 8))
     return [bs for bs in candidates if bs <= cuda_graph_max_bs]
 
 
