@@ -294,6 +294,12 @@ class _TpShard:
             if name.endswith((".attn.proj.weight", ".mlp.linear_fc2.weight", ".merger.linear_fc2.weight")):
                 c = tensor.shape[1] // tp
                 return tensor[:, r * c : (r + 1) * c].contiguous()
+            if name.endswith((".attn.proj.bias", ".mlp.linear_fc2.bias", ".merger.linear_fc2.bias")):
+                # Row-parallel output biases: the quant method adds the bias on EVERY rank
+                # BEFORE the all-reduce sums the partials, so a replicated copy would be
+                # counted ``tp`` times in the reduced sum. Rank 0 carries the real bias and
+                # the rest contribute zeros -- the sum then holds it exactly once.
+                return tensor if r == 0 else torch.zeros_like(tensor)
             if name.endswith((".mlp.linear_fc1.weight", ".mlp.linear_fc1.bias",
                               ".merger.linear_fc1.weight", ".merger.linear_fc1.bias")):
                 c = tensor.shape[0] // tp

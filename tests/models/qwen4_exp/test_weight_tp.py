@@ -459,6 +459,11 @@ def test_vision_shards_recat_to_full(loaded_vision):
                 assert torch.equal(torch.cat([r0[n][lo:hi], r1[n][lo:hi]], 0), t[flo : flo + 2 * (hi - lo)])
         elif n.endswith((".attn.proj.weight", ".mlp.linear_fc2.weight", ".merger.linear_fc2.weight")):
             assert torch.equal(torch.cat([r0[n], r1[n]], 1), t)
+        elif n.endswith((".attn.proj.bias", ".mlp.linear_fc2.bias", ".merger.linear_fc2.bias")):
+            # row-parallel output bias: rank 0 owns it, rank 1 contributes zeros (the
+            # all-reduce sum adds it exactly once)
+            assert torch.equal(r0[n], t)
+            assert torch.equal(r1[n], torch.zeros_like(t))
         elif n.endswith((".mlp.linear_fc1.weight", ".mlp.linear_fc1.bias",
                          ".merger.linear_fc1.weight", ".merger.linear_fc1.bias")):
             assert torch.equal(torch.cat([r0[n], r1[n]], 0), t)
